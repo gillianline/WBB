@@ -3,9 +3,10 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+import urllib.request
 
 # -----------------------------------------------------------------------------
-# 1. PAGE CONFIGURATION & BASE STYLING
+# 1. PAGE CONFIGURATION & STYLING
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="Lady Vols Basketball | Performance Console",
@@ -46,15 +47,15 @@ st.markdown("""
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
         }
         .athlete-avatar {
-            width: 80px;
-            height: 80px;
+            width: 75px;
+            height: 75px;
             border-radius: 50%;
             border: 3px solid #FF8200;
             object-fit: cover;
             background-color: #F1F5F9;
         }
-        .athlete-info h2 { margin: 0; font-size: 1.5rem; font-weight: 700; color: #0F172A; }
-        .athlete-info p { margin: 2px 0 0 0; color: #64748B; font-size: 0.9rem; }
+        .athlete-info h2 { margin: 0; font-size: 1.4rem; font-weight: 700; color: #0F172A; }
+        .athlete-info p { margin: 2px 0 0 0; color: #64748B; font-size: 0.88rem; }
 
         .vball-section-title {
             background-color: #38BDF8; color: #0F172A; font-weight: 700; font-size: 1.05rem;
@@ -92,16 +93,26 @@ st.markdown("""
 
         .roster-card {
             background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 10px;
-            padding: 18px; margin-bottom: 25px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+            padding: 18px; margin-bottom: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);
         }
 
+        /* Side-by-side Compliance Card Styling */
+        .compliance-card {
+            background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 10px;
+            padding: 16px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+        }
         .compliance-metric-card {
             background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px;
-            padding: 12px 14px; text-align: center;
+            padding: 10px 8px; text-align: center;
         }
-        .compliance-metric-label { font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase; margin-bottom: 4px; }
-        .compliance-metric-value { font-size: 1.25rem; font-weight: 800; color: #0F172A; }
-        .compliance-metric-sub { font-size: 0.75rem; color: #94A3B8; margin-top: 2px; }
+        .compliance-metric-label { font-size: 0.7rem; font-weight: 700; color: #64748B; text-transform: uppercase; margin-bottom: 2px; }
+        .compliance-metric-value { font-size: 1.1rem; font-weight: 800; color: #0F172A; }
+        .compliance-metric-sub { font-size: 0.7rem; color: #94A3B8; margin-top: 2px; }
+        
+        .session-meta-pill {
+            background-color: #F1F5F9; border: 1px solid #E2E8F0; color: #475569;
+            padding: 4px 10px; border-radius: 6px; font-weight: 600; font-size: 0.8rem;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -135,15 +146,19 @@ if not check_password():
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=300)
 def load_sheet_data():
-    try:
-        vol_df = pd.read_csv(st.secrets["sheets"]["volume_url"])
-        int_df = pd.read_csv(st.secrets["sheets"]["intensity_url"])
-        comp_df = pd.read_csv(st.secrets["sheets"]["compliance_url"])
-        weekly_df = pd.read_csv(st.secrets["sheets"]["weekly_url"])
-        cmj_df = pd.read_csv(st.secrets["sheets"]["cmj_url"])
-        roster_df = pd.read_csv(st.secrets["sheets"]["roster_url"])
+    def fetch_csv(secret_key):
+        url = st.secrets["sheets"][secret_key]
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        return pd.read_csv(req, on_bad_lines='skip', engine='python')
 
-        # Convert date columns to datetime
+    try:
+        vol_df = fetch_csv("volume_url")
+        int_df = fetch_csv("intensity_url")
+        comp_df = fetch_csv("compliance_url")
+        weekly_df = fetch_csv("weekly_url")
+        cmj_df = fetch_csv("cmj_url")
+        roster_df = fetch_csv("roster_url")
+
         for df in [vol_df, int_df, comp_df, weekly_df, cmj_df]:
             date_col = [c for c in df.columns if "date" in c.lower()]
             if date_col:
@@ -158,14 +173,17 @@ vol_raw, int_raw, comp_raw, weekly_raw, cmj_raw, roster_raw = load_sheet_data()
 
 
 # -----------------------------------------------------------------------------
-# 4. HELPER FUNCTIONS & CALCULATIONS
+# 4. HELPER FUNCTIONS & VOLLEYBALL COLOR LOGIC (Green = Low)
 # -----------------------------------------------------------------------------
 def get_vball_color(score):
+    """
+    Volleyball Load Logic: Lower numbers = Green (Optimal/Controlled),
+    Higher numbers = Yellow/Red (Moderate/High Load).
+    """
     if score is None or pd.isna(score): return "#E2E8F0", "#475569"
-    if score < 45: return "#FFD6D6", "#991B1B"
-    elif score < 65: return "#FEF08A", "#854D0E"
-    elif score < 85: return "#BAE6FD", "#0369A1"
-    else: return "#BBF7D0", "#166534"
+    if score < 50: return "#BBF7D0", "#166534"      # Green (Low load)
+    elif score < 75: return "#FEF08A", "#854D0E"    # Yellow (Moderate)
+    else: return "#FFD6D6", "#991B1B"               # Red (High load)
 
 def render_vball_table(df):
     html = '<table class="vball-table"><thead><tr>'
@@ -189,10 +207,8 @@ def create_clean_bar_chart(x_vals, y_vals, title_text, bar_color="#38BDF8"):
     fig.update_traces(marker_color=bar_color)
     fig.update_layout(
         title_font=dict(size=14, color="#0F172A"),
-        height=240,
-        margin=dict(l=0, r=0, t=35, b=0),
-        plot_bgcolor="rgba(0,0,0,0)",
-        paper_bgcolor="rgba(0,0,0,0)",
+        height=240, margin=dict(l=0, r=0, t=35, b=0),
+        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
         xaxis_title=None, yaxis_title=None
     )
     return fig
@@ -213,11 +229,9 @@ def create_weekly_benchmark_chart(weeks, athlete_vals, team_avg_vals, title_text
     return fig
 
 def compute_practice_tables(player_name, session_date):
-    """Calculates Volume and Intensity grades and scores from live Google Sheets data."""
     v_player = vol_raw[(vol_raw['Player'] == player_name) & (vol_raw['Date'] == session_date)]
     i_player = int_raw[(int_raw['Player'] == player_name) & (int_raw['Date'] == session_date)]
     
-    # Baselines (First 2 weeks highest values)
     v_base = vol_raw[vol_raw['Player'] == player_name].sort_values('Date').head(14)
     i_base = int_raw[int_raw['Player'] == player_name].sort_values('Date').head(14)
 
@@ -226,16 +240,14 @@ def compute_practice_tables(player_name, session_date):
 
     vol_rows, int_rows = [], []
 
-    # Volume Calculations
     for m in vol_metrics:
-        curr = v_player[m].values[0] if not v_player.empty else 0.0
+        curr = v_player[m].values[0] if not v_player.empty and m in v_player else 0.0
         mx = v_base[m].max() if not v_base.empty and m in v_base else curr
         grade = round((curr / mx * 100), 0) if mx > 0 else 0
         vol_rows.append({"Metric": m, "Current": curr, "Max": mx, "Grade": grade})
 
-    # Intensity Calculations
     for m in int_metrics:
-        curr = i_player[m].values[0] if not i_player.empty else 0.0
+        curr = i_player[m].values[0] if not i_player.empty and m in i_player else 0.0
         mx = i_base[m].max() if not i_base.empty and m in i_base else curr
         grade = round((curr / mx * 100), 0) if mx > 0 else 0
         int_rows.append({"Metric": m, "Current": curr, "Max": mx, "Grade": grade})
@@ -246,14 +258,19 @@ def compute_practice_tables(player_name, session_date):
     vol_score = int(vol_df_out['Grade'].mean()) if not vol_df_out.empty else 0
     int_score = int(int_df_out['Grade'].mean()) if not int_df_out.empty else 0
 
-    return vol_df_out, int_df_out, vol_score, int_score
+    # Session metadata (Minutes, Week, Day)
+    minutes = v_player['Minutes'].values[0] if not v_player.empty and 'Minutes' in v_player else "--"
+    week_num = v_player['Week'].values[0] if not v_player.empty and 'Week' in v_player else "--"
+    day_num = v_player['Day'].values[0] if not v_player.empty and 'Day' in v_player else "--"
+
+    return vol_df_out, int_df_out, vol_score, int_score, minutes, week_num, day_num
 
 
 # -----------------------------------------------------------------------------
 # 5. SIDEBAR NAVIGATION
 # -----------------------------------------------------------------------------
 st.sidebar.markdown("### LADY VOLS BASKETBALL")
-st.sidebar.caption("Performance Analytics Engine")
+st.sidebar.caption("Performance Analytics Console")
 
 main_tab = st.sidebar.radio(
     "Console View:",
@@ -282,20 +299,18 @@ active_season = st.tabs(["Summer"])[0]
 
 with active_season:
     st.markdown("<br>", unsafe_allow_html=True)
-
     roster_players = roster_raw['Name'].tolist() if not roster_raw.empty else vol_raw['Player'].unique().tolist()
 
     # =========================================================================
-    # TAB 1: INDIVIDUAL PROFILE
+    # TAB 1: INDIVIDUAL PROFILE (Original Dual Layout Restored)
     # =========================================================================
     if main_tab == "Individual Profile":
         c_sel, _ = st.columns([1, 2])
         with c_sel:
             selected_player = st.selectbox("Select Athlete Profile:", roster_players)
 
-        # Athlete Roster Metadata
         p_row = roster_raw[roster_raw['Name'] == selected_player]
-        p_pos = p_row['Position'].values[0] if not p_row.empty else "Athlete"
+        p_pos = p_row['Position'].values[0] if not p_row.empty else "Guard / Forward | #00"
         p_img = p_row['Picture'].values[0] if not p_row.empty else "https://via.placeholder.com/80"
 
         st.markdown(f"""
@@ -308,6 +323,7 @@ with active_season:
             </div>
         """, unsafe_allow_html=True)
 
+        # Dual Trend Graphs
         col_g1, col_g2 = st.columns(2)
 
         with col_g1:
@@ -332,10 +348,20 @@ with active_season:
 
         st.divider()
 
+        # Daily Practice Score Breakdown Tables
         st.markdown('### Most Recent Practice Score Breakdown')
         latest_date = vol_raw[vol_raw['Player'] == selected_player]['Date'].max()
         if pd.notna(latest_date):
-            vol_df, int_df, vol_score, int_score = compute_practice_tables(selected_player, latest_date)
+            vol_df, int_df, vol_score, int_score, mins, wk, dy = compute_practice_tables(selected_player, latest_date)
+            
+            st.markdown(f"""
+                <div style="margin-bottom: 12px; display: flex; gap: 10px;">
+                    <span class="session-meta-pill">Minutes: {mins}</span>
+                    <span class="session-meta-pill">Week: {wk}</span>
+                    <span class="session-meta-pill">Day: {dy}</span>
+                </div>
+            """, unsafe_allow_html=True)
+
             col_v, col_i = st.columns(2)
 
             with col_v:
@@ -362,7 +388,7 @@ with active_season:
 
 
     # =========================================================================
-    # TAB 2: PRACTICE SCORE
+    # TAB 2: PRACTICE SCORE (Minutes, Week, Day added)
     # =========================================================================
     elif main_tab == "Practice Score":
         c_d, _ = st.columns([1, 3])
@@ -374,18 +400,25 @@ with active_season:
 
         for player_name in roster_players:
             p_row = roster_raw[roster_raw['Name'] == player_name]
-            p_pos = p_row['Position'].values[0] if not p_row.empty else "Athlete"
+            p_pos = p_row['Position'].values[0] if not p_row.empty else "Guard / Forward | #00"
             p_img = p_row['Picture'].values[0] if not p_row.empty else "https://via.placeholder.com/70"
 
-            vol_df, int_df, vol_score, int_score = compute_practice_tables(player_name, pd.to_datetime(session_date))
+            vol_df, int_df, vol_score, int_score, mins, wk, dy = compute_practice_tables(player_name, pd.to_datetime(session_date))
 
             st.markdown(f"""
                 <div class="roster-card">
-                    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
-                        <img src="{p_img}" class="athlete-avatar" style="width:60px; height:60px;">
-                        <div>
-                            <h3 style="margin:0; font-size:1.3rem; color:#0F172A;">{player_name}</h3>
-                            <span style="color:#64748B; font-size:0.85rem;">{p_pos}</span>
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px;">
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            <img src="{p_img}" class="athlete-avatar" style="width:60px; height:60px;">
+                            <div>
+                                <h3 style="margin:0; font-size:1.25rem; color:#0F172A;">{player_name}</h3>
+                                <span style="color:#64748B; font-size:0.85rem;">{p_pos}</span>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <span class="session-meta-pill">Minutes: {mins}</span>
+                            <span class="session-meta-pill">Week {wk}</span>
+                            <span class="session-meta-pill">Day {dy}</span>
                         </div>
                     </div>
             """, unsafe_allow_html=True)
@@ -417,96 +450,97 @@ with active_season:
 
 
     # =========================================================================
-    # TAB 3: COMPLIANCE
+    # TAB 3: COMPLIANCE (Side-by-Side 2-Column Roster Grid)
     # =========================================================================
     elif main_tab == "Compliance":
-        st.markdown('<div class="vball-section-title">Max Speed & Exposure Compliance Roster</div>', unsafe_allow_html=True)
+        st.markdown('<div class="vball-section-title">Max Speed & Exposure Compliance Grid</div>', unsafe_allow_html=True)
 
-        for player_name in roster_players:
-            p_row = roster_raw[roster_raw['Name'] == player_name]
-            p_pos = p_row['Position'].values[0] if not p_row.empty else "Athlete"
-            p_img = p_row['Picture'].values[0] if not p_row.empty else "https://via.placeholder.com/70"
+        for i in range(0, len(roster_players), 2):
+            col1, col2 = st.columns(2)
+            cols = [col1, col2]
 
-            p_comp = comp_raw[comp_raw['Player'] == player_name].sort_values('Date')
+            for j in range(2):
+                if i + j < len(roster_players):
+                    player_name = roster_players[i + j]
+                    p_row = roster_raw[roster_raw['Name'] == player_name]
+                    p_pos = p_row['Position'].values[0] if not p_row.empty else "Guard / Forward | #00"
+                    p_img = p_row['Picture'].values[0] if not p_row.empty else "https://via.placeholder.com/60"
 
-            if not p_comp.empty:
-                all_time_max = p_comp['Speed (MPH)'].max()
-                max_row = p_comp[p_comp['Speed (MPH)'] == all_time_max].iloc[-1]
-                max_date = max_row['Date'].strftime('%Y-%m-%d')
+                    p_comp = comp_raw[comp_raw['Player'] == player_name].sort_values('Date')
 
-                recent_row = p_comp.iloc[-1]
-                recent_speed = recent_row['Speed (MPH)']
-                recent_date = recent_row['Date'].strftime('%Y-%m-%d')
+                    if not p_comp.empty:
+                        all_time_max = p_comp['Speed (MPH)'].max()
+                        max_row = p_comp[p_comp['Speed (MPH)'] == all_time_max].iloc[-1]
+                        max_date = max_row['Date'].strftime('%Y-%m-%d')
 
-                pct_max = f"{(recent_speed / all_time_max * 100):.1f}%" if all_time_max > 0 else "-- %"
-                days_since = (pd.to_datetime('today') - pd.to_datetime(max_date)).days
+                        recent_row = p_comp.iloc[-1]
+                        recent_speed = recent_row['Speed (MPH)']
+                        recent_date = recent_row['Date'].strftime('%Y-%m-%d')
 
-                badge_bg = "#BBF7D0" if days_since <= 7 else "#FFD6D6"
-                badge_fg = "#166534" if days_since <= 7 else "#991B1B"
+                        pct_max = f"{(recent_speed / all_time_max * 100):.1f}%" if all_time_max > 0 else "-- %"
+                        days_since = (pd.to_datetime('today') - pd.to_datetime(max_date)).days
 
-                st.markdown(f"""
-                    <div class="roster-card">
-                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px;">
-                            <div style="display: flex; align-items: center; gap: 15px;">
-                                <img src="{p_img}" class="athlete-avatar" style="width:60px; height:60px;">
-                                <div>
-                                    <h3 style="margin:0; font-size:1.3rem; color:#0F172A;">{player_name}</h3>
-                                    <span style="color:#64748B; font-size:0.85rem;">{p_pos}</span>
+                        badge_bg = "#BBF7D0" if days_since <= 7 else "#FFD6D6"
+                        badge_fg = "#166534" if days_since <= 7 else "#991B1B"
+
+                        with cols[j]:
+                            st.markdown(f"""
+                                <div class="compliance-card">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                                        <div style="display: flex; align-items: center; gap: 12px;">
+                                            <img src="{p_img}" class="athlete-avatar" style="width:50px; height:50px;">
+                                            <div>
+                                                <h4 style="margin:0; font-size:1.1rem; color:#0F172A;">{player_name}</h4>
+                                                <span style="color:#64748B; font-size:0.8rem;">{p_pos}</span>
+                                            </div>
+                                        </div>
+                                        <div style="background-color:{badge_bg}; color:{badge_fg}; font-weight:700; padding:4px 10px; border-radius:12px; font-size:0.75rem;">
+                                            {days_since} Days
+                                        </div>
+                                    </div>
+                                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+                                        <div class="compliance-metric-card">
+                                            <div class="compliance-metric-label">Recent Speed</div>
+                                            <div class="compliance-metric-value">{recent_speed:.1f} mph</div>
+                                            <div class="compliance-metric-sub">{recent_date}</div>
+                                        </div>
+                                        <div class="compliance-metric-card">
+                                            <div class="compliance-metric-label">All-Time Max Speed</div>
+                                            <div class="compliance-metric-value">{all_time_max:.1f} mph</div>
+                                            <div class="compliance-metric-sub">{max_date}</div>
+                                        </div>
+                                        <div class="compliance-metric-card">
+                                            <div class="compliance-metric-label">% of All-Time Max</div>
+                                            <div class="compliance-metric-value" style="color:#FF8200;">{pct_max}</div>
+                                            <div class="compliance-metric-sub">Recent vs. Peak Output</div>
+                                        </div>
+                                        <div class="compliance-metric-card">
+                                            <div class="compliance-metric-label">Recency Status</div>
+                                            <div class="compliance-metric-value">{days_since} Days</div>
+                                            <div class="compliance-metric-sub">Elapsed Threshold</div>
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
-                            <div style="background-color:{badge_bg}; color:{badge_fg}; font-weight:700; padding:6px 14px; border-radius:20px; font-size:0.85rem;">
-                                {days_since} Days Since Max Speed Ever
-                            </div>
-                        </div>
-                """, unsafe_allow_html=True)
-
-                c1, c2, c3, c4 = st.columns(4)
-                with c1:
-                    st.markdown(f"""
-                        <div class="compliance-metric-card">
-                            <div class="compliance-metric-label">Recent Speed</div>
-                            <div class="compliance-metric-value">{recent_speed:.1f} mph</div>
-                            <div class="compliance-metric-sub">{recent_date}</div>
-                        </div>
-                    """, unsafe_allow_html=True)
-
-                with c2:
-                    st.markdown(f"""
-                        <div class="compliance-metric-card">
-                            <div class="compliance-metric-label">All-Time Max Speed</div>
-                            <div class="compliance-metric-value">{all_time_max:.1f} mph</div>
-                            <div class="compliance-metric-sub">{max_date}</div>
-                        </div>
-                    """, unsafe_allow_html=True)
-
-                with c3:
-                    st.markdown(f"""
-                        <div class="compliance-metric-card">
-                            <div class="compliance-metric-label">% of All-Time Max</div>
-                            <div class="compliance-metric-value" style="color:#FF8200;">{pct_max}</div>
-                            <div class="compliance-metric-sub">Recent vs. Peak Output</div>
-                        </div>
-                    """, unsafe_allow_html=True)
-
-                with c4:
-                    st.markdown(f"""
-                        <div class="compliance-metric-card">
-                            <div class="compliance-metric-label">Recency Status</div>
-                            <div class="compliance-metric-value">{days_since} Days</div>
-                            <div class="compliance-metric-sub">Elapsed Threshold</div>
-                        </div>
-                    """, unsafe_allow_html=True)
-
-                st.markdown('</div>', unsafe_allow_html=True)
+                            """, unsafe_allow_html=True)
 
 
     # =========================================================================
-    # TAB 4: WEEKLY DATA
+    # TAB 4: WEEKLY DATA (Added Select Week Dropdown)
     # =========================================================================
     elif main_tab == "Weekly Data":
+        c_wk, _ = st.columns([1, 2])
+        with c_wk:
+            available_weeks = weekly_raw['Week'].unique().tolist()
+            selected_week = st.selectbox("Select Week Filter:", ["All Weeks"] + list(available_weeks))
+
+        if selected_week != "All Weeks":
+            weekly_filtered = weekly_raw[weekly_raw['Week'] == selected_week]
+        else:
+            weekly_filtered = weekly_raw
+
         st.markdown('<div class="vball-section-title">1. Team Weekly Accumulation Overview</div>', unsafe_allow_html=True)
 
-        weekly_agg = weekly_raw.groupby('Week').agg({
+        weekly_agg = weekly_filtered.groupby('Week').agg({
             'Distance (mi)': 'sum',
             'Distance (speed | High Speed) (mi)': 'sum',
             'Accumulated Acceleration Load': 'sum',
@@ -551,26 +585,28 @@ with active_season:
             'Decels Load': 'mean'
         }).reset_index()
 
+        all_weeks = t_weekly_avg['Week'].tolist()
+
         col_p1, col_p2 = st.columns(2)
         with col_p1:
             st.markdown('<div class="light-card-box">', unsafe_allow_html=True)
-            fig_ind_td = create_weekly_benchmark_chart(weeks, p_weekly['Distance (mi)'], t_weekly_avg['Distance (mi)'], f"Total Distance (mi) — {selected_player_w}", "#FF8200")
+            fig_ind_td = create_weekly_benchmark_chart(all_weeks, p_weekly['Distance (mi)'], t_weekly_avg['Distance (mi)'], f"Total Distance (mi) — {selected_player_w}", "#FF8200")
             st.plotly_chart(fig_ind_td, use_container_width=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
             st.markdown('<div class="light-card-box">', unsafe_allow_html=True)
-            fig_ind_aal = create_weekly_benchmark_chart(weeks, p_weekly['Accumulated Acceleration Load'], t_weekly_avg['Accumulated Acceleration Load'], f"AAL — {selected_player_w}", "#38BDF8")
+            fig_ind_aal = create_weekly_benchmark_chart(all_weeks, p_weekly['Accumulated Acceleration Load'], t_weekly_avg['Accumulated Acceleration Load'], f"AAL — {selected_player_w}", "#38BDF8")
             st.plotly_chart(fig_ind_aal, use_container_width=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
         with col_p2:
             st.markdown('<div class="light-card-box">', unsafe_allow_html=True)
-            fig_ind_hsd = create_weekly_benchmark_chart(weeks, p_weekly['Distance (speed | High Speed) (mi)'], t_weekly_avg['Distance (speed | High Speed) (mi)'], f"High Speed Distance (mi) — {selected_player_w}", "#FF8200")
+            fig_ind_hsd = create_weekly_benchmark_chart(all_weeks, p_weekly['Distance (speed | High Speed) (mi)'], t_weekly_avg['Distance (speed | High Speed) (mi)'], f"High Speed Distance (mi) — {selected_player_w}", "#FF8200")
             st.plotly_chart(fig_ind_hsd, use_container_width=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
             st.markdown('<div class="light-card-box">', unsafe_allow_html=True)
-            fig_ind_dl = create_weekly_benchmark_chart(weeks, p_weekly['Decels Load'], t_weekly_avg['Decels Load'], f"Deceleration Load — {selected_player_w}", "#38BDF8")
+            fig_ind_dl = create_weekly_benchmark_chart(all_weeks, p_weekly['Decels Load'], t_weekly_avg['Decels Load'], f"Deceleration Load — {selected_player_w}", "#38BDF8")
             st.plotly_chart(fig_ind_dl, use_container_width=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
@@ -579,7 +615,7 @@ with active_season:
     # TAB 5: TESTING
     # =========================================================================
     elif main_tab == "Testing":
-        st.markdown('<div class="vball-section-title">CMJ</div>', unsafe_allow_html=True)
+        st.markdown('<div class="vball-section-title">CMJ History</div>', unsafe_allow_html=True)
 
         c_filter, _ = st.columns([1, 2])
         with c_filter:
