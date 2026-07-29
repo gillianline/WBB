@@ -6,6 +6,14 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+def get_clean_jump_col(df):
+    for col in df.columns:
+        if "jump height" in col.lower():
+            # Force string entries (like "cm" or empty strings) to float numbers
+            df[col] = pd.to_numeric(df[col].astype(str).str.replace(r'[^0-9.]', '', regex=True), errors='coerce')
+            return col
+    return None
+    
 # -----------------------------------------------------------------------------
 # 1. PAGE CONFIGURATION & CLEAN STYLING
 # -----------------------------------------------------------------------------
@@ -944,68 +952,73 @@ with active_season:
       st.plotly_chart(fig_ind_dl, use_container_width=True)
 
   # =========================================================================
-  # TAB 5: TESTING
-  # =========================================================================
-  elif main_tab == "Testing":
-    st.markdown(
-        '<div class="vball-section-title">CMJ History</div>',
-        unsafe_allow_html=True,
-    )
+    # TAB 5: TESTING (Fixed CMJ Line & Dual-Axis Trend Plotting)
+    # =========================================================================
+    elif main_tab == "Testing":
+        st.markdown('<div class="vball-section-title">CMJ History</div>', unsafe_allow_html=True)
 
-    c_filter, _ = st.columns([1, 2])
-    with c_filter:
-      selected_player_t = st.selectbox("Select Athlete:", roster_players)
+        c_filter, _ = st.columns([1, 2])
+        with c_filter:
+            selected_player_t = st.selectbox("Select Athlete:", roster_players)
 
-    p_cmj = cmj_raw[cmj_raw["Name"] == selected_player_t].sort_values("Date")
-    j_col = get_jump_col(p_cmj)
+        # Filter athlete data & sort by date
+        p_cmj = cmj_raw[cmj_raw["Name"] == selected_player_t].sort_values("Date").copy()
+        
+        # Identify jump height column and force numeric values
+        j_col = get_clean_jump_col(p_cmj)
 
-    display_cols = [c for c in p_cmj.columns if c not in ["Name", "Date_Str"]]
-    st.markdown(f"### Jump History for {selected_player_t}")
-    st.markdown(render_vball_table(p_cmj[display_cols]), unsafe_allow_html=True)
+        display_cols = [c for c in p_cmj.columns if c not in ["Name", "Date_Str"]]
+        st.markdown(f"### Jump History for {selected_player_t}")
+        st.markdown(render_vball_table(p_cmj[display_cols]), unsafe_allow_html=True)
 
-    st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
 
-    if not p_cmj.empty and j_col:
-      fig_jump_trend = go.Figure()
-      fig_jump_trend.add_trace(
-          go.Scatter(
-              x=p_cmj["Date_Str"],
-              y=p_cmj[j_col],
-              name=j_col,
-              mode="lines+markers",
-              line=dict(color="#FF8200", width=3),
-              marker=dict(size=8),
-          )
-      )
+        if not p_cmj.empty and j_col:
+            fig_jump_trend = go.Figure()
 
-      if "RSI-modified (Imp-Mom) [m/s]" in p_cmj.columns:
-        fig_jump_trend.add_trace(
-            go.Scatter(
-                x=p_cmj["Date_Str"],
-                y=p_cmj["RSI-modified (Imp-Mom) [m/s]"],
-                name="RSI-modified",
-                mode="lines+markers",
-                yaxis="y2",
-                line=dict(color="#38BDF8", width=3),
-                marker=dict(size=8),
+            # 1. Primary Y-Axis: Jump Height Line + Markers
+            fig_jump_trend.add_trace(
+                go.Scatter(
+                    x=p_cmj["Date_Str"],
+                    y=p_cmj[j_col],
+                    name=j_col,
+                    mode="lines+markers",
+                    connectgaps=True,  # Draws line continuously even if rows have gaps
+                    line=dict(color="#FF8200", width=3),
+                    marker=dict(size=8),
+                )
             )
-        )
 
-      fig_jump_trend.update_layout(
-          title=(
-              "Jump Height & RSI-modified Progression Over Time"
-              f" ({selected_player_t})"
-          ),
-          title_font=dict(size=14, color="#0F172A"),
-          height=320,
-          margin=dict(l=0, r=0, t=40, b=0),
-          plot_bgcolor="rgba(0,0,0,0)",
-          paper_bgcolor="rgba(0,0,0,0)",
-          yaxis=dict(title="Jump Height [cm]"),
-          yaxis2=dict(title="RSI-modified [m/s]", overlaying="y", side="right"),
-          legend=dict(
-              orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
-          ),
-      )
+            # 2. Secondary Y-Axis: RSI-Modified (if exists)
+            rsi_col = [c for c in p_cmj.columns if "rsi" in c.lower()]
+            if rsi_col:
+                rsi_c = rsi_col[0]
+                p_cmj[rsi_c] = pd.to_numeric(p_cmj[rsi_c].astype(str).str.replace(r'[^0-9.]', '', regex=True), errors='coerce')
+                fig_jump_trend.add_trace(
+                    go.Scatter(
+                        x=p_cmj["Date_Str"],
+                        y=p_cmj[rsi_c],
+                        name="RSI-modified",
+                        mode="lines+markers",
+                        connectgaps=True,
+                        yaxis="y2",
+                        line=dict(color="#38BDF8", width=3),
+                        marker=dict(size=8),
+                    )
+                )
 
-      st.plotly_chart(fig_jump_trend, use_container_width=True)
+            fig_jump_trend.update_layout(
+                title=f"Jump Height & RSI-modified Progression Over Time ({selected_player_t})",
+                title_font=dict(size=14, color="#0F172A"),
+                height=350,
+                margin=dict(l=0, r=0, t=40, b=0),
+                plot_bgcolor="rgba(0,0,0,0)",
+                paper_bgcolor="rgba(0,0,0,0)",
+                yaxis=dict(title="Jump Height [cm]"),
+                yaxis2=dict(title="RSI-modified [m/s]", overlaying="y", side="right"),
+                legend=dict(
+                    orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
+                ),
+            )
+
+            st.plotly_chart(fig_jump_trend, use_container_width=True)
