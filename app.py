@@ -387,7 +387,7 @@ with active_season:
 
 
     # =========================================================================
-    # TAB 2: PRACTICE SCORE (Unified Athlete Profile Card Layout)
+    # TAB 2: PRACTICE SCORE (Unified Player Card Container)
     # =========================================================================
     elif main_tab == "Practice Score":
         c_d, _ = st.columns([1, 3])
@@ -397,15 +397,16 @@ with active_season:
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Unified Card Block containing Profile Banner + Volume/Intensity Tables
+        # Loop through each player in the roster
         for player_name in roster_players:
             p_row = roster_raw[roster_raw['Name'] == player_name]
             p_pos = p_row['Position'].values[0] if not p_row.empty else "Guard / Forward | #00"
             p_img = p_row['Picture'].values[0] if not p_row.empty else "https://via.placeholder.com/70"
 
+            # Compute practice tables & session metadata
             vol_df, int_df, vol_score, int_score, mins, wk, dy = compute_practice_tables(player_name, pd.to_datetime(session_date))
 
-            # Opening Unified Card Container
+            # ---------------- UNIFIED CARD CONTAINER START ----------------
             st.markdown(f"""
                 <div class="roster-card">
                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; border-bottom: 1px solid #E2E8F0; padding-bottom: 12px;">
@@ -424,8 +425,9 @@ with active_season:
                     </div>
             """, unsafe_allow_html=True)
 
-            # Columns inside the unified card
+            # Volume & Intensity Tables inside the same card
             col1, col2 = st.columns(2)
+            
             with col1:
                 st.markdown('<div class="vball-section-title">Volume Metrics</div>', unsafe_allow_html=True)
                 st.markdown(render_vball_table(vol_df), unsafe_allow_html=True)
@@ -448,9 +450,8 @@ with active_season:
                     </div>
                 """, unsafe_allow_html=True)
 
-            # Closing Unified Card Container
+            # ---------------- UNIFIED CARD CONTAINER END ----------------
             st.markdown('</div>', unsafe_allow_html=True)
-
 
     # =========================================================================
     # TAB 3: COMPLIANCE (Sub-Tabs for Speed & CMJ Grids)
