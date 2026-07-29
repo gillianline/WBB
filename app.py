@@ -973,6 +973,9 @@ with active_season:
         st.markdown("<br>", unsafe_allow_html=True)
 
         if not p_cmj.empty and j_col:
+            # --- FIX DATES: Format from '2026-07-21 00:00:00' to 'Jul 21\n2026' ---
+            p_cmj["Formatted_Date"] = pd.to_datetime(p_cmj["Date_Str"]).dt.strftime("%b %d<br>%Y")
+
             # Numeric cleaning
             p_cmj["Jump_Height_Clean"] = pd.to_numeric(
                 p_cmj[j_col].astype(str).str.replace(r"[^0-9.]", "", regex=True),
@@ -984,13 +987,13 @@ with active_season:
             # 1. ORANGE SOLID LINE: JUMP HEIGHT (Left Axis)
             fig_jump_trend.add_trace(
                 go.Scatter(
-                    x=p_cmj["Date_Str"],
+                    x=p_cmj["Formatted_Date"],
                     y=p_cmj["Jump_Height_Clean"],
                     name="Jump Height",
                     mode="lines+markers",
                     connectgaps=True,
                     yaxis="y",
-                    line=dict(color="#FF8200", width=4),  # Thick solid orange line
+                    line=dict(color="#FF8200", width=4),  # Solid thick orange line
                     marker=dict(size=8, color="#FF8200"),
                 )
             )
@@ -1003,7 +1006,7 @@ with active_season:
                 )
                 fig_jump_trend.add_trace(
                     go.Scatter(
-                        x=p_cmj["Date_Str"],
+                        x=p_cmj["Formatted_Date"],
                         y=p_cmj["RSI_Clean"],
                         name="RSI Modified",
                         mode="lines+markers",
@@ -1034,6 +1037,7 @@ with active_season:
                 # Bottom X-Axis
                 xaxis=dict(
                     title=None,
+                    type="category",  # Keeps exact date string layout without automatic timestamp stretching
                     showgrid=False,
                     showline=True,
                     linewidth=1.5,
