@@ -969,6 +969,12 @@ with active_season:
         if not p_cmj.empty and j_col:
             fig_jump_trend = go.Figure()
 
+            # Ensure numeric types and clean dates
+            p_cmj[j_col] = pd.to_numeric(
+                p_cmj[j_col].astype(str).str.replace(r"[^0-9.]", "", regex=True),
+                errors="coerce",
+            )
+
             # 1. ORANGE LINE: JUMP HEIGHT (Left Y-Axis)
             fig_jump_trend.add_trace(
                 go.Scatter(
@@ -977,9 +983,9 @@ with active_season:
                     name="Jump Height [cm]",
                     mode="lines+markers",
                     connectgaps=True,
-                    yaxis="y1",
+                    yaxis="y",  # Primary Y-Axis
                     line=dict(color="#FF8200", width=3),
-                    marker=dict(size=8),
+                    marker=dict(size=8, color="#FF8200"),
                 )
             )
 
@@ -998,21 +1004,20 @@ with active_season:
                         name="RSI-modified [m/s]",
                         mode="lines+markers",
                         connectgaps=True,
-                        yaxis="y2",
+                        yaxis="y2",  # Secondary Y-Axis
                         line=dict(color="#38BDF8", width=3),
-                        marker=dict(size=8),
+                        marker=dict(size=8, color="#38BDF8"),
                     )
                 )
 
-            # 3. MODERN PLOTLY v6 COMPATIBLE LAYOUT
-            # 3. CONFIGURE BOTH Y-AXES EXPLICITLY (WITH ANCHORING)
+            # 3. DUAL Y-AXES LAYOUT CONFIGURATION
             fig_jump_trend.update_layout(
                 title=dict(
                     text=f"Jump Height & RSI-modified Progression Over Time ({selected_player_t})",
                     font=dict(size=14, color="#0F172A"),
                 ),
                 height=380,
-                margin=dict(l=40, r=40, t=40, b=20),
+                margin=dict(l=50, r=50, t=40, b=30),
                 plot_bgcolor="rgba(0,0,0,0)",
                 paper_bgcolor="rgba(0,0,0,0)",
                 xaxis=dict(title=None, showgrid=False),
@@ -1034,7 +1039,7 @@ with active_season:
                     tickfont=dict(color="#38BDF8"),
                     overlaying="y",
                     side="right",
-                    anchor="x",  # <-- Ensures yaxis2 binds properly to the time series
+                    anchor="x",
                     showgrid=False,
                 ),
                 legend=dict(
