@@ -974,15 +974,7 @@ with active_season:
         st.markdown("<br>", unsafe_allow_html=True)
 
         if not p_cmj.empty and j_col:
-            # --- FORCE FORMAT AS A CLEAN STRING (Prevents Plotly from auto-adding 00:00:00) ---
-            # Converts any date type to 'Jul 28<br>2026' string explicitly
-            p_cmj["Formatted_Date"] = (
-                pd.to_datetime(p_cmj["Date"])
-                .dt.strftime("%b %d<br>%Y")
-                .astype(str)
-            )
-
-            # Clean numeric data
+            # Clean numeric values directly
             p_cmj["Jump_Height_Clean"] = pd.to_numeric(
                 p_cmj[j_col].astype(str).str.replace(r"[^0-9.]", "", regex=True),
                 errors="coerce",
@@ -993,13 +985,13 @@ with active_season:
             # 1. ORANGE SOLID LINE: JUMP HEIGHT (Left Axis)
             fig_jump_trend.add_trace(
                 go.Scatter(
-                    x=p_cmj["Formatted_Date"],
+                    x=p_cmj["Date"],  # Pass raw datetime series
                     y=p_cmj["Jump_Height_Clean"],
                     name="Jump Height",
                     mode="lines+markers",
                     connectgaps=True,
                     yaxis="y",
-                    line=dict(color="#FF8200", width=4),  # Solid thick orange line
+                    line=dict(color="#FF8200", width=4),
                     marker=dict(size=8, color="#FF8200"),
                 )
             )
@@ -1012,18 +1004,18 @@ with active_season:
                 )
                 fig_jump_trend.add_trace(
                     go.Scatter(
-                        x=p_cmj["Formatted_Date"],
+                        x=p_cmj["Date"],
                         y=p_cmj["RSI_Clean"],
                         name="RSI Modified",
                         mode="lines+markers",
                         connectgaps=True,
                         yaxis="y2",
-                        line=dict(color="#38BDF8", width=3, dash="dot"),  # Dotted blue line
+                        line=dict(color="#38BDF8", width=3, dash="dot"),
                         marker=dict(size=8, color="#38BDF8"),
                     )
                 )
 
-            # 3. MATCH EXACT STYLING FROM REFERENCE
+            # 3. DUAL Y-AXES LAYOUT
             fig_jump_trend.update_layout(
                 height=320,
                 margin=dict(l=40, r=40, t=50, b=40),
@@ -1040,10 +1032,11 @@ with active_season:
                     font=dict(size=13, color="#0F172A"),
                 ),
                 
-                # Bottom X-Axis
+                # Bottom X-Axis (Explicit Plotly Date Formatter)
                 xaxis=dict(
                     title=None,
-                    type="category",  # Forces Plotly to treat values strictly as discrete text labels
+                    type="date",
+                    tickformat="%b %d\n%Y",  # Overrides default 00:00:00 time format
                     showgrid=False,
                     showline=True,
                     linewidth=1.5,
