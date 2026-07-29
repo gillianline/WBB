@@ -387,7 +387,7 @@ with active_season:
 
 
     # =========================================================================
-    # TAB 2: PRACTICE SCORE (Unified Player Card Container)
+    # TAB 2: PRACTICE SCORE (Truly Unified HTML Card Container)
     # =========================================================================
     elif main_tab == "Practice Score":
         c_d, _ = st.columns([1, 3])
@@ -397,62 +397,67 @@ with active_season:
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Loop through each player in the roster
         for player_name in roster_players:
             p_row = roster_raw[roster_raw['Name'] == player_name]
             p_pos = p_row['Position'].values[0] if not p_row.empty else "Guard / Forward | #00"
             p_img = p_row['Picture'].values[0] if not p_row.empty else "https://via.placeholder.com/70"
 
-            # Compute practice tables & session metadata
             vol_df, int_df, vol_score, int_score, mins, wk, dy = compute_practice_tables(player_name, pd.to_datetime(session_date))
 
-            # ---------------- UNIFIED CARD CONTAINER START ----------------
-            st.markdown(f"""
-                <div class="roster-card">
-                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; border-bottom: 1px solid #E2E8F0; padding-bottom: 12px;">
+            # HTML Tables Render
+            vol_html_table = render_vball_table(vol_df)
+            int_html_table = render_vball_table(int_df)
+
+            # Colors for Score Callouts
+            v_bg, v_fg = get_vball_color(vol_score)
+            i_bg, i_fg = get_vball_color(int_score)
+
+            # ONE SINGLE HTML CARD STRING
+            card_html = f"""
+                <div class="roster-card" style="background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
+                    <!-- 1. ATHLETE PROFILE HEADER & METADATA -->
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; border-bottom: 1px solid #E2E8F0; padding-bottom: 12px;">
                         <div style="display: flex; align-items: center; gap: 15px;">
-                            <img src="{p_img}" class="athlete-avatar" style="width:60px; height:60px;">
+                            <img src="{p_img}" class="athlete-avatar" style="width:60px; height:60px; border-radius:50%; border:3px solid #FF8200; object-fit:cover;">
                             <div>
-                                <h3 style="margin:0; font-size:1.3rem; color:#0F172A;">{player_name}</h3>
+                                <h3 style="margin:0; font-size:1.3rem; color:#0F172A; font-weight:700;">{player_name}</h3>
                                 <span style="color:#64748B; font-size:0.85rem;">{p_pos}</span>
                             </div>
                         </div>
                         <div style="display: flex; gap: 8px;">
-                            <span class="session-meta-pill">Minutes: {mins}</span>
-                            <span class="session-meta-pill">Week {wk}</span>
-                            <span class="session-meta-pill">Day {dy}</span>
+                            <span class="session-meta-pill" style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Minutes: {mins}</span>
+                            <span class="session-meta-pill" style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Week {wk}</span>
+                            <span class="session-meta-pill" style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Day {dy}</span>
                         </div>
                     </div>
-            """, unsafe_allow_html=True)
 
-            # Volume & Intensity Tables inside the same card
-            col1, col2 = st.columns(2)
+                    <!-- 2. DUAL TABLES & SCORES GRID -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <!-- Volume Section -->
+                        <div>
+                            <div class="vball-section-title" style="background-color:#38BDF8; color:#0F172A; font-weight:700; font-size:0.95rem; padding:6px 12px; border-radius:6px; text-align:center; margin-bottom:12px; text-transform:uppercase;">Volume Metrics</div>
+                            {vol_html_table}
+                            <div class="score-box-container" style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:10px; text-align:center; margin-top:10px;">
+                                <div style="font-weight:700; color:#64748B; font-size:0.85rem;">VOLUME SCORE</div>
+                                <div class="score-box-value" style="font-size:2rem; font-weight:800; padding:6px 0; border-radius:6px; background-color:{v_bg}; color:{v_fg}; margin-top:4px;">{vol_score}</div>
+                            </div>
+                        </div>
+
+                        <!-- Intensity Section -->
+                        <div>
+                            <div class="vball-section-title" style="background-color:#38BDF8; color:#0F172A; font-weight:700; font-size:0.95rem; padding:6px 12px; border-radius:6px; text-align:center; margin-bottom:12px; text-transform:uppercase;">Intensity Metrics</div>
+                            {int_html_table}
+                            <div class="score-box-container" style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:10px; text-align:center; margin-top:10px;">
+                                <div style="font-weight:700; color:#64748B; font-size:0.85rem;">INTENSITY SCORE</div>
+                                <div class="score-box-value" style="font-size:2rem; font-weight:800; padding:6px 0; border-radius:6px; background-color:{i_bg}; color:{i_fg}; margin-top:4px;">{int_score}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            """
+
+            st.markdown(card_html, unsafe_allow_html=True)
             
-            with col1:
-                st.markdown('<div class="vball-section-title">Volume Metrics</div>', unsafe_allow_html=True)
-                st.markdown(render_vball_table(vol_df), unsafe_allow_html=True)
-                v_bg, v_fg = get_vball_color(vol_score)
-                st.markdown(f"""
-                    <div class="score-box-container">
-                        <div style="font-weight: 700; color: #64748B; font-size: 0.85rem;">VOLUME SCORE</div>
-                        <div class="score-box-value" style="background-color: {v_bg}; color: {v_fg};">{vol_score}</div>
-                    </div>
-                """, unsafe_allow_html=True)
-
-            with col2:
-                st.markdown('<div class="vball-section-title">Intensity Metrics</div>', unsafe_allow_html=True)
-                st.markdown(render_vball_table(int_df), unsafe_allow_html=True)
-                i_bg, i_fg = get_vball_color(int_score)
-                st.markdown(f"""
-                    <div class="score-box-container">
-                        <div style="font-weight: 700; color: #64748B; font-size: 0.85rem;">INTENSITY SCORE</div>
-                        <div class="score-box-value" style="background-color: {i_bg}; color: {i_fg};">{int_score}</div>
-                    </div>
-                """, unsafe_allow_html=True)
-
-            # ---------------- UNIFIED CARD CONTAINER END ----------------
-            st.markdown('</div>', unsafe_allow_html=True)
-
     # =========================================================================
     # TAB 3: COMPLIANCE (Sub-Tabs for Speed & CMJ Grids)
     # =========================================================================
