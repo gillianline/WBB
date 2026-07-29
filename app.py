@@ -91,12 +91,12 @@ st.markdown("""
             padding: 15px; margin-bottom: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.03);
         }
 
+        /* Unified Roster Card Styling for Practice & Compliance */
         .roster-card {
-            background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 10px;
-            padding: 18px; margin-bottom: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+            background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px;
+            padding: 20px; margin-bottom: 25px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);
         }
 
-        /* Side-by-side Compliance Card Styling */
         .compliance-card {
             background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 10px;
             padding: 16px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.03);
@@ -149,8 +149,6 @@ def load_sheet_data():
     def fetch_csv(secret_key):
         url = st.secrets["sheets"][secret_key]
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        
-        # urllib.request.urlopen opens the response buffer that pandas reads directly
         with urllib.request.urlopen(req) as response:
             return pd.read_csv(response, on_bad_lines='skip', engine='python')
 
@@ -162,7 +160,6 @@ def load_sheet_data():
         cmj_df = fetch_csv("cmj_url")
         roster_df = fetch_csv("roster_url")
 
-        # Convert date columns to datetime
         for df in [vol_df, int_df, comp_df, weekly_df, cmj_df]:
             date_col = [c for c in df.columns if "date" in c.lower()]
             if date_col:
@@ -177,17 +174,13 @@ vol_raw, int_raw, comp_raw, weekly_raw, cmj_raw, roster_raw = load_sheet_data()
 
 
 # -----------------------------------------------------------------------------
-# 4. HELPER FUNCTIONS & VOLLEYBALL COLOR LOGIC (Green = Low)
+# 4. HELPER FUNCTIONS & COLOR LOGIC (Green = Low Load)
 # -----------------------------------------------------------------------------
 def get_vball_color(score):
-    """
-    Volleyball Load Logic: Lower numbers = Green (Optimal/Controlled),
-    Higher numbers = Yellow/Red (Moderate/High Load).
-    """
     if score is None or pd.isna(score): return "#E2E8F0", "#475569"
-    if score < 50: return "#BBF7D0", "#166534"      # Green (Low load)
+    if score < 50: return "#BBF7D0", "#166534"      # Green (Low/Optimal Load)
     elif score < 75: return "#FEF08A", "#854D0E"    # Yellow (Moderate)
-    else: return "#FFD6D6", "#991B1B"               # Red (High load)
+    else: return "#FFD6D6", "#991B1B"               # Red (High Load)
 
 def render_vball_table(df):
     html = '<table class="vball-table"><thead><tr>'
@@ -214,21 +207,6 @@ def create_clean_bar_chart(x_vals, y_vals, title_text, bar_color="#38BDF8"):
         height=240, margin=dict(l=0, r=0, t=35, b=0),
         plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
         xaxis_title=None, yaxis_title=None
-    )
-    return fig
-
-def create_weekly_benchmark_chart(weeks, athlete_vals, team_avg_vals, title_text, bar_color="#38BDF8"):
-    fig = go.Figure()
-    fig.add_trace(go.Bar(x=weeks, y=athlete_vals, name="Athlete Output", marker_color=bar_color))
-    fig.add_trace(go.Scatter(
-        x=weeks, y=team_avg_vals, name="Team Average", mode="markers",
-        marker=dict(symbol="line-ew", size=24, line=dict(width=3, color="black"))
-    ))
-    fig.update_layout(
-        title=title_text, title_font=dict(size=14, color="#0F172A"),
-        height=250, margin=dict(l=0, r=0, t=35, b=0),
-        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-        showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
     return fig
 
@@ -262,7 +240,6 @@ def compute_practice_tables(player_name, session_date):
     vol_score = int(vol_df_out['Grade'].mean()) if not vol_df_out.empty else 0
     int_score = int(int_df_out['Grade'].mean()) if not int_df_out.empty else 0
 
-    # Session metadata (Minutes, Week, Day)
     minutes = v_player['Minutes'].values[0] if not v_player.empty and 'Minutes' in v_player else "--"
     week_num = v_player['Week'].values[0] if not v_player.empty and 'Week' in v_player else "--"
     day_num = v_player['Day'].values[0] if not v_player.empty and 'Day' in v_player else "--"
@@ -305,15 +282,14 @@ with active_season:
     st.markdown("<br>", unsafe_allow_html=True)
     roster_players = roster_raw['Name'].tolist() if not roster_raw.empty else vol_raw['Player'].unique().tolist()
 
-     # =========================================================================
-    # TAB 1: INDIVIDUAL PROFILE
+    # =========================================================================
+    # TAB 1: INDIVIDUAL PROFILE (Practice Trend + CMJ + Daily Score Breakdown)
     # =========================================================================
     if main_tab == "Individual Profile":
         c_sel, _ = st.columns([1, 2])
         with c_sel:
             selected_player = st.selectbox("Select Athlete Profile:", roster_players)
 
-        # Roster Header
         p_row = roster_raw[roster_raw['Name'] == selected_player]
         p_pos = p_row['Position'].values[0] if not p_row.empty else "Guard / Forward | #00"
         p_img = p_row['Picture'].values[0] if not p_row.empty else "https://via.placeholder.com/80"
@@ -328,17 +304,13 @@ with active_season:
             </div>
         """, unsafe_allow_html=True)
 
-        # DUAL GRAPHS: 1. Volume vs Intensity Score Trend | 2. CMJ History
         col_g1, col_g2 = st.columns(2)
 
         with col_g1:
-            st.markdown('<div class="vball-section-title">Practice Scores Trend</div>', unsafe_allow_html=True)
-            
-            # Fetch dates for selected athlete from volume & intensity sheets
+            st.markdown('<div class="vball-section-title">Practice Scores History</div>', unsafe_allow_html=True)
             v_p = vol_raw[vol_raw['Player'] == selected_player].sort_values('Date')
             
             if not v_p.empty:
-                # Merge or calculate daily Volume & Intensity scores over time
                 score_history = []
                 for d in v_p['Date'].unique():
                     _, _, v_sc, i_sc, _, _, _ = compute_practice_tables(selected_player, d)
@@ -346,7 +318,6 @@ with active_season:
                 
                 df_score_trend = pd.DataFrame(score_history)
 
-                # Line graph plotting Volume Score vs Intensity Score over time
                 fig1 = px.line(
                     df_score_trend, 
                     x="Date", 
@@ -377,7 +348,6 @@ with active_season:
 
         st.divider()
 
-        # DAILY PRACTICE SCORE BREAKDOWN TABLES
         st.markdown('### Most Recent Practice Score Breakdown')
         latest_date = vol_raw[vol_raw['Player'] == selected_player]['Date'].max()
         if pd.notna(latest_date):
@@ -417,7 +387,7 @@ with active_season:
 
 
     # =========================================================================
-    # TAB 2: PRACTICE SCORE (Minutes, Week, Day added)
+    # TAB 2: PRACTICE SCORE (Unified Athlete Profile Card Layout)
     # =========================================================================
     elif main_tab == "Practice Score":
         c_d, _ = st.columns([1, 3])
@@ -427,6 +397,7 @@ with active_season:
 
         st.markdown("<br>", unsafe_allow_html=True)
 
+        # Unified Card Block containing Profile Banner + Volume/Intensity Tables
         for player_name in roster_players:
             p_row = roster_raw[roster_raw['Name'] == player_name]
             p_pos = p_row['Position'].values[0] if not p_row.empty else "Guard / Forward | #00"
@@ -434,13 +405,14 @@ with active_season:
 
             vol_df, int_df, vol_score, int_score, mins, wk, dy = compute_practice_tables(player_name, pd.to_datetime(session_date))
 
+            # Opening Unified Card Container
             st.markdown(f"""
                 <div class="roster-card">
-                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; border-bottom: 1px solid #E2E8F0; padding-bottom: 12px;">
                         <div style="display: flex; align-items: center; gap: 15px;">
                             <img src="{p_img}" class="athlete-avatar" style="width:60px; height:60px;">
                             <div>
-                                <h3 style="margin:0; font-size:1.25rem; color:#0F172A;">{player_name}</h3>
+                                <h3 style="margin:0; font-size:1.3rem; color:#0F172A;">{player_name}</h3>
                                 <span style="color:#64748B; font-size:0.85rem;">{p_pos}</span>
                             </div>
                         </div>
@@ -452,6 +424,7 @@ with active_season:
                     </div>
             """, unsafe_allow_html=True)
 
+            # Columns inside the unified card
             col1, col2 = st.columns(2)
             with col1:
                 st.markdown('<div class="vball-section-title">Volume Metrics</div>', unsafe_allow_html=True)
@@ -475,19 +448,16 @@ with active_season:
                     </div>
                 """, unsafe_allow_html=True)
 
+            # Closing Unified Card Container
             st.markdown('</div>', unsafe_allow_html=True)
 
 
     # =========================================================================
-    # TAB 3: COMPLIANCE (Sub-Tabs for Speed & CMJ Roster Grids)
+    # TAB 3: COMPLIANCE (Sub-Tabs for Speed & CMJ Grids)
     # =========================================================================
     elif main_tab == "Compliance":
-        # Compliance Sub-Tabs Navigation
         comp_sub_tab1, comp_sub_tab2 = st.tabs(["Speed Compliance", "CMJ Compliance"])
 
-        # ---------------------------------------------------------------------
-        # SUB-TAB 1: SPEED COMPLIANCE
-        # ---------------------------------------------------------------------
         with comp_sub_tab1:
             st.markdown('<div class="vball-section-title">Max Speed & Exposure Compliance Grid</div>', unsafe_allow_html=True)
 
@@ -559,9 +529,6 @@ with active_season:
                                     </div>
                                 """, unsafe_allow_html=True)
 
-        # ---------------------------------------------------------------------
-        # SUB-TAB 2: CMJ COMPLIANCE
-        # ---------------------------------------------------------------------
         with comp_sub_tab2:
             st.markdown('<div class="vball-section-title">CMJ Jump Height Exposure & Compliance Grid</div>', unsafe_allow_html=True)
 
@@ -635,11 +602,9 @@ with active_season:
 
 
     # =========================================================================
-    # TAB 4: WEEKLY DATA (Team Bars + Individual Athlete Overlay Dashes)
+    # TAB 4: WEEKLY DATA (Team Bars + Individual Overlay Lines)
     # =========================================================================
     elif main_tab == "Weekly Data":
-        
-        # 1. TEAM WEEKLY ACCUMULATION OVERVIEW (Aggregated across all weeks)
         st.markdown('<div class="vball-section-title">1. Team Weekly Accumulation Overview</div>', unsafe_allow_html=True)
 
         weekly_agg = weekly_raw.groupby('Week').agg({
@@ -676,11 +641,9 @@ with active_season:
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # 2. INDIVIDUAL PLAYER OVERLAY ON TEAM AVERAGE BARS
         st.markdown('<div class="vball-section-title">2. Individual Player Breakdown vs. Team Average</div>', unsafe_allow_html=True)
         selected_player_w = st.selectbox("Select Athlete:", roster_players)
 
-        # Player Weekly Values & Team Weekly Averages
         p_weekly = weekly_raw[weekly_raw['Player'] == selected_player_w]
         t_weekly_avg = weekly_raw.groupby('Week').agg({
             'Distance (mi)': 'mean',
@@ -691,27 +654,13 @@ with active_season:
 
         all_weeks = t_weekly_avg['Week'].tolist()
 
-        # Helper function where BARS = Team Average, DASHES = Athlete Output
         def create_team_bar_athlete_line_chart(weeks, team_avg_vals, athlete_vals, title_text, bar_color="#38BDF8"):
             fig = go.Figure()
-            
-            # Team Average Bar
-            fig.add_trace(go.Bar(
-                x=weeks,
-                y=team_avg_vals,
-                name="Team Average",
-                marker_color=bar_color
-            ))
-            
-            # Athlete Output Overlay Line (Black horizontal dashes per week)
+            fig.add_trace(go.Bar(x=weeks, y=team_avg_vals, name="Team Average", marker_color=bar_color))
             fig.add_trace(go.Scatter(
-                x=weeks,
-                y=athlete_vals,
-                name=f"{selected_player_w} Output",
-                mode="markers",
+                x=weeks, y=athlete_vals, name=f"{selected_player_w} Output", mode="markers",
                 marker=dict(symbol="line-ew", size=24, line=dict(width=3, color="black"))
             ))
-            
             fig.update_layout(
                 title=title_text, title_font=dict(size=14, color="#0F172A"),
                 height=250, margin=dict(l=0, r=0, t=35, b=0),
@@ -742,6 +691,7 @@ with active_season:
             fig_ind_dl = create_team_bar_athlete_line_chart(all_weeks, t_weekly_avg['Decels Load'], p_weekly['Decels Load'], f"Deceleration Load — {selected_player_w}", "#38BDF8")
             st.plotly_chart(fig_ind_dl, use_container_width=True)
             st.markdown('</div>', unsafe_allow_html=True)
+
 
     # =========================================================================
     # TAB 5: TESTING
