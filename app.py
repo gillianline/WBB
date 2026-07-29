@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 # -----------------------------------------------------------------------------
-# 1. PAGE CONFIGURATION & CUSTOM STYLING
+# 1. PAGE CONFIGURATION & CLEAN STYLING
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="Lady Vols Basketball | Performance Console",
@@ -39,7 +39,7 @@ st.markdown(
 
         .athlete-card {
             background-color: #FFFFFF;
-            border: 1px solid #E2E8F0;
+            border: 1px solid #CBD5E1;
             border-radius: 12px;
             padding: 16px 20px;
             display: flex;
@@ -56,23 +56,11 @@ st.markdown(
             object-fit: cover;
             background-color: #F1F5F9;
         }
-        .athlete-info h2 { margin: 0; font-size: 1.4rem; font-weight: 700; color: #0F172A; }
-        .athlete-info p { margin: 2px 0 0 0; color: #64748B; font-size: 0.88rem; }
 
         .vball-section-title {
             background-color: #38BDF8; color: #0F172A; font-weight: 700; font-size: 1.05rem;
             padding: 8px 16px; border-radius: 6px; text-align: center;
             margin-bottom: 15px; text-transform: uppercase; letter-spacing: 0.5px;
-        }
-
-        .score-box-container {
-            background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px;
-            padding: 10px; text-align: center; margin-top: 10px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.03);
-        }
-        .score-box-value {
-            font-size: 2rem; font-weight: 800; padding: 6px 0; border-radius: 6px;
-            color: #0F172A; margin-top: 4px;
         }
 
         .vball-table {
@@ -87,11 +75,6 @@ st.markdown(
         .vball-table td { padding: 8px 12px; border-bottom: 1px solid #F1F5F9; color: #0F172A; }
         .vball-table tr:last-child td { border-bottom: none; }
         .grade-badge { font-weight: 700; padding: 2px 8px; border-radius: 4px; display: inline-block; }
-        
-        .light-card-box {
-            background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px;
-            padding: 15px; margin-bottom: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.03);
-        }
 
         .compliance-card {
             background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 10px;
@@ -139,7 +122,7 @@ if not check_password():
 
 
 # -----------------------------------------------------------------------------
-# 3. DATA LOADING VIA GOOGLE SHEETS SECRETS
+# 3. DATA LOADING VIA SECRETS
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=300)
 def load_sheet_data():
@@ -162,10 +145,12 @@ def load_sheet_data():
     cmj_df = fetch_csv("cmj_url")
     roster_df = fetch_csv("roster_url")
 
+    # Clean date columns across all dataframes
     for df in [vol_df, int_df, comp_df, weekly_df, cmj_df]:
       date_col = [c for c in df.columns if "date" in c.lower()]
       if date_col:
-        df[date_col[0]] = pd.to_datetime(df[date_col[0]])
+        df["Date"] = pd.to_datetime(df[date_col[0]])
+        df["Date_Str"] = df["Date"].dt.strftime("%Y-%m-%d")
 
     return vol_df, int_df, comp_df, weekly_df, cmj_df, roster_df
   except Exception as e:
@@ -177,17 +162,17 @@ vol_raw, int_raw, comp_raw, weekly_raw, cmj_raw, roster_raw = load_sheet_data()
 
 
 # -----------------------------------------------------------------------------
-# 4. HELPER FUNCTIONS & COLOR SCALES (Green = Low Load)
+# 4. HELPER FUNCTIONS
 # -----------------------------------------------------------------------------
 def get_vball_color(score):
   if score is None or pd.isna(score):
     return "#E2E8F0", "#475569"
   if score < 50:
-    return "#BBF7D0", "#166534"  # Green (Low/Optimal Load)
+    return "#BBF7D0", "#166534"  # Green
   elif score < 75:
-    return "#FEF08A", "#854D0E"  # Yellow (Moderate Load)
+    return "#FEF08A", "#854D0E"  # Yellow
   else:
-    return "#FFD6D6", "#991B1B"  # Red (High Load)
+    return "#FFD6D6", "#991B1B"  # Red
 
 
 def render_vball_table(df):
@@ -226,12 +211,14 @@ def create_clean_bar_chart(x_vals, y_vals, title_text, bar_color="#38BDF8"):
   return fig
 
 
-def compute_practice_tables(player_name, session_date):
+def compute_practice_tables(player_name, session_date_str):
   v_player = vol_raw[
-      (vol_raw["Player"] == player_name) & (vol_raw["Date"] == session_date)
+      (vol_raw["Player"] == player_name)
+      & (vol_raw["Date_Str"] == str(session_date_str))
   ]
   i_player = int_raw[
-      (int_raw["Player"] == player_name) & (int_raw["Date"] == session_date)
+      (int_raw["Player"] == player_name)
+      & (int_raw["Date_Str"] == str(session_date_str))
   ]
 
   v_base = (
@@ -311,8 +298,16 @@ def compute_practice_tables(player_name, session_date):
   )
 
 
+# Helper to get the correct Jump Height column dynamically
+def get_jump_col(df):
+  for c in df.columns:
+    if "jump height" in c.lower():
+      return c
+  return None
+
+
 # -----------------------------------------------------------------------------
-# 5. SIDEBAR NAVIGATION & DATA MANAGEMENT
+# 5. SIDEBAR NAVIGATION
 # -----------------------------------------------------------------------------
 st.sidebar.markdown("### LADY VOLS BASKETBALL")
 st.sidebar.caption("Performance Analytics Console")
@@ -391,8 +386,8 @@ with active_season:
             <div class="athlete-card">
                 <img src="{p_img}" class="athlete-avatar">
                 <div class="athlete-info">
-                    <h2>{selected_player}</h2>
-                    <p>{p_pos}</p>
+                    <h2 style="margin:0; font-size:1.4rem; font-weight:700; color:#0F172A;">{selected_player}</h2>
+                    <p style="margin:2px 0 0 0; color:#64748B; font-size:0.88rem;">{p_pos}</p>
                 </div>
             </div>
         """,
@@ -410,12 +405,12 @@ with active_season:
 
       if not v_p.empty:
         score_history = []
-        for d in v_p["Date"].unique():
+        for d_str in v_p["Date_Str"].unique():
           _, _, v_sc, i_sc, _, _, _ = compute_practice_tables(
-              selected_player, d
+              selected_player, d_str
           )
           score_history.append(
-              {"Date": d, "Volume Score": v_sc, "Intensity Score": i_sc}
+              {"Date": d_str, "Volume Score": v_sc, "Intensity Score": i_sc}
           )
 
         df_score_trend = pd.DataFrame(score_history)
@@ -441,9 +436,7 @@ with active_season:
                 title=None,
             ),
         )
-        st.markdown('<div class="light-card-box">', unsafe_allow_html=True)
         st.plotly_chart(fig1, use_container_width=True)
-        st.markdown("</div>", unsafe_allow_html=True)
 
     with col_g2:
       st.markdown(
@@ -451,30 +444,32 @@ with active_season:
           unsafe_allow_html=True,
       )
       cmj_p = cmj_raw[cmj_raw["Name"] == selected_player].sort_values("Date")
-      if not cmj_p.empty:
+      j_col = get_jump_col(cmj_p)
+
+      if not cmj_p.empty and j_col:
         fig2 = px.bar(
-            cmj_p,
-            x="Date",
-            y="Jump Height (Imp-Mom) [cm]",
-            color_discrete_sequence=["#94A3B8"],
+            cmj_p, x="Date_Str", y=j_col, color_discrete_sequence=["#94A3B8"]
         )
         fig2.update_layout(
             margin=dict(l=0, r=0, t=10, b=0),
             height=230,
             plot_bgcolor="rgba(0,0,0,0)",
             paper_bgcolor="rgba(0,0,0,0)",
+            xaxis_title=None,
+            yaxis_title="Jump Height",
         )
-        st.markdown('<div class="light-card-box">', unsafe_allow_html=True)
         st.plotly_chart(fig2, use_container_width=True)
-        st.markdown("</div>", unsafe_allow_html=True)
 
     st.divider()
 
     st.markdown("### Most Recent Practice Score Breakdown")
-    latest_date = vol_raw[vol_raw["Player"] == selected_player]["Date"].max()
-    if pd.notna(latest_date):
+    latest_date_str = vol_raw[vol_raw["Player"] == selected_player][
+        "Date_Str"
+    ].max()
+
+    if pd.notna(latest_date_str):
       vol_df, int_df, vol_score, int_score, mins, wk, dy = (
-          compute_practice_tables(selected_player, latest_date)
+          compute_practice_tables(selected_player, latest_date_str)
       )
 
       wk_str = str(wk).replace("Week ", "")
@@ -502,9 +497,9 @@ with active_season:
         v_bg, v_fg = get_vball_color(vol_score)
         st.markdown(
             f"""
-                    <div class="score-box-container">
+                    <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:10px; text-align:center; margin-top:10px;">
                         <div style="font-weight: 700; color: #64748B; font-size: 0.9rem;">VOLUME SCORE</div>
-                        <div class="score-box-value" style="background-color: {v_bg}; color: {v_fg};">{vol_score}</div>
+                        <div style="font-size: 2rem; font-weight: 800; padding: 6px 0; border-radius: 6px; background-color: {v_bg}; color: {v_fg}; margin-top: 4px;">{vol_score}</div>
                     </div>
                 """,
             unsafe_allow_html=True,
@@ -519,89 +514,87 @@ with active_season:
         i_bg, i_fg = get_vball_color(int_score)
         st.markdown(
             f"""
-                    <div class="score-box-container">
+                    <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:10px; text-align:center; margin-top:10px;">
                         <div style="font-weight: 700; color: #64748B; font-size: 0.9rem;">INTENSITY SCORE</div>
-                        <div class="score-box-value" style="background-color: {i_bg}; color: {i_fg};">{int_score}</div>
+                        <div style="font-size: 2rem; font-weight: 800; padding: 6px 0; border-radius: 6px; background-color: {i_bg}; color: {i_fg}; margin-top: 4px;">{int_score}</div>
                     </div>
                 """,
             unsafe_allow_html=True,
         )
 
   # =========================================================================
-    # TAB 2: PRACTICE SCORE
-    # =========================================================================
-    elif main_tab == "Practice Score":
-        c_d, _ = st.columns([1, 3])
-        with c_d:
-            available_dates = (
-                vol_raw["Date"].sort_values(ascending=False).dt.date.unique()
-            )
-            session_date = st.selectbox("Select Session Date:", available_dates)
+  # TAB 2: PRACTICE SCORE
+  # =========================================================================
+  elif main_tab == "Practice Score":
+    c_d, _ = st.columns([1, 3])
+    with c_d:
+      available_dates = vol_raw["Date_Str"].sort_values(ascending=False).unique()
+      session_date = st.selectbox("Select Session Date:", available_dates)
 
-        st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
 
-        for player_name in roster_players:
-            p_row = roster_raw[roster_raw["Name"] == player_name]
-            p_pos = (
-                p_row["Position"].values[0] if not p_row.empty else "Guard / Forward"
-            )
-            p_img = (
-                p_row["Picture"].values[0]
-                if not p_row.empty
-                else "https://via.placeholder.com/70"
-            )
+    for player_name in roster_players:
+      p_row = roster_raw[roster_raw["Name"] == player_name]
+      p_pos = (
+          p_row["Position"].values[0] if not p_row.empty else "Guard / Forward"
+      )
+      p_img = (
+          p_row["Picture"].values[0]
+          if not p_row.empty
+          else "https://via.placeholder.com/70"
+      )
 
-            vol_df, int_df, vol_score, int_score, mins, wk, dy = (
-                compute_practice_tables(player_name, pd.to_datetime(session_date))
-            )
+      vol_df, int_df, vol_score, int_score, mins, wk, dy = (
+          compute_practice_tables(player_name, str(session_date))
+      )
 
-            vol_html_table = render_vball_table(vol_df)
-            int_html_table = render_vball_table(int_df)
+      vol_html_table = render_vball_table(vol_df)
+      int_html_table = render_vball_table(int_df)
 
-            v_bg, v_fg = get_vball_color(vol_score)
-            i_bg, i_fg = get_vball_color(int_score)
+      v_bg, v_fg = get_vball_color(vol_score)
+      i_bg, i_fg = get_vball_color(int_score)
 
-            wk_str = str(wk).replace("Week ", "")
-            dy_str = str(dy).replace("Day ", "")
+      wk_str = str(wk).replace("Week ", "")
+      dy_str = str(dy).replace("Day ", "")
 
-            single_box_card_html = f"""
-            <div style="background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; border-bottom: 1px solid #E2E8F0; padding-bottom: 12px;">
-                    <div style="display: flex; align-items: center; gap: 15px;">
-                        <img src="{p_img}" style="width:60px; height:60px; border-radius:50%; border:3px solid #FF8200; object-fit:cover;">
-                        <div>
-                            <h3 style="margin:0; font-size:1.3rem; color:#0F172A; font-weight:700;">{player_name}</h3>
-                            <span style="color:#64748B; font-size:0.85rem;">{p_pos}</span>
-                        </div>
-                    </div>
-                    <div style="display: flex; gap: 8px;">
-                        <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Minutes: {mins}</span>
-                        <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Week {wk_str}</span>
-                        <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Day {dy_str}</span>
-                    </div>
-                </div>
-                <div style="display: flex; gap: 20px; width: 100%;">
-                    <div style="flex: 1; min-width: 0;">
-                        <div style="background-color:#38BDF8; color:#0F172A; font-weight:700; font-size:0.95rem; padding:6px 12px; border-radius:6px; text-align:center; margin-bottom:12px; text-transform:uppercase;">Volume Metrics</div>
-                        {vol_html_table}
-                        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:10px; text-align:center; margin-top:10px;">
-                            <div style="font-weight:700; color:#64748B; font-size:0.85rem;">VOLUME SCORE</div>
-                            <div style="font-size:2rem; font-weight:800; padding:6px 0; border-radius:6px; background-color:{v_bg}; color:{v_fg}; margin-top:4px;">{vol_score}</div>
-                        </div>
-                    </div>
-                    <div style="flex: 1; min-width: 0;">
-                        <div style="background-color:#38BDF8; color:#0F172A; font-weight:700; font-size:0.95rem; padding:6px 12px; border-radius:6px; text-align:center; margin-bottom:12px; text-transform:uppercase;">Intensity Metrics</div>
-                        {int_html_table}
-                        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:10px; text-align:center; margin-top:10px;">
-                            <div style="font-weight:700; color:#64748B; font-size:0.85rem;">INTENSITY SCORE</div>
-                            <div style="font-size:2rem; font-weight:800; padding:6px 0; border-radius:6px; background-color:{i_bg}; color:{i_fg}; margin-top:4px;">{int_score}</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            """
+      single_box_card_html = f"""
+      <div style="background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; border-bottom: 1px solid #E2E8F0; padding-bottom: 12px;">
+              <div style="display: flex; align-items: center; gap: 15px;">
+                  <img src="{p_img}" style="width:60px; height:60px; border-radius:50%; border:3px solid #FF8200; object-fit:cover;">
+                  <div>
+                      <h3 style="margin:0; font-size:1.3rem; color:#0F172A; font-weight:700;">{player_name}</h3>
+                      <span style="color:#64748B; font-size:0.85rem;">{p_pos}</span>
+                  </div>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                  <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Minutes: {mins}</span>
+                  <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Week {wk_str}</span>
+                  <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Day {dy_str}</span>
+              </div>
+          </div>
+          <div style="display: flex; gap: 20px; width: 100%;">
+              <div style="flex: 1; min-width: 0;">
+                  <div style="background-color:#38BDF8; color:#0F172A; font-weight:700; font-size:0.95rem; padding:6px 12px; border-radius:6px; text-align:center; margin-bottom:12px; text-transform:uppercase;">Volume Metrics</div>
+                  {vol_html_table}
+                  <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:10px; text-align:center; margin-top:10px;">
+                      <div style="font-weight:700; color:#64748B; font-size:0.85rem;">VOLUME SCORE</div>
+                      <div style="font-size:2rem; font-weight:800; padding:6px 0; border-radius:6px; background-color:{v_bg}; color:{v_fg}; margin-top:4px;">{vol_score}</div>
+                  </div>
+              </div>
+              <div style="flex: 1; min-width: 0;">
+                  <div style="background-color:#38BDF8; color:#0F172A; font-weight:700; font-size:0.95rem; padding:6px 12px; border-radius:6px; text-align:center; margin-bottom:12px; text-transform:uppercase;">Intensity Metrics</div>
+                  {int_html_table}
+                  <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:10px; text-align:center; margin-top:10px;">
+                      <div style="font-weight:700; color:#64748B; font-size:0.85rem;">INTENSITY SCORE</div>
+                      <div style="font-size:2rem; font-weight:800; padding:6px 0; border-radius:6px; background-color:{i_bg}; color:{i_fg}; margin-top:4px;">{int_score}</div>
+                  </div>
+              </div>
+          </div>
+      </div>
+      """
 
-            st.markdown(single_box_card_html, unsafe_allow_html=True)
+      st.markdown(single_box_card_html, unsafe_allow_html=True)
 
   # =========================================================================
   # TAB 3: COMPLIANCE
@@ -644,11 +637,11 @@ with active_season:
             if not p_comp.empty:
               all_time_max = p_comp["Speed (MPH)"].max()
               max_row = p_comp[p_comp["Speed (MPH)"] == all_time_max].iloc[-1]
-              max_date = max_row["Date"].strftime("%Y-%m-%d")
+              max_date = max_row["Date_Str"]
 
               recent_row = p_comp.iloc[-1]
               recent_speed = recent_row["Speed (MPH)"]
-              recent_date = recent_row["Date"].strftime("%Y-%m-%d")
+              recent_date = recent_row["Date_Str"]
 
               pct_max = (
                   f"{(recent_speed / all_time_max * 100):.1f}%"
@@ -732,24 +725,16 @@ with active_season:
             )
 
             p_cmj = cmj_raw[cmj_raw["Name"] == player_name].sort_values("Date")
+            j_col = get_jump_col(p_cmj)
 
-            if (
-                not p_cmj.empty
-                and "Jump Height (Imp-Mom) [cm]" in p_cmj.columns
-            ):
-              all_time_max_cmj = p_cmj["Jump Height (Imp-Mom) [cm]"].max()
-              max_row_cmj = p_cmj[
-                  p_cmj["Jump Height (Imp-Mom) [cm]"] == all_time_max_cmj
-              ].iloc[-1]
-              max_date_cmj = pd.to_datetime(max_row_cmj["Date"]).strftime(
-                  "%Y-%m-%d"
-              )
+            if not p_cmj.empty and j_col:
+              all_time_max_cmj = p_cmj[j_col].max()
+              max_row_cmj = p_cmj[p_cmj[j_col] == all_time_max_cmj].iloc[-1]
+              max_date_cmj = max_row_cmj["Date_Str"]
 
               recent_row_cmj = p_cmj.iloc[-1]
-              recent_cmj = recent_row_cmj["Jump Height (Imp-Mom) [cm]"]
-              recent_date_cmj = pd.to_datetime(recent_row_cmj["Date"]).strftime(
-                  "%Y-%m-%d"
-              )
+              recent_cmj = recent_row_cmj[j_col]
+              recent_date_cmj = recent_row_cmj["Date_Str"]
 
               pct_max_cmj = (
                   f"{(recent_cmj / all_time_max_cmj * 100):.1f}%"
@@ -831,14 +816,11 @@ with active_season:
 
     w1, w2 = st.columns(2)
     with w1:
-      st.markdown('<div class="light-card-box">', unsafe_allow_html=True)
       fig_td = create_clean_bar_chart(
           weeks, weekly_agg["Distance (mi)"], "Total Distance (mi)", "#38BDF8"
       )
       st.plotly_chart(fig_td, use_container_width=True)
-      st.markdown("</div>", unsafe_allow_html=True)
 
-      st.markdown('<div class="light-card-box">', unsafe_allow_html=True)
       fig_aal = create_clean_bar_chart(
           weeks,
           weekly_agg["Accumulated Acceleration Load"],
@@ -846,10 +828,8 @@ with active_season:
           "#FF8200",
       )
       st.plotly_chart(fig_aal, use_container_width=True)
-      st.markdown("</div>", unsafe_allow_html=True)
 
     with w2:
-      st.markdown('<div class="light-card-box">', unsafe_allow_html=True)
       fig_hsd = create_clean_bar_chart(
           weeks,
           weekly_agg["Distance (speed | High Speed) (mi)"],
@@ -857,14 +837,11 @@ with active_season:
           "#38BDF8",
       )
       st.plotly_chart(fig_hsd, use_container_width=True)
-      st.markdown("</div>", unsafe_allow_html=True)
 
-      st.markdown('<div class="light-card-box">', unsafe_allow_html=True)
       fig_dl = create_clean_bar_chart(
           weeks, weekly_agg["Decels Load"], "Deceleration Load", "#FF8200"
       )
       st.plotly_chart(fig_dl, use_container_width=True)
-      st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -929,7 +906,6 @@ with active_season:
 
     col_p1, col_p2 = st.columns(2)
     with col_p1:
-      st.markdown('<div class="light-card-box">', unsafe_allow_html=True)
       fig_ind_td = create_team_bar_athlete_line_chart(
           all_weeks,
           t_weekly_avg["Distance (mi)"],
@@ -938,9 +914,7 @@ with active_season:
           "#FF8200",
       )
       st.plotly_chart(fig_ind_td, use_container_width=True)
-      st.markdown("</div>", unsafe_allow_html=True)
 
-      st.markdown('<div class="light-card-box">', unsafe_allow_html=True)
       fig_ind_aal = create_team_bar_athlete_line_chart(
           all_weeks,
           t_weekly_avg["Accumulated Acceleration Load"],
@@ -949,10 +923,8 @@ with active_season:
           "#38BDF8",
       )
       st.plotly_chart(fig_ind_aal, use_container_width=True)
-      st.markdown("</div>", unsafe_allow_html=True)
 
     with col_p2:
-      st.markdown('<div class="light-card-box">', unsafe_allow_html=True)
       fig_ind_hsd = create_team_bar_athlete_line_chart(
           all_weeks,
           t_weekly_avg["Distance (speed | High Speed) (mi)"],
@@ -961,9 +933,7 @@ with active_season:
           "#FF8200",
       )
       st.plotly_chart(fig_ind_hsd, use_container_width=True)
-      st.markdown("</div>", unsafe_allow_html=True)
 
-      st.markdown('<div class="light-card-box">', unsafe_allow_html=True)
       fig_ind_dl = create_team_bar_athlete_line_chart(
           all_weeks,
           t_weekly_avg["Decels Load"],
@@ -972,7 +942,6 @@ with active_season:
           "#38BDF8",
       )
       st.plotly_chart(fig_ind_dl, use_container_width=True)
-      st.markdown("</div>", unsafe_allow_html=True)
 
   # =========================================================================
   # TAB 5: TESTING
@@ -988,53 +957,55 @@ with active_season:
       selected_player_t = st.selectbox("Select Athlete:", roster_players)
 
     p_cmj = cmj_raw[cmj_raw["Name"] == selected_player_t].sort_values("Date")
+    j_col = get_jump_col(p_cmj)
 
-    display_cols = [c for c in p_cmj.columns if c not in ["Name"]]
+    display_cols = [c for c in p_cmj.columns if c not in ["Name", "Date_Str"]]
     st.markdown(f"### Jump History for {selected_player_t}")
     st.markdown(render_vball_table(p_cmj[display_cols]), unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    st.markdown('<div class="light-card-box">', unsafe_allow_html=True)
-    fig_jump_trend = go.Figure()
-    fig_jump_trend.add_trace(
-        go.Scatter(
-            x=p_cmj["Date"],
-            y=p_cmj["Jump Height (Imp-Mom) [cm]"],
-            name="Jump Height (Imp-Mom) [cm]",
-            mode="lines+markers",
-            line=dict(color="#FF8200", width=3),
-            marker=dict(size=8),
-        )
-    )
-    fig_jump_trend.add_trace(
-        go.Scatter(
-            x=p_cmj["Date"],
-            y=p_cmj["RSI-modified (Imp-Mom) [m/s]"],
-            name="RSI-modified (Imp-Mom) [m/s]",
-            mode="lines+markers",
-            yaxis="y2",
-            line=dict(color="#38BDF8", width=3),
-            marker=dict(size=8),
-        )
-    )
+    if not p_cmj.empty and j_col:
+      fig_jump_trend = go.Figure()
+      fig_jump_trend.add_trace(
+          go.Scatter(
+              x=p_cmj["Date_Str"],
+              y=p_cmj[j_col],
+              name=j_col,
+              mode="lines+markers",
+              line=dict(color="#FF8200", width=3),
+              marker=dict(size=8),
+          )
+      )
 
-    fig_jump_trend.update_layout(
-        title=(
-            "Jump Height & RSI-modified Progression Over Time"
-            f" ({selected_player_t})"
-        ),
-        title_font=dict(size=14, color="#0F172A"),
-        height=320,
-        margin=dict(l=0, r=0, t=40, b=0),
-        plot_bgcolor="rgba(0,0,0,0)",
-        paper_bgcolor="rgba(0,0,0,0)",
-        yaxis=dict(title="Jump Height [cm]"),
-        yaxis2=dict(title="RSI-modified [m/s]", overlaying="y", side="right"),
-        legend=dict(
-            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
-        ),
-    )
+      if "RSI-modified (Imp-Mom) [m/s]" in p_cmj.columns:
+        fig_jump_trend.add_trace(
+            go.Scatter(
+                x=p_cmj["Date_Str"],
+                y=p_cmj["RSI-modified (Imp-Mom) [m/s]"],
+                name="RSI-modified",
+                mode="lines+markers",
+                yaxis="y2",
+                line=dict(color="#38BDF8", width=3),
+                marker=dict(size=8),
+            )
+        )
 
-    st.plotly_chart(fig_jump_trend, use_container_width=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+      fig_jump_trend.update_layout(
+          title=(
+              "Jump Height & RSI-modified Progression Over Time"
+              f" ({selected_player_t})"
+          ),
+          title_font=dict(size=14, color="#0F172A"),
+          height=320,
+          margin=dict(l=0, r=0, t=40, b=0),
+          plot_bgcolor="rgba(0,0,0,0)",
+          paper_bgcolor="rgba(0,0,0,0)",
+          yaxis=dict(title="Jump Height [cm]"),
+          yaxis2=dict(title="RSI-modified [m/s]", overlaying="y", side="right"),
+          legend=dict(
+              orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
+          ),
+      )
+
+      st.plotly_chart(fig_jump_trend, use_container_width=True)
