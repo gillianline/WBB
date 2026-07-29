@@ -528,106 +528,80 @@ with active_season:
         )
 
   # =========================================================================
-  # TAB 2: PRACTICE SCORE
-  # =========================================================================
-  elif main_tab == "Practice Score":
-    c_d, _ = st.columns([1, 3])
-    with c_d:
-      available_dates = (
-          vol_raw["Date"].sort_values(ascending=False).dt.date.unique()
-      )
-      session_date = st.selectbox("Select Session Date:", available_dates)
+    # TAB 2: PRACTICE SCORE
+    # =========================================================================
+    elif main_tab == "Practice Score":
+        c_d, _ = st.columns([1, 3])
+        with c_d:
+            available_dates = (
+                vol_raw["Date"].sort_values(ascending=False).dt.date.unique()
+            )
+            session_date = st.selectbox("Select Session Date:", available_dates)
 
-    st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
 
-    for player_name in roster_players:
-      p_row = roster_raw[roster_raw["Name"] == player_name]
-      p_pos = (
-          p_row["Position"].values[0] if not p_row.empty else "Guard / Forward"
-      )
-      p_img = (
-          p_row["Picture"].values[0]
-          if not p_row.empty
-          else "https://via.placeholder.com/70"
-      )
+        for player_name in roster_players:
+            p_row = roster_raw[roster_raw["Name"] == player_name]
+            p_pos = (
+                p_row["Position"].values[0] if not p_row.empty else "Guard / Forward"
+            )
+            p_img = (
+                p_row["Picture"].values[0]
+                if not p_row.empty
+                else "https://via.placeholder.com/70"
+            )
 
-      vol_df, int_df, vol_score, int_score, mins, wk, dy = (
-          compute_practice_tables(player_name, pd.to_datetime(session_date))
-      )
+            vol_df, int_df, vol_score, int_score, mins, wk, dy = (
+                compute_practice_tables(player_name, pd.to_datetime(session_date))
+            )
 
-      vol_html_table = render_vball_table(vol_df)
-      int_html_table = render_vball_table(int_df)
+            vol_html_table = render_vball_table(vol_df)
+            int_html_table = render_vball_table(int_df)
 
-      v_bg, v_fg = get_vball_color(vol_score)
-      i_bg, i_fg = get_vball_color(int_score)
+            v_bg, v_fg = get_vball_color(vol_score)
+            i_bg, i_fg = get_vball_color(int_score)
 
-      wk_str = str(wk).replace("Week ", "")
-      dy_str = str(dy).replace("Day ", "")
+            wk_str = str(wk).replace("Week ", "")
+            dy_str = str(dy).replace("Day ", "")
 
-      single_box_card_html = (
-          '<div style="background-color: #FFFFFF; border: 1px solid #CBD5E1;'
-          " border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow:"
-          ' 0 2px 6px rgba(0,0,0,0.04);">'
-          '<div style="display: flex; align-items: center; justify-content:'
-          " space-between; margin-bottom: 18px; border-bottom: 1px solid"
-          ' #E2E8F0; padding-bottom: 12px;">'
-          '<div style="display: flex; align-items: center; gap: 15px;">'
-          f'<img src="{p_img}" style="width:60px; height:60px;'
-          ' border-radius:50%; border:3px solid #FF8200; object-fit:cover;">'
-          '<div><h3 style="margin:0; font-size:1.3rem; color:#0F172A;'
-          f' font-weight:700;">{player_name}</h3><span'
-          f' style="color:#64748B; font-size:0.85rem;">{p_pos}</span></div>'
-          "</div>"
-          '<div style="display: flex; gap: 8px;">'
-          '<span style="background:#F1F5F9; border:1px solid #E2E8F0;'
-          " color:#475569; padding:4px 10px; border-radius:6px; font-weight:600;"
-          f' font-size:0.8rem;">Minutes: {mins}</span>'
-          '<span style="background:#F1F5F9; border:1px solid #E2E8F0;'
-          " color:#475569; padding:4px 10px; border-radius:6px; font-weight:600;"
-          f' font-size:0.8rem;">Week {wk_str}</span>'
-          '<span style="background:#F1F5F9; border:1px solid #E2E8F0;'
-          " color:#475569; padding:4px 10px; border-radius:6px; font-weight:600;"
-          f' font-size:0.8rem;">Day {dy_str}</span>'
-          "</div>"
-          "</div>"
-          '<div style="display: flex; gap: 20px; width: 100%;">'
-          '<div style="flex: 1; min-width: 0;">'
-          '<div style="background-color:#38BDF8; color:#0F172A;'
-          " font-weight:700; font-size:0.95rem; padding:6px 12px;"
-          " border-radius:6px; text-align:center; margin-bottom:12px;"
-          ' text-transform:uppercase;">Volume Metrics</div>'
-          f"{vol_html_table}"
-          '<div style="background:#FFFFFF; border:1px solid #E2E8F0;'
-          " border-radius:8px; padding:10px; text-align:center;"
-          ' margin-top:10px;">'
-          '<div style="font-weight:700; color:#64748B;'
-          ' font-size:0.85rem;">VOLUME SCORE</div>'
-          ' <div style="font-size:2rem; font-weight:800; padding:6px 0;'
-          " border-radius:6px; background-color:"
-          f"{v_bg}; color:{v_fg}; margin-top:4px;">{vol_score}</div>"
-          "</div>"
-          "</div>"
-          '<div style="flex: 1; min-width: 0;">'
-          '<div style="background-color:#38BDF8; color:#0F172A;'
-          " font-weight:700; font-size:0.95rem; padding:6px 12px;"
-          " border-radius:6px; text-align:center; margin-bottom:12px;"
-          ' text-transform:uppercase;">Intensity Metrics</div>'
-          f"{int_html_table}"
-          '<div style="background:#FFFFFF; border:1px solid #E2E8F0;'
-          " border-radius:8px; padding:10px; text-align:center;"
-          ' margin-top:10px;">'
-          '<div style="font-weight:700; color:#64748B;'
-          ' font-size:0.85rem;">INTENSITY SCORE</div>'
-          ' <div style="font-size:2rem; font-weight:800; padding:6px 0;'
-          " border-radius:6px; background-color:"
-          f"{i_bg}; color:{i_fg}; margin-top:4px;">{int_score}</div>"
-          "</div>"
-          "</div>"
-          "</div>"
-          "</div>"
-      )
+            single_box_card_html = f"""
+            <div style="background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; border-bottom: 1px solid #E2E8F0; padding-bottom: 12px;">
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <img src="{p_img}" style="width:60px; height:60px; border-radius:50%; border:3px solid #FF8200; object-fit:cover;">
+                        <div>
+                            <h3 style="margin:0; font-size:1.3rem; color:#0F172A; font-weight:700;">{player_name}</h3>
+                            <span style="color:#64748B; font-size:0.85rem;">{p_pos}</span>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Minutes: {mins}</span>
+                        <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Week {wk_str}</span>
+                        <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Day {dy_str}</span>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 20px; width: 100%;">
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="background-color:#38BDF8; color:#0F172A; font-weight:700; font-size:0.95rem; padding:6px 12px; border-radius:6px; text-align:center; margin-bottom:12px; text-transform:uppercase;">Volume Metrics</div>
+                        {vol_html_table}
+                        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:10px; text-align:center; margin-top:10px;">
+                            <div style="font-weight:700; color:#64748B; font-size:0.85rem;">VOLUME SCORE</div>
+                            <div style="font-size:2rem; font-weight:800; padding:6px 0; border-radius:6px; background-color:{v_bg}; color:{v_fg}; margin-top:4px;">{vol_score}</div>
+                        </div>
+                    </div>
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="background-color:#38BDF8; color:#0F172A; font-weight:700; font-size:0.95rem; padding:6px 12px; border-radius:6px; text-align:center; margin-bottom:12px; text-transform:uppercase;">Intensity Metrics</div>
+                        {int_html_table}
+                        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:10px; text-align:center; margin-top:10px;">
+                            <div style="font-weight:700; color:#64748B; font-size:0.85rem;">INTENSITY SCORE</div>
+                            <div style="font-size:2rem; font-weight:800; padding:6px 0; border-radius:6px; background-color:{i_bg}; color:{i_fg}; margin-top:4px;">{int_score}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            """
 
-      st.markdown(single_box_card_html, unsafe_allow_html=True)
+            st.markdown(single_box_card_html, unsafe_allow_html=True)
 
   # =========================================================================
   # TAB 3: COMPLIANCE
