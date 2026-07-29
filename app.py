@@ -554,22 +554,14 @@ with active_season:
 
 
     # =========================================================================
-    # TAB 4: WEEKLY DATA (Added Select Week Dropdown)
+    # TAB 4: WEEKLY DATA (Team Bars + Individual Athlete Overlay Dashes)
     # =========================================================================
     elif main_tab == "Weekly Data":
-        c_wk, _ = st.columns([1, 2])
-        with c_wk:
-            available_weeks = weekly_raw['Week'].unique().tolist()
-            selected_week = st.selectbox("Select Week Filter:", ["All Weeks"] + list(available_weeks))
-
-        if selected_week != "All Weeks":
-            weekly_filtered = weekly_raw[weekly_raw['Week'] == selected_week]
-        else:
-            weekly_filtered = weekly_raw
-
+        
+        # 1. TEAM WEEKLY ACCUMULATION OVERVIEW (Aggregated across all weeks)
         st.markdown('<div class="vball-section-title">1. Team Weekly Accumulation Overview</div>', unsafe_allow_html=True)
 
-        weekly_agg = weekly_filtered.groupby('Week').agg({
+        weekly_agg = weekly_raw.groupby('Week').agg({
             'Distance (mi)': 'sum',
             'Distance (speed | High Speed) (mi)': 'sum',
             'Accumulated Acceleration Load': 'sum',
@@ -603,9 +595,11 @@ with active_season:
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        st.markdown('<div class="vball-section-title">2. Individual Player Weekly Breakdown vs. Team Average</div>', unsafe_allow_html=True)
+        # 2. INDIVIDUAL PLAYER OVERLAY ON TEAM AVERAGE BARS
+        st.markdown('<div class="vball-section-title">2. Individual Player Breakdown vs. Team Average</div>', unsafe_allow_html=True)
         selected_player_w = st.selectbox("Select Athlete:", roster_players)
 
+        # Player Weekly Values & Team Weekly Averages
         p_weekly = weekly_raw[weekly_raw['Player'] == selected_player_w]
         t_weekly_avg = weekly_raw.groupby('Week').agg({
             'Distance (mi)': 'mean',
@@ -616,29 +610,57 @@ with active_season:
 
         all_weeks = t_weekly_avg['Week'].tolist()
 
+        # Helper function where BARS = Team Average, DASHES = Athlete Output
+        def create_team_bar_athlete_line_chart(weeks, team_avg_vals, athlete_vals, title_text, bar_color="#38BDF8"):
+            fig = go.Figure()
+            
+            # Team Average Bar
+            fig.add_trace(go.Bar(
+                x=weeks,
+                y=team_avg_vals,
+                name="Team Average",
+                marker_color=bar_color
+            ))
+            
+            # Athlete Output Overlay Line (Black horizontal dashes per week)
+            fig.add_trace(go.Scatter(
+                x=weeks,
+                y=athlete_vals,
+                name=f"{selected_player_w} Output",
+                mode="markers",
+                marker=dict(symbol="line-ew", size=24, line=dict(width=3, color="black"))
+            ))
+            
+            fig.update_layout(
+                title=title_text, title_font=dict(size=14, color="#0F172A"),
+                height=250, margin=dict(l=0, r=0, t=35, b=0),
+                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            )
+            return fig
+
         col_p1, col_p2 = st.columns(2)
         with col_p1:
             st.markdown('<div class="light-card-box">', unsafe_allow_html=True)
-            fig_ind_td = create_weekly_benchmark_chart(all_weeks, p_weekly['Distance (mi)'], t_weekly_avg['Distance (mi)'], f"Total Distance (mi) — {selected_player_w}", "#FF8200")
+            fig_ind_td = create_team_bar_athlete_line_chart(all_weeks, t_weekly_avg['Distance (mi)'], p_weekly['Distance (mi)'], f"Total Distance (mi) — {selected_player_w}", "#FF8200")
             st.plotly_chart(fig_ind_td, use_container_width=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
             st.markdown('<div class="light-card-box">', unsafe_allow_html=True)
-            fig_ind_aal = create_weekly_benchmark_chart(all_weeks, p_weekly['Accumulated Acceleration Load'], t_weekly_avg['Accumulated Acceleration Load'], f"AAL — {selected_player_w}", "#38BDF8")
+            fig_ind_aal = create_team_bar_athlete_line_chart(all_weeks, t_weekly_avg['Accumulated Acceleration Load'], p_weekly['Accumulated Acceleration Load'], f"AAL — {selected_player_w}", "#38BDF8")
             st.plotly_chart(fig_ind_aal, use_container_width=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
         with col_p2:
             st.markdown('<div class="light-card-box">', unsafe_allow_html=True)
-            fig_ind_hsd = create_weekly_benchmark_chart(all_weeks, p_weekly['Distance (speed | High Speed) (mi)'], t_weekly_avg['Distance (speed | High Speed) (mi)'], f"High Speed Distance (mi) — {selected_player_w}", "#FF8200")
+            fig_ind_hsd = create_team_bar_athlete_line_chart(all_weeks, t_weekly_avg['Distance (speed | High Speed) (mi)'], p_weekly['Distance (speed | High Speed) (mi)'], f"High Speed Distance (mi) — {selected_player_w}", "#FF8200")
             st.plotly_chart(fig_ind_hsd, use_container_width=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
             st.markdown('<div class="light-card-box">', unsafe_allow_html=True)
-            fig_ind_dl = create_weekly_benchmark_chart(all_weeks, p_weekly['Decels Load'], t_weekly_avg['Decels Load'], f"Deceleration Load — {selected_player_w}", "#38BDF8")
+            fig_ind_dl = create_team_bar_athlete_line_chart(all_weeks, t_weekly_avg['Decels Load'], p_weekly['Decels Load'], f"Deceleration Load — {selected_player_w}", "#38BDF8")
             st.plotly_chart(fig_ind_dl, use_container_width=True)
             st.markdown('</div>', unsafe_allow_html=True)
-
 
     # =========================================================================
     # TAB 5: TESTING
