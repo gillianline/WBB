@@ -149,7 +149,10 @@ def load_sheet_data():
     def fetch_csv(secret_key):
         url = st.secrets["sheets"][secret_key]
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        return pd.read_csv(req, on_bad_lines='skip', engine='python')
+        
+        # urllib.request.urlopen opens the response buffer that pandas reads directly
+        with urllib.request.urlopen(req) as response:
+            return pd.read_csv(response, on_bad_lines='skip', engine='python')
 
     try:
         vol_df = fetch_csv("volume_url")
@@ -159,6 +162,7 @@ def load_sheet_data():
         cmj_df = fetch_csv("cmj_url")
         roster_df = fetch_csv("roster_url")
 
+        # Convert date columns to datetime
         for df in [vol_df, int_df, comp_df, weekly_df, cmj_df]:
             date_col = [c for c in df.columns if "date" in c.lower()]
             if date_col:
