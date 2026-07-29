@@ -1005,16 +1005,17 @@ with active_season:
                 )
 
             # 3. MODERN PLOTLY v6 COMPATIBLE LAYOUT
+            # 3. CONFIGURE BOTH Y-AXES EXPLICITLY (WITH ANCHORING)
             fig_jump_trend.update_layout(
                 title=dict(
                     text=f"Jump Height & RSI-modified Progression Over Time ({selected_player_t})",
                     font=dict(size=14, color="#0F172A"),
                 ),
                 height=380,
-                margin=dict(l=0, r=0, t=40, b=0),
+                margin=dict(l=40, r=40, t=40, b=20),
                 plot_bgcolor="rgba(0,0,0,0)",
                 paper_bgcolor="rgba(0,0,0,0)",
-                xaxis=dict(title=None),
+                xaxis=dict(title=None, showgrid=False),
                 yaxis=dict(
                     title=dict(
                         text="Jump Height [cm]",
@@ -1022,6 +1023,8 @@ with active_season:
                     ),
                     tickfont=dict(color="#FF8200"),
                     side="left",
+                    showgrid=True,
+                    gridcolor="#F1F5F9",
                 ),
                 yaxis2=dict(
                     title=dict(
@@ -1031,6 +1034,8 @@ with active_season:
                     tickfont=dict(color="#38BDF8"),
                     overlaying="y",
                     side="right",
+                    anchor="x",  # <-- Ensures yaxis2 binds properly to the time series
+                    showgrid=False,
                 ),
                 legend=dict(
                     orientation="h",
