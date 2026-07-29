@@ -959,12 +959,10 @@ with active_season:
 
         p_cmj = cmj_raw[cmj_raw["Name"] == selected_player_t].sort_values("Date").copy()
 
-        # --- 1. DIRECT & ROBUST COLUMN IDENTIFICATION ---
-        # Find Jump Height Column
+        # Robust column detection
         jump_cols = [c for c in p_cmj.columns if "jump" in c.lower() or "height" in c.lower()]
         j_col = jump_cols[0] if jump_cols else None
 
-        # Find RSI Column
         rsi_cols = [c for c in p_cmj.columns if "rsi" in c.lower()]
         rsi_col = rsi_cols[0] if rsi_cols else None
 
@@ -975,7 +973,7 @@ with active_season:
         st.markdown("<br>", unsafe_allow_html=True)
 
         if not p_cmj.empty and j_col:
-            # --- 2. FORCE CLEAN NUMERIC CONVERSION ON DATA FRAME ---
+            # Numeric cleaning
             p_cmj["Jump_Height_Clean"] = pd.to_numeric(
                 p_cmj[j_col].astype(str).str.replace(r"[^0-9.]", "", regex=True),
                 errors="coerce",
@@ -983,21 +981,21 @@ with active_season:
 
             fig_jump_trend = go.Figure()
 
-            # --- 3. ORANGE LINE: JUMP HEIGHT (Left Axis 'y') ---
+            # 1. ORANGE SOLID LINE: JUMP HEIGHT (Left Axis)
             fig_jump_trend.add_trace(
                 go.Scatter(
                     x=p_cmj["Date_Str"],
                     y=p_cmj["Jump_Height_Clean"],
-                    name="Jump Height [cm]",
+                    name="Jump Height",
                     mode="lines+markers",
                     connectgaps=True,
                     yaxis="y",
-                    line=dict(color="#FF8200", width=3),
+                    line=dict(color="#FF8200", width=4),  # Thick solid orange line
                     marker=dict(size=8, color="#FF8200"),
                 )
             )
 
-            # --- 4. BLUE LINE: RSI-MODIFIED (Right Axis 'y2') ---
+            # 2. BLUE DOTTED LINE: RSI MODIFIED (Right Axis)
             if rsi_col:
                 p_cmj["RSI_Clean"] = pd.to_numeric(
                     p_cmj[rsi_col].astype(str).str.replace(r"[^0-9.]", "", regex=True),
@@ -1007,53 +1005,62 @@ with active_season:
                     go.Scatter(
                         x=p_cmj["Date_Str"],
                         y=p_cmj["RSI_Clean"],
-                        name="RSI-modified [m/s]",
+                        name="RSI Modified",
                         mode="lines+markers",
                         connectgaps=True,
                         yaxis="y2",
-                        line=dict(color="#38BDF8", width=3),
+                        line=dict(color="#38BDF8", width=3, dash="dot"),  # Dotted blue line
                         marker=dict(size=8, color="#38BDF8"),
                     )
                 )
 
-            # --- 5. DUAL Y-AXIS LAYOUT CONFIGURATION ---
+            # 3. MATCH EXACT STYLING FROM REFERENCE
             fig_jump_trend.update_layout(
-                title=dict(
-                    text=f"Jump Height & RSI-modified Progression Over Time ({selected_player_t})",
-                    font=dict(size=14, color="#0F172A"),
-                ),
-                height=380,
-                margin=dict(l=50, r=50, t=40, b=30),
+                height=320,
+                margin=dict(l=40, r=40, t=50, b=40),
                 plot_bgcolor="rgba(0,0,0,0)",
                 paper_bgcolor="rgba(0,0,0,0)",
-                xaxis=dict(title=None, showgrid=False),
-                yaxis=dict(
-                    title=dict(
-                        text="Jump Height [cm]",
-                        font=dict(color="#FF8200"),
-                    ),
-                    tickfont=dict(color="#FF8200"),
-                    side="left",
-                    showgrid=True,
-                    gridcolor="#F1F5F9",
-                ),
-                yaxis2=dict(
-                    title=dict(
-                        text="RSI-modified [m/s]",
-                        font=dict(color="#38BDF8"),
-                    ),
-                    tickfont=dict(color="#38BDF8"),
-                    overlaying="y",
-                    side="right",
-                    anchor="x",
-                    showgrid=False,
-                ),
+                
+                # Top-Left Horizontal Legend
                 legend=dict(
                     orientation="h",
                     yanchor="bottom",
-                    y=1.02,
-                    xanchor="right",
-                    x=1,
+                    y=1.08,
+                    xanchor="left",
+                    x=0.01,
+                    font=dict(size=13, color="#0F172A"),
+                ),
+                
+                # Bottom X-Axis
+                xaxis=dict(
+                    title=None,
+                    showgrid=False,
+                    showline=True,
+                    linewidth=1.5,
+                    linecolor="#0F172A",
+                    tickfont=dict(color="#64748B", size=12),
+                ),
+                
+                # Left Y-Axis (Jump Height)
+                yaxis=dict(
+                    showgrid=False,
+                    showline=True,
+                    linewidth=1.5,
+                    linecolor="#0F172A",
+                    tickfont=dict(color="#64748B", size=12),
+                    side="left",
+                ),
+                
+                # Right Y-Axis (RSI Modified)
+                yaxis2=dict(
+                    showgrid=False,
+                    showline=True,
+                    linewidth=1.5,
+                    linecolor="#0F172A",
+                    tickfont=dict(color="#64748B", size=12),
+                    overlaying="y",
+                    side="right",
+                    anchor="x",
                 ),
             )
 
