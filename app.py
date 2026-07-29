@@ -958,7 +958,15 @@ with active_season:
             selected_player_t = st.selectbox("Select Athlete:", roster_players)
 
         p_cmj = cmj_raw[cmj_raw["Name"] == selected_player_t].sort_values("Date").copy()
-        j_col = get_clean_jump_col(p_cmj)
+
+        # --- 1. DIRECT & ROBUST COLUMN IDENTIFICATION ---
+        # Find Jump Height Column
+        jump_cols = [c for c in p_cmj.columns if "jump" in c.lower() or "height" in c.lower()]
+        j_col = jump_cols[0] if jump_cols else None
+
+        # Find RSI Column
+        rsi_cols = [c for c in p_cmj.columns if "rsi" in c.lower()]
+        rsi_col = rsi_cols[0] if rsi_cols else None
 
         display_cols = [c for c in p_cmj.columns if c not in ["Name", "Date_Str"]]
         st.markdown(f"### Jump History for {selected_player_t}")
@@ -967,50 +975,48 @@ with active_season:
         st.markdown("<br>", unsafe_allow_html=True)
 
         if not p_cmj.empty and j_col:
-            fig_jump_trend = go.Figure()
-
-            # Ensure numeric types and clean dates
-            p_cmj[j_col] = pd.to_numeric(
+            # --- 2. FORCE CLEAN NUMERIC CONVERSION ON DATA FRAME ---
+            p_cmj["Jump_Height_Clean"] = pd.to_numeric(
                 p_cmj[j_col].astype(str).str.replace(r"[^0-9.]", "", regex=True),
                 errors="coerce",
             )
 
-            # 1. ORANGE LINE: JUMP HEIGHT (Left Y-Axis)
+            fig_jump_trend = go.Figure()
+
+            # --- 3. ORANGE LINE: JUMP HEIGHT (Left Axis 'y') ---
             fig_jump_trend.add_trace(
                 go.Scatter(
                     x=p_cmj["Date_Str"],
-                    y=p_cmj[j_col],
+                    y=p_cmj["Jump_Height_Clean"],
                     name="Jump Height [cm]",
                     mode="lines+markers",
                     connectgaps=True,
-                    yaxis="y",  # Primary Y-Axis
+                    yaxis="y",
                     line=dict(color="#FF8200", width=3),
                     marker=dict(size=8, color="#FF8200"),
                 )
             )
 
-            # 2. BLUE LINE: RSI-MODIFIED (Right Y-Axis)
-            rsi_cols = [c for c in p_cmj.columns if "rsi" in c.lower()]
-            if rsi_cols:
-                rsi_col = rsi_cols[0]
-                p_cmj[rsi_col] = pd.to_numeric(
+            # --- 4. BLUE LINE: RSI-MODIFIED (Right Axis 'y2') ---
+            if rsi_col:
+                p_cmj["RSI_Clean"] = pd.to_numeric(
                     p_cmj[rsi_col].astype(str).str.replace(r"[^0-9.]", "", regex=True),
                     errors="coerce",
                 )
                 fig_jump_trend.add_trace(
                     go.Scatter(
                         x=p_cmj["Date_Str"],
-                        y=p_cmj[rsi_col],
+                        y=p_cmj["RSI_Clean"],
                         name="RSI-modified [m/s]",
                         mode="lines+markers",
                         connectgaps=True,
-                        yaxis="y2",  # Secondary Y-Axis
+                        yaxis="y2",
                         line=dict(color="#38BDF8", width=3),
                         marker=dict(size=8, color="#38BDF8"),
                     )
                 )
 
-            # 3. DUAL Y-AXES LAYOUT CONFIGURATION
+            # --- 5. DUAL Y-AXIS LAYOUT CONFIGURATION ---
             fig_jump_trend.update_layout(
                 title=dict(
                     text=f"Jump Height & RSI-modified Progression Over Time ({selected_player_t})",
