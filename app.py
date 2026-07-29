@@ -305,14 +305,15 @@ with active_season:
     st.markdown("<br>", unsafe_allow_html=True)
     roster_players = roster_raw['Name'].tolist() if not roster_raw.empty else vol_raw['Player'].unique().tolist()
 
-    # =========================================================================
-    # TAB 1: INDIVIDUAL PROFILE (Original Dual Layout Restored)
+     # =========================================================================
+    # TAB 1: INDIVIDUAL PROFILE
     # =========================================================================
     if main_tab == "Individual Profile":
         c_sel, _ = st.columns([1, 2])
         with c_sel:
             selected_player = st.selectbox("Select Athlete Profile:", roster_players)
 
+        # Roster Header
         p_row = roster_raw[roster_raw['Name'] == selected_player]
         p_pos = p_row['Position'].values[0] if not p_row.empty else "Guard / Forward | #00"
         p_img = p_row['Picture'].values[0] if not p_row.empty else "https://via.placeholder.com/80"
@@ -327,15 +328,39 @@ with active_season:
             </div>
         """, unsafe_allow_html=True)
 
-        # Dual Trend Graphs
+        # DUAL GRAPHS: 1. Volume vs Intensity Score Trend | 2. CMJ History
         col_g1, col_g2 = st.columns(2)
 
         with col_g1:
-            st.markdown('<div class="vball-section-title">Practice Scores History</div>', unsafe_allow_html=True)
-            v_hist = vol_raw[vol_raw['Player'] == selected_player].sort_values('Date')
-            if not v_hist.empty:
-                fig1 = px.line(v_hist, x="Date", y="Distance (mi)", markers=True, color_discrete_sequence=["#FF8200"])
-                fig1.update_layout(margin=dict(l=0, r=0, t=10, b=0), height=230, plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+            st.markdown('<div class="vball-section-title">Practice Scores Trend</div>', unsafe_allow_html=True)
+            
+            # Fetch dates for selected athlete from volume & intensity sheets
+            v_p = vol_raw[vol_raw['Player'] == selected_player].sort_values('Date')
+            
+            if not v_p.empty:
+                # Merge or calculate daily Volume & Intensity scores over time
+                score_history = []
+                for d in v_p['Date'].unique():
+                    _, _, v_sc, i_sc, _, _, _ = compute_practice_tables(selected_player, d)
+                    score_history.append({"Date": d, "Volume Score": v_sc, "Intensity Score": i_sc})
+                
+                df_score_trend = pd.DataFrame(score_history)
+
+                # Line graph plotting Volume Score vs Intensity Score over time
+                fig1 = px.line(
+                    df_score_trend, 
+                    x="Date", 
+                    y=["Volume Score", "Intensity Score"], 
+                    markers=True, 
+                    color_discrete_sequence=["#FF8200", "#38BDF8"]
+                )
+                fig1.update_layout(
+                    margin=dict(l=0, r=0, t=10, b=0), 
+                    height=230, 
+                    plot_bgcolor="rgba(0,0,0,0)", 
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, title=None)
+                )
                 st.markdown('<div class="light-card-box">', unsafe_allow_html=True)
                 st.plotly_chart(fig1, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
@@ -352,7 +377,7 @@ with active_season:
 
         st.divider()
 
-        # Daily Practice Score Breakdown Tables
+        # DAILY PRACTICE SCORE BREAKDOWN TABLES
         st.markdown('### Most Recent Practice Score Breakdown')
         latest_date = vol_raw[vol_raw['Player'] == selected_player]['Date'].max()
         if pd.notna(latest_date):
