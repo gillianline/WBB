@@ -146,11 +146,12 @@ def load_sheet_data():
         roster_df = fetch_csv("roster_url")
 
         # Clean date columns across all dataframes
+        # Clean date columns across all dataframes
         for df in [vol_df, int_df, comp_df, weekly_df, cmj_df]:
             date_col = [c for c in df.columns if "date" in c.lower()]
             if date_col:
-                df["Date"] = pd.to_datetime(df[date_col[0]])
-                df["Date_Str"] = df["Date"].dt.strftime("%Y-%m-%d")
+                df["Date"] = pd.to_datetime(df[date_col[0]], errors="coerce")
+                df["Date_Str"] = df["Date"].dt.strftime("%Y-%m-%d")  # Ensures clean YYYY-MM-DD
 
         return vol_df, int_df, comp_df, weekly_df, cmj_df, roster_df
     except Exception as e:
@@ -973,8 +974,17 @@ with active_season:
         st.markdown("<br>", unsafe_allow_html=True)
 
         if not p_cmj.empty and j_col:
-            # --- FIX DATES: Format from '2026-07-21 00:00:00' to 'Jul 21\n2026' ---
-            p_cmj["Formatted_Date"] = pd.to_datetime(p_cmj["Date_Str"]).dt.strftime("%b %d<br>%Y")
+            # --- FORCE STRIP ANY TIME COMPONENT ('2026-07-21 00:00:00' -> 'Jul 21<br>2026') ---
+            p_cmj["Clean_Date_Only"] = (
+                p_cmj["Date_Str"]
+                .astype(str)
+                .str.split(" ")
+                .str[0]  # Takes only '2026-07-21'
+            )
+            
+            p_cmj["Formatted_Date"] = pd.to_datetime(
+                p_cmj["Clean_Date_Only"], errors="coerce"
+            ).dt.strftime("%b %d<br>%Y")
 
             # Numeric cleaning
             p_cmj["Jump_Height_Clean"] = pd.to_numeric(
@@ -1037,7 +1047,7 @@ with active_season:
                 # Bottom X-Axis
                 xaxis=dict(
                     title=None,
-                    type="category",  # Keeps exact date string layout without automatic timestamp stretching
+                    type="category",  # Explicitly prevents Plotly from auto-converting back to timestamps
                     showgrid=False,
                     showline=True,
                     linewidth=1.5,
