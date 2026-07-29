@@ -973,18 +973,21 @@ with active_season:
     if not p_cmj.empty and j_col:
       fig_jump_trend = go.Figure()
       
+      # 1. ORANGE LINE: JUMP HEIGHT (Explicitly mapped to Left Y-Axis yaxis='y1')
       fig_jump_trend.add_trace(
           go.Scatter(
               x=p_cmj["Date_Str"],
               y=p_cmj[j_col],
-              name=j_col,
+              name="Jump Height [cm]",
               mode="lines+markers",
               connectgaps=True,
+              yaxis="y1",  # Forces left axis
               line=dict(color="#FF8200", width=3),
               marker=dict(size=8),
           )
       )
 
+      # 2. BLUE LINE: RSI-MODIFIED (Explicitly mapped to Right Y-Axis yaxis='y2')
       rsi_cols = [c for c in p_cmj.columns if "rsi" in c.lower()]
       if rsi_cols:
         rsi_col = rsi_cols[0]
@@ -996,27 +999,40 @@ with active_season:
             go.Scatter(
                 x=p_cmj["Date_Str"],
                 y=p_cmj[rsi_col],
-                name="RSI-modified",
+                name="RSI-modified [m/s]",
                 mode="lines+markers",
                 connectgaps=True,
-                yaxis="y2",
+                yaxis="y2",  # Forces right axis
                 line=dict(color="#38BDF8", width=3),
                 marker=dict(size=8),
             )
         )
 
+      # 3. CONFIGURE BOTH Y-AXES EXPLICITLY
       fig_jump_trend.update_layout(
           title=(
               "Jump Height & RSI-modified Progression Over Time"
               f" ({selected_player_t})"
           ),
           title_font=dict(size=14, color="#0F172A"),
-          height=350,
+          height=380,
           margin=dict(l=0, r=0, t=40, b=0),
           plot_bgcolor="rgba(0,0,0,0)",
           paper_bgcolor="rgba(0,0,0,0)",
-          yaxis=dict(title="Jump Height [cm]"),
-          yaxis2=dict(title="RSI-modified [m/s]", overlaying="y", side="right"),
+          xaxis=dict(title=None),
+          yaxis=dict(
+              title="Jump Height [cm]",
+              titlefont=dict(color="#FF8200"),
+              tickfont=dict(color="#FF8200"),
+              side="left"
+          ),
+          yaxis2=dict(
+              title="RSI-modified [m/s]",
+              titlefont=dict(color="#38BDF8"),
+              tickfont=dict(color="#38BDF8"),
+              overlaying="y",
+              side="right"
+          ),
           legend=dict(
               orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
           ),
