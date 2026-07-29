@@ -6,16 +6,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-def get_clean_jump_col(df):
-    for col in df.columns:
-        if "jump height" in col.lower():
-            # Force string entries (like "cm" or empty strings) to float numbers
-            df[col] = pd.to_numeric(df[col].astype(str).str.replace(r'[^0-9.]', '', regex=True), errors='coerce')
-            return col
-    return None
-    
 # -----------------------------------------------------------------------------
-# 1. PAGE CONFIGURATION & CLEAN STYLING
+# 1. PAGE CONFIGURATION & STYLING
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="Lady Vols Basketball | Performance Console",
@@ -306,11 +298,14 @@ def compute_practice_tables(player_name, session_date_str):
   )
 
 
-# Helper to get the correct Jump Height column dynamically
-def get_jump_col(df):
-  for c in df.columns:
-    if "jump height" in c.lower():
-      return c
+def get_clean_jump_col(df):
+  for col in df.columns:
+    if "jump height" in col.lower():
+      df[col] = pd.to_numeric(
+          df[col].astype(str).str.replace(r"[^0-9.]", "", regex=True),
+          errors="coerce",
+      )
+      return col
   return None
 
 
@@ -452,7 +447,7 @@ with active_season:
           unsafe_allow_html=True,
       )
       cmj_p = cmj_raw[cmj_raw["Name"] == selected_player].sort_values("Date")
-      j_col = get_jump_col(cmj_p)
+      j_col = get_clean_jump_col(cmj_p)
 
       if not cmj_p.empty and j_col:
         fig2 = px.bar(
@@ -536,7 +531,9 @@ with active_season:
   elif main_tab == "Practice Score":
     c_d, _ = st.columns([1, 3])
     with c_d:
-      available_dates = vol_raw["Date_Str"].sort_values(ascending=False).unique()
+      available_dates = (
+          vol_raw["Date_Str"].sort_values(ascending=False).unique()
+      )
       session_date = st.selectbox("Select Session Date:", available_dates)
 
     st.markdown("<br>", unsafe_allow_html=True)
@@ -733,7 +730,7 @@ with active_season:
             )
 
             p_cmj = cmj_raw[cmj_raw["Name"] == player_name].sort_values("Date")
-            j_col = get_jump_col(p_cmj)
+            j_col = get_clean_jump_col(p_cmj)
 
             if not p_cmj.empty and j_col:
               all_time_max_cmj = p_cmj[j_col].max()
@@ -952,73 +949,77 @@ with active_season:
       st.plotly_chart(fig_ind_dl, use_container_width=True)
 
   # =========================================================================
-    # TAB 5: TESTING (Fixed CMJ Line & Dual-Axis Trend Plotting)
-    # =========================================================================
-    elif main_tab == "Testing":
-        st.markdown('<div class="vball-section-title">CMJ History</div>', unsafe_allow_html=True)
+  # TAB 5: TESTING
+  # =========================================================================
+  elif main_tab == "Testing":
+    st.markdown(
+        '<div class="vball-section-title">CMJ History</div>',
+        unsafe_allow_html=True,
+    )
 
-        c_filter, _ = st.columns([1, 2])
-        with c_filter:
-            selected_player_t = st.selectbox("Select Athlete:", roster_players)
+    c_filter, _ = st.columns([1, 2])
+    with c_filter:
+      selected_player_t = st.selectbox("Select Athlete:", roster_players)
 
-        # Filter athlete data & sort by date
-        p_cmj = cmj_raw[cmj_raw["Name"] == selected_player_t].sort_values("Date").copy()
-        
-        # Identify jump height column and force numeric values
-        j_col = get_clean_jump_col(p_cmj)
+    p_cmj = cmj_raw[cmj_raw["Name"] == selected_player_t].sort_values("Date").copy()
+    j_col = get_clean_jump_col(p_cmj)
 
-        display_cols = [c for c in p_cmj.columns if c not in ["Name", "Date_Str"]]
-        st.markdown(f"### Jump History for {selected_player_t}")
-        st.markdown(render_vball_table(p_cmj[display_cols]), unsafe_allow_html=True)
+    display_cols = [c for c in p_cmj.columns if c not in ["Name", "Date_Str"]]
+    st.markdown(f"### Jump History for {selected_player_t}")
+    st.markdown(render_vball_table(p_cmj[display_cols]), unsafe_allow_html=True)
 
-        st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
 
-        if not p_cmj.empty and j_col:
-            fig_jump_trend = go.Figure()
+    if not p_cmj.empty and j_col:
+      fig_jump_trend = go.Figure()
+      
+      fig_jump_trend.add_trace(
+          go.Scatter(
+              x=p_cmj["Date_Str"],
+              y=p_cmj[j_col],
+              name=j_col,
+              mode="lines+markers",
+              connectgaps=True,
+              line=dict(color="#FF8200", width=3),
+              marker=dict(size=8),
+          )
+      )
 
-            # 1. Primary Y-Axis: Jump Height Line + Markers
-            fig_jump_trend.add_trace(
-                go.Scatter(
-                    x=p_cmj["Date_Str"],
-                    y=p_cmj[j_col],
-                    name=j_col,
-                    mode="lines+markers",
-                    connectgaps=True,  # Draws line continuously even if rows have gaps
-                    line=dict(color="#FF8200", width=3),
-                    marker=dict(size=8),
-                )
+      rsi_cols = [c for c in p_cmj.columns if "rsi" in c.lower()]
+      if rsi_cols:
+        rsi_col = rsi_cols[0]
+        p_cmj[rsi_col] = pd.to_numeric(
+            p_cmj[rsi_col].astype(str).str.replace(r"[^0-9.]", "", regex=True),
+            errors="coerce",
+        )
+        fig_jump_trend.add_trace(
+            go.Scatter(
+                x=p_cmj["Date_Str"],
+                y=p_cmj[rsi_col],
+                name="RSI-modified",
+                mode="lines+markers",
+                connectgaps=True,
+                yaxis="y2",
+                line=dict(color="#38BDF8", width=3),
+                marker=dict(size=8),
             )
+        )
 
-            # 2. Secondary Y-Axis: RSI-Modified (if exists)
-            rsi_col = [c for c in p_cmj.columns if "rsi" in c.lower()]
-            if rsi_col:
-                rsi_c = rsi_col[0]
-                p_cmj[rsi_c] = pd.to_numeric(p_cmj[rsi_c].astype(str).str.replace(r'[^0-9.]', '', regex=True), errors='coerce')
-                fig_jump_trend.add_trace(
-                    go.Scatter(
-                        x=p_cmj["Date_Str"],
-                        y=p_cmj[rsi_c],
-                        name="RSI-modified",
-                        mode="lines+markers",
-                        connectgaps=True,
-                        yaxis="y2",
-                        line=dict(color="#38BDF8", width=3),
-                        marker=dict(size=8),
-                    )
-                )
+      fig_jump_trend.update_layout(
+          title=(
+              "Jump Height & RSI-modified Progression Over Time"
+              f" ({selected_player_t})"
+          ),
+          title_font=dict(size=14, color="#0F172A"),
+          height=350,
+          margin=dict(l=0, r=0, t=40, b=0),
+          plot_bgcolor="rgba(0,0,0,0)",
+          paper_bgcolor="rgba(0,0,0,0)",
+          yaxis=dict(title="Jump Height [cm]"),
+          yaxis2=dict(title="RSI-modified [m/s]", overlaying="y", side="right"),
+          legend=dict(
+              orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
+          ),
+      )
 
-            fig_jump_trend.update_layout(
-                title=f"Jump Height & RSI-modified Progression Over Time ({selected_player_t})",
-                title_font=dict(size=14, color="#0F172A"),
-                height=350,
-                margin=dict(l=0, r=0, t=40, b=0),
-                plot_bgcolor="rgba(0,0,0,0)",
-                paper_bgcolor="rgba(0,0,0,0)",
-                yaxis=dict(title="Jump Height [cm]"),
-                yaxis2=dict(title="RSI-modified [m/s]", overlaying="y", side="right"),
-                legend=dict(
-                    orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
-                ),
-            )
-
-            st.plotly_chart(fig_jump_trend, use_container_width=True)
+      st.plotly_chart(fig_jump_trend, use_container_width=True)
