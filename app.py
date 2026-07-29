@@ -969,7 +969,7 @@ with active_season:
         if not p_cmj.empty and j_col:
             fig_jump_trend = go.Figure()
 
-            # 1. ORANGE LINE: JUMP HEIGHT (Explicitly mapped to Left Y-Axis yaxis='y1')
+            # 1. ORANGE LINE: JUMP HEIGHT (Left Y-Axis)
             fig_jump_trend.add_trace(
                 go.Scatter(
                     x=p_cmj["Date_Str"],
@@ -977,13 +977,13 @@ with active_season:
                     name="Jump Height [cm]",
                     mode="lines+markers",
                     connectgaps=True,
-                    yaxis="y1",  # Forces left axis
+                    yaxis="y1",
                     line=dict(color="#FF8200", width=3),
                     marker=dict(size=8),
                 )
             )
 
-            # 2. BLUE LINE: RSI-MODIFIED (Explicitly mapped to Right Y-Axis yaxis='y2')
+            # 2. BLUE LINE: RSI-MODIFIED (Right Y-Axis)
             rsi_cols = [c for c in p_cmj.columns if "rsi" in c.lower()]
             if rsi_cols:
                 rsi_col = rsi_cols[0]
@@ -998,39 +998,46 @@ with active_season:
                         name="RSI-modified [m/s]",
                         mode="lines+markers",
                         connectgaps=True,
-                        yaxis="y2",  # Forces right axis
+                        yaxis="y2",
                         line=dict(color="#38BDF8", width=3),
                         marker=dict(size=8),
                     )
                 )
 
-            # 3. CONFIGURE BOTH Y-AXES EXPLICITLY
+            # 3. MODERN PLOTLY v6 COMPATIBLE LAYOUT
             fig_jump_trend.update_layout(
-                title=(
-                    "Jump Height & RSI-modified Progression Over Time"
-                    f" ({selected_player_t})"
+                title=dict(
+                    text=f"Jump Height & RSI-modified Progression Over Time ({selected_player_t})",
+                    font=dict(size=14, color="#0F172A"),
                 ),
-                title_font=dict(size=14, color="#0F172A"),
                 height=380,
                 margin=dict(l=0, r=0, t=40, b=0),
                 plot_bgcolor="rgba(0,0,0,0)",
                 paper_bgcolor="rgba(0,0,0,0)",
                 xaxis=dict(title=None),
                 yaxis=dict(
-                    title="Jump Height [cm]",
-                    titlefont=dict(color="#FF8200"),
+                    title=dict(
+                        text="Jump Height [cm]",
+                        font=dict(color="#FF8200"),
+                    ),
                     tickfont=dict(color="#FF8200"),
                     side="left",
                 ),
                 yaxis2=dict(
-                    title="RSI-modified [m/s]",
-                    titlefont=dict(color="#38BDF8"),
+                    title=dict(
+                        text="RSI-modified [m/s]",
+                        font=dict(color="#38BDF8"),
+                    ),
                     tickfont=dict(color="#38BDF8"),
                     overlaying="y",
                     side="right",
                 ),
                 legend=dict(
-                    orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.02,
+                    xanchor="right",
+                    x=1,
                 ),
             )
 
