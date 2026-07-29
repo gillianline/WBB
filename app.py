@@ -974,19 +974,15 @@ with active_season:
         st.markdown("<br>", unsafe_allow_html=True)
 
         if not p_cmj.empty and j_col:
-            # --- FORCE STRIP ANY TIME COMPONENT ('2026-07-21 00:00:00' -> 'Jul 21<br>2026') ---
-            p_cmj["Clean_Date_Only"] = (
-                p_cmj["Date_Str"]
+            # --- FORCE FORMAT AS A CLEAN STRING (Prevents Plotly from auto-adding 00:00:00) ---
+            # Converts any date type to 'Jul 28<br>2026' string explicitly
+            p_cmj["Formatted_Date"] = (
+                pd.to_datetime(p_cmj["Date"])
+                .dt.strftime("%b %d<br>%Y")
                 .astype(str)
-                .str.split(" ")
-                .str[0]  # Takes only '2026-07-21'
             )
-            
-            p_cmj["Formatted_Date"] = pd.to_datetime(
-                p_cmj["Clean_Date_Only"], errors="coerce"
-            ).dt.strftime("%b %d<br>%Y")
 
-            # Numeric cleaning
+            # Clean numeric data
             p_cmj["Jump_Height_Clean"] = pd.to_numeric(
                 p_cmj[j_col].astype(str).str.replace(r"[^0-9.]", "", regex=True),
                 errors="coerce",
@@ -1047,7 +1043,7 @@ with active_season:
                 # Bottom X-Axis
                 xaxis=dict(
                     title=None,
-                    type="category",  # Explicitly prevents Plotly from auto-converting back to timestamps
+                    type="category",  # Forces Plotly to treat values strictly as discrete text labels
                     showgrid=False,
                     showline=True,
                     linewidth=1.5,
