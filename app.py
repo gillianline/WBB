@@ -479,78 +479,159 @@ with active_season:
 
 
     # =========================================================================
-    # TAB 3: COMPLIANCE (Side-by-Side 2-Column Roster Grid)
+    # TAB 3: COMPLIANCE (Sub-Tabs for Speed & CMJ Roster Grids)
     # =========================================================================
     elif main_tab == "Compliance":
-        st.markdown('<div class="vball-section-title">Max Speed & Exposure Compliance Grid</div>', unsafe_allow_html=True)
+        # Compliance Sub-Tabs Navigation
+        comp_sub_tab1, comp_sub_tab2 = st.tabs(["Speed Compliance", "CMJ Compliance"])
 
-        for i in range(0, len(roster_players), 2):
-            col1, col2 = st.columns(2)
-            cols = [col1, col2]
+        # ---------------------------------------------------------------------
+        # SUB-TAB 1: SPEED COMPLIANCE
+        # ---------------------------------------------------------------------
+        with comp_sub_tab1:
+            st.markdown('<div class="vball-section-title">Max Speed & Exposure Compliance Grid</div>', unsafe_allow_html=True)
 
-            for j in range(2):
-                if i + j < len(roster_players):
-                    player_name = roster_players[i + j]
-                    p_row = roster_raw[roster_raw['Name'] == player_name]
-                    p_pos = p_row['Position'].values[0] if not p_row.empty else "Guard / Forward | #00"
-                    p_img = p_row['Picture'].values[0] if not p_row.empty else "https://via.placeholder.com/60"
+            for i in range(0, len(roster_players), 2):
+                col1, col2 = st.columns(2)
+                cols = [col1, col2]
 
-                    p_comp = comp_raw[comp_raw['Player'] == player_name].sort_values('Date')
+                for j in range(2):
+                    if i + j < len(roster_players):
+                        player_name = roster_players[i + j]
+                        p_row = roster_raw[roster_raw['Name'] == player_name]
+                        p_pos = p_row['Position'].values[0] if not p_row.empty else "Guard / Forward | #00"
+                        p_img = p_row['Picture'].values[0] if not p_row.empty else "https://via.placeholder.com/60"
 
-                    if not p_comp.empty:
-                        all_time_max = p_comp['Speed (MPH)'].max()
-                        max_row = p_comp[p_comp['Speed (MPH)'] == all_time_max].iloc[-1]
-                        max_date = max_row['Date'].strftime('%Y-%m-%d')
+                        p_comp = comp_raw[comp_raw['Player'] == player_name].sort_values('Date')
 
-                        recent_row = p_comp.iloc[-1]
-                        recent_speed = recent_row['Speed (MPH)']
-                        recent_date = recent_row['Date'].strftime('%Y-%m-%d')
+                        if not p_comp.empty:
+                            all_time_max = p_comp['Speed (MPH)'].max()
+                            max_row = p_comp[p_comp['Speed (MPH)'] == all_time_max].iloc[-1]
+                            max_date = max_row['Date'].strftime('%Y-%m-%d')
 
-                        pct_max = f"{(recent_speed / all_time_max * 100):.1f}%" if all_time_max > 0 else "-- %"
-                        days_since = (pd.to_datetime('today') - pd.to_datetime(max_date)).days
+                            recent_row = p_comp.iloc[-1]
+                            recent_speed = recent_row['Speed (MPH)']
+                            recent_date = recent_row['Date'].strftime('%Y-%m-%d')
 
-                        badge_bg = "#BBF7D0" if days_since <= 7 else "#FFD6D6"
-                        badge_fg = "#166534" if days_since <= 7 else "#991B1B"
+                            pct_max = f"{(recent_speed / all_time_max * 100):.1f}%" if all_time_max > 0 else "-- %"
+                            days_since = (pd.to_datetime('today') - pd.to_datetime(max_date)).days
 
-                        with cols[j]:
-                            st.markdown(f"""
-                                <div class="compliance-card">
-                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-                                        <div style="display: flex; align-items: center; gap: 12px;">
-                                            <img src="{p_img}" class="athlete-avatar" style="width:50px; height:50px;">
-                                            <div>
-                                                <h4 style="margin:0; font-size:1.1rem; color:#0F172A;">{player_name}</h4>
-                                                <span style="color:#64748B; font-size:0.8rem;">{p_pos}</span>
+                            badge_bg = "#BBF7D0" if days_since <= 7 else "#FFD6D6"
+                            badge_fg = "#166534" if days_since <= 7 else "#991B1B"
+
+                            with cols[j]:
+                                st.markdown(f"""
+                                    <div class="compliance-card">
+                                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                                            <div style="display: flex; align-items: center; gap: 12px;">
+                                                <img src="{p_img}" class="athlete-avatar" style="width:50px; height:50px;">
+                                                <div>
+                                                    <h4 style="margin:0; font-size:1.1rem; color:#0F172A;">{player_name}</h4>
+                                                    <span style="color:#64748B; font-size:0.8rem;">{p_pos}</span>
+                                                </div>
+                                            </div>
+                                            <div style="background-color:{badge_bg}; color:{badge_fg}; font-weight:700; padding:4px 10px; border-radius:12px; font-size:0.75rem;">
+                                                {days_since} Days
                                             </div>
                                         </div>
-                                        <div style="background-color:{badge_bg}; color:{badge_fg}; font-weight:700; padding:4px 10px; border-radius:12px; font-size:0.75rem;">
-                                            {days_since} Days
+                                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+                                            <div class="compliance-metric-card">
+                                                <div class="compliance-metric-label">Recent Speed</div>
+                                                <div class="compliance-metric-value">{recent_speed:.1f} mph</div>
+                                                <div class="compliance-metric-sub">{recent_date}</div>
+                                            </div>
+                                            <div class="compliance-metric-card">
+                                                <div class="compliance-metric-label">All-Time Max Speed</div>
+                                                <div class="compliance-metric-value">{all_time_max:.1f} mph</div>
+                                                <div class="compliance-metric-sub">{max_date}</div>
+                                            </div>
+                                            <div class="compliance-metric-card">
+                                                <div class="compliance-metric-label">% of All-Time Max</div>
+                                                <div class="compliance-metric-value" style="color:#FF8200;">{pct_max}</div>
+                                                <div class="compliance-metric-sub">Recent vs. Peak Output</div>
+                                            </div>
+                                            <div class="compliance-metric-card">
+                                                <div class="compliance-metric-label">Recency Status</div>
+                                                <div class="compliance-metric-value">{days_since} Days</div>
+                                                <div class="compliance-metric-sub">Elapsed Threshold</div>
+                                            </div>
                                         </div>
                                     </div>
-                                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
-                                        <div class="compliance-metric-card">
-                                            <div class="compliance-metric-label">Recent Speed</div>
-                                            <div class="compliance-metric-value">{recent_speed:.1f} mph</div>
-                                            <div class="compliance-metric-sub">{recent_date}</div>
+                                """, unsafe_allow_html=True)
+
+        # ---------------------------------------------------------------------
+        # SUB-TAB 2: CMJ COMPLIANCE
+        # ---------------------------------------------------------------------
+        with comp_sub_tab2:
+            st.markdown('<div class="vball-section-title">CMJ Jump Height Exposure & Compliance Grid</div>', unsafe_allow_html=True)
+
+            for i in range(0, len(roster_players), 2):
+                col1, col2 = st.columns(2)
+                cols = [col1, col2]
+
+                for j in range(2):
+                    if i + j < len(roster_players):
+                        player_name = roster_players[i + j]
+                        p_row = roster_raw[roster_raw['Name'] == player_name]
+                        p_pos = p_row['Position'].values[0] if not p_row.empty else "Guard / Forward | #00"
+                        p_img = p_row['Picture'].values[0] if not p_row.empty else "https://via.placeholder.com/60"
+
+                        p_cmj = cmj_raw[cmj_raw['Name'] == player_name].sort_values('Date')
+
+                        if not p_cmj.empty and "Jump Height (Imp-Mom) [cm]" in p_cmj.columns:
+                            all_time_max_cmj = p_cmj['Jump Height (Imp-Mom) [cm]'].max()
+                            max_row_cmj = p_cmj[p_cmj['Jump Height (Imp-Mom) [cm]'] == all_time_max_cmj].iloc[-1]
+                            max_date_cmj = pd.to_datetime(max_row_cmj['Date']).strftime('%Y-%m-%d')
+
+                            recent_row_cmj = p_cmj.iloc[-1]
+                            recent_cmj = recent_row_cmj['Jump Height (Imp-Mom) [cm]']
+                            recent_date_cmj = pd.to_datetime(recent_row_cmj['Date']).strftime('%Y-%m-%d')
+
+                            pct_max_cmj = f"{(recent_cmj / all_time_max_cmj * 100):.1f}%" if all_time_max_cmj > 0 else "-- %"
+                            days_since_cmj = (pd.to_datetime('today') - pd.to_datetime(max_date_cmj)).days
+
+                            badge_bg_cmj = "#BBF7D0" if days_since_cmj <= 7 else "#FFD6D6"
+                            badge_fg_cmj = "#166534" if days_since_cmj <= 7 else "#991B1B"
+
+                            with cols[j]:
+                                st.markdown(f"""
+                                    <div class="compliance-card">
+                                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                                            <div style="display: flex; align-items: center; gap: 12px;">
+                                                <img src="{p_img}" class="athlete-avatar" style="width:50px; height:50px;">
+                                                <div>
+                                                    <h4 style="margin:0; font-size:1.1rem; color:#0F172A;">{player_name}</h4>
+                                                    <span style="color:#64748B; font-size:0.8rem;">{p_pos}</span>
+                                                </div>
+                                            </div>
+                                            <div style="background-color:{badge_bg_cmj}; color:{badge_fg_cmj}; font-weight:700; padding:4px 10px; border-radius:12px; font-size:0.75rem;">
+                                                {days_since_cmj} Days
+                                            </div>
                                         </div>
-                                        <div class="compliance-metric-card">
-                                            <div class="compliance-metric-label">All-Time Max Speed</div>
-                                            <div class="compliance-metric-value">{all_time_max:.1f} mph</div>
-                                            <div class="compliance-metric-sub">{max_date}</div>
-                                        </div>
-                                        <div class="compliance-metric-card">
-                                            <div class="compliance-metric-label">% of All-Time Max</div>
-                                            <div class="compliance-metric-value" style="color:#FF8200;">{pct_max}</div>
-                                            <div class="compliance-metric-sub">Recent vs. Peak Output</div>
-                                        </div>
-                                        <div class="compliance-metric-card">
-                                            <div class="compliance-metric-label">Recency Status</div>
-                                            <div class="compliance-metric-value">{days_since} Days</div>
-                                            <div class="compliance-metric-sub">Elapsed Threshold</div>
+                                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+                                            <div class="compliance-metric-card">
+                                                <div class="compliance-metric-label">Recent Jump Height</div>
+                                                <div class="compliance-metric-value">{recent_cmj:.1f} cm</div>
+                                                <div class="compliance-metric-sub">{recent_date_cmj}</div>
+                                            </div>
+                                            <div class="compliance-metric-card">
+                                                <div class="compliance-metric-label">All-Time Max Jump</div>
+                                                <div class="compliance-metric-value">{all_time_max_cmj:.1f} cm</div>
+                                                <div class="compliance-metric-sub">{max_date_cmj}</div>
+                                            </div>
+                                            <div class="compliance-metric-card">
+                                                <div class="compliance-metric-label">% of All-Time Max</div>
+                                                <div class="compliance-metric-value" style="color:#FF8200;">{pct_max_cmj}</div>
+                                                <div class="compliance-metric-sub">Recent vs. Peak Output</div>
+                                            </div>
+                                            <div class="compliance-metric-card">
+                                                <div class="compliance-metric-label">Recency Status</div>
+                                                <div class="compliance-metric-value">{days_since_cmj} Days</div>
+                                                <div class="compliance-metric-sub">Elapsed Threshold</div>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            """, unsafe_allow_html=True)
+                                """, unsafe_allow_html=True)
 
 
     # =========================================================================
