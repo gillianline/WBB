@@ -1118,7 +1118,7 @@ with active_season:
             st.plotly_chart(fig_jump_trend, use_container_width=True)
 
  # =========================================================================
-    # TAB 6: LIVE TRACKING (SYNCHRONOUS GUARANTEED DELETE & PERSISTENCE)
+    # TAB 6: LIVE TRACKING (PHYSICAL ROW DELETION ENGINE)
     # =========================================================================
     elif main_tab == "Live Tracking":
         st.markdown(
@@ -1127,7 +1127,7 @@ with active_season:
         )
 
         # ---------------------------------------------------------------------
-        # 1. READ FRESH LOGS FROM GOOGLE SHEET ON INITIAL LOAD
+        # 1. READ LOGS FROM GOOGLE SHEET ON LOAD
         # ---------------------------------------------------------------------
         def fetch_live_gsheet():
             try:
@@ -1152,11 +1152,11 @@ with active_season:
 
             return pd.DataFrame(columns=["Week_Starting", "Athlete", "Metric", "Day", "Count", "Timestamp"])
 
-        # Populate session state once per browser session
+        # Populate session state once per session
         if "live_historical_df" not in st.session_state:
             st.session_state.live_historical_df = fetch_live_gsheet()
 
-        # Synchronous execution helper
+        # Synchronous POST to Google Sheets
         def execute_sheet_mutation(payload):
             target_url = (
                 st.secrets.get("MACRO_URL") 
@@ -1196,7 +1196,7 @@ with active_season:
         st.divider()
 
         # ---------------------------------------------------------------------
-        # 3. PLAYER CARDS (2-COLUMN GRID SIDE-BY-SIDE)
+        # 3. PLAYER CARDS (SIDE-BY-SIDE GRID)
         # ---------------------------------------------------------------------
         st.markdown("### Player Trackers")
 
@@ -1252,11 +1252,11 @@ with active_season:
                                 with m_col2:
                                     if st.button("➖", key=f"dec_{p_name.replace(' ', '')}_{m}_{day_selected}"):
                                         if current_count > 0:
-                                            # 1. Update local state immediately
+                                            # 1. Drop row locally from session_state immediately
                                             last_idx = matches.index[-1]
                                             st.session_state.live_historical_df = st.session_state.live_historical_df.drop(last_idx).reset_index(drop=True)
 
-                                            # 2. Fire payload and wait for synchronous completion
+                                            # 2. Fire remove command to delete physical row in Google Sheets
                                             payload = {
                                                 "Week_Starting": week_str,
                                                 "Athlete": str(p_name).strip(),
@@ -1275,7 +1275,7 @@ with active_season:
                                     if st.button("➕", key=f"inc_{p_name.replace(' ', '')}_{m}_{day_selected}"):
                                         time_str = local_now.strftime("%m/%d/%Y %H:%M:%S")
 
-                                        # 1. Update local state immediately
+                                        # 1. Append row locally to session_state immediately
                                         new_row = pd.DataFrame([{
                                             "Week_Starting": week_str,
                                             "Athlete": str(p_name).strip(),
@@ -1289,7 +1289,7 @@ with active_season:
                                             ignore_index=True,
                                         )
 
-                                        # 2. Fire payload and wait for synchronous completion
+                                        # 2. Fire add command to append physical row in Google Sheets
                                         payload = {
                                             "Week_Starting": week_str,
                                             "Athlete": str(p_name).strip(),
