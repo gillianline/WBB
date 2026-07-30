@@ -1121,7 +1121,7 @@ with active_season:
     # =========================================================================
     elif main_tab == "Live Tracking":
         st.markdown(
-            '<div class="vball-section-title">Live Tracking</div>',
+            '<div class="vball-section-title">Live Practice & Game Tracking</div>',
             unsafe_allow_html=True,
         )
 
@@ -1145,23 +1145,35 @@ with active_season:
 
         metrics_to_track = ["Box Out", "Turnovers", "Offensive Rebounds"]
 
-        # Ensure historical_df exists in session_state (same as Recovery Engine)
+        # Loader function defined directly inside the scope to prevent NameError
+        def fetch_live_historical_logs():
+            try:
+                if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
+                    url = st.secrets["connections"]["gsheets"]["spreadsheet"]
+                    cache_buster = f"&cache={pd.to_datetime('now').timestamp()}"
+                    csv_url = url.replace("/edit", f"/gviz/tq?tqx=out:csv&sheet=Sheet1{cache_buster}")
+                    return pd.read_csv(csv_url)
+            except Exception as e:
+                print(f"Sheet fetch error: {e}")
+            return pd.DataFrame(columns=["Week_Starting", "Athlete", "Metric", "Day", "Count", "Timestamp"])
+
+        # Hydrate historical_df safely
         if "historical_df" not in st.session_state:
-            st.session_state.historical_df = load_historical_data()
+            st.session_state.historical_df = fetch_live_historical_logs()
 
         historical_df = st.session_state.historical_df
 
         st.divider()
 
         # ---------------------------------------------------------------------
-        # B. SYNC HELPER (EXACT RECOVERY WEBHOOK PATTERN)
+        # B. SYNC HELPER (RECOVERY WEBHOOK ENGINE)
         # ---------------------------------------------------------------------
         def send_recovery_style_update(athlete_name, metric_name, action_val):
             current_time_str = (
                 pd.to_datetime("now").strftime("%H:%M:%S") if action_val == "add" else ""
             )
 
-            # 1. Update local historical_df in memory instantly
+            # 1. Update in-memory historical_df instantly
             if action_val == "add":
                 new_row = pd.DataFrame([{
                     "Week_Starting": week_str,
