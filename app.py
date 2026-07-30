@@ -1116,33 +1116,58 @@ with active_season:
 
             st.plotly_chart(fig_jump_trend, use_container_width=True)
 
-   # =========================================================================
+  # =========================================================================
     # TAB 6: LIVE TRACKING (EXACT RECOVERY ENGINE PATTERN)
     # =========================================================================
     elif main_tab == "Live Tracking":
         st.title("Daily Live Metric Entry")
 
-        # 1. Ensure persistent historical_df exists in session state
+        # --- RECOVERY CONTINUOUS READ ENGINE ---
+        def load_historical_data():
+            try:
+                url = st.secrets["connections"]["gsheets"]["spreadsheet"]
+                cache_buster = f"&cache={datetime.datetime.now().timestamp()}"
+                csv_url = url.replace(
+                    "/edit", f"/gviz/tq?tqx=out:csv&sheet=Logs{cache_buster}"
+                )
+                return pd.read_csv(csv_url)
+            except Exception:
+                return pd.DataFrame(
+                    columns=[
+                        "Week_Starting",
+                        "Athlete",
+                        "Lift_Group",
+                        "Station",
+                        "Day",
+                        "Timestamp",
+                    ]
+                )
+
+        # 1. Initialize or load historical dataframe into persistent session state
         if "historical_df" not in st.session_state:
             st.session_state.historical_df = load_historical_data()
 
+        # Shortcut for manual triggers
+        if st.sidebar.button("Force Cloud Refresh", key="live_force_refresh"):
+            st.session_state.historical_df = load_historical_data()
+            st.rerun()
+
         historical_df = st.session_state.historical_df
 
-        # 2. Week & Day Controls (EST Time Sync)
+        # 2. Week & Day Controls (EST Sync)
         local_now = datetime.datetime.utcnow() - datetime.timedelta(hours=4)
         today = local_now.date()
         current_monday = today - datetime.timedelta(days=today.weekday())
 
         col_s1, col_s2, col_s3 = st.columns([1, 1, 1])
         with col_s1:
-            selected_monday = st.date_input("Select Week", value=current_monday)
+            selected_monday = st.date_input("Select Week", value=current_monday, key="live_selected_monday")
             if selected_monday.weekday() != 0:
                 selected_monday = selected_monday - datetime.timedelta(days=selected_monday.weekday())
             week_str = selected_monday.strftime("%Y-%m-%d")
         with col_s2:
             DAYS = [(selected_monday + datetime.timedelta(days=i)).strftime("%A (%m/%d)") for i in range(7)]
-            current_day_str = local_now.strftime("%A (%m/%d)")
-            day_selected = st.selectbox("Select Day:", DAYS, index=0)
+            day_selected = st.selectbox("Select Day:", DAYS, index=0, key="live_day_selected")
         with col_s3:
             st.caption(f"Logging For: `{day_selected}`")
 
@@ -1155,10 +1180,13 @@ with active_season:
         # ---------------------------------------------------------------------
         grid_cols = st.columns(4)
         
-        for idx, row in roster.iterrows():
-            athlete_name = row["Athlete"]
-            lift_group = row["Lift Group"] if "Lift Group" in row else ""
-            img_url = str(row["Picture"]) if pd.notna(row["Picture"]) else "https://cdn-icons-png.flaticon.com/512/186/186037.png"
+        # Pull roster dataframe safely
+        roster_df = roster_raw if 'roster_raw' in locals() else roster
+        
+        for idx, (_, row) in enumerate(roster_df.iterrows()):
+            athlete_name = row["Athlete"] if "Athlete" in row else row["Name"]
+            lift_group = row["Lift Group"] if "Lift Group" in row else (row["Group #"] if "Group #" in row else "")
+            img_url = str(row["Picture"]) if ("Picture" in row and pd.notna(row["Picture"])) else "https://cdn-icons-png.flaticon.com/512/186/186037.png"
 
             with grid_cols[idx % 4]:
                 st.markdown(
