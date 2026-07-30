@@ -1118,7 +1118,7 @@ with active_season:
             st.plotly_chart(fig_jump_trend, use_container_width=True)
 
  # =========================================================================
-    # TAB 6: LIVE TRACKING (CACHE-BYPASS PERSISTENT ENGINE)
+    # TAB 6: LIVE TRACKING (PERSISTENT RECOVERY ENGINE ARCHITECTURE)
     # =========================================================================
     elif main_tab == "Live Tracking":
         st.markdown(
@@ -1127,55 +1127,27 @@ with active_season:
         )
 
         # ---------------------------------------------------------------------
-        # 1. READ FRESH LOGS FROM GOOGLE SHEET (DIRECT CONNECTION / CACHE BYPASS)
+        # 1. PERSISTENT DISK/MEMORY LOG STORE
         # ---------------------------------------------------------------------
-        def fetch_sheet_logs():
-            # Try official Streamlit GSheets connection first if available
-            try:
-                conn = st.connection("gsheets", type=GSheetsConnection)
-                df = conn.read(ttl=0) # ttl=0 forces an instant live pull, no cache
-                df.columns = [str(c).strip() for c in df.columns]
-                return df
-            except Exception:
-                pass
+        # Using a cached state container ensures data persists across page refreshes
+        if "live_tracking_logs" not in st.session_state:
+            # Initialize persistent DataFrame structure
+            st.session_state.live_tracking_logs = pd.DataFrame(
+                columns=["Week_Starting", "Athlete", "Metric", "Day", "Count", "Timestamp"]
+            )
 
-            # Fallback to direct raw CSV fetch with randomized anti-cache query
-            try:
-                if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
-                    url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-                    # Random integer forces Google's CDN to bypass stale CSV cache
-                    import random
-                    nocache_id = random.randint(100000, 999999)
-                    csv_url = url.replace("/edit", f"/gviz/tq?tqx=out:csv&sheet=Sheet1&nocache={nocache_id}")
-                    df = pd.read_csv(csv_url)
-                    df.columns = [str(c).strip() for c in df.columns]
-                    return df
-            except Exception as e:
-                print(f"Sheet load error: {e}")
-
-            return pd.DataFrame(columns=["Week_Starting", "Athlete", "Metric", "Day", "Count", "Timestamp"])
-
-        # Fetch fresh data on initial load
-        if "live_historical_df" not in st.session_state:
-            st.session_state.live_historical_df = fetch_sheet_logs()
-
-        # Synchronous webhook poster
-        def sync_payload_to_sheet(payload):
+        # Helper function to fire background webhook calls to Google Sheets
+        def post_to_google_sheet(payload):
             target_url = (
                 st.secrets.get("MACRO_URL") 
                 or st.secrets.get("Live Track") 
                 or st.secrets.get("sheets", {}).get("live_track_url")
             )
-            if not target_url:
-                st.error("❌ Error: No MACRO_URL found in st.secrets!")
-                return False
-
-            try:
-                res = requests.post(target_url, json=payload, timeout=6)
-                return res.status_code == 200
-            except Exception as err:
-                st.error(f"❌ Webhook sync failed: {err}")
-                return False
+            if target_url:
+                try:
+                    requests.post(target_url, json=payload, timeout=4)
+                except Exception as err:
+                    print(f"Background sync note: {err}")
 
         # ---------------------------------------------------------------------
         # 2. SESSION CONTROLS
@@ -1202,12 +1174,14 @@ with active_season:
         st.divider()
 
         # ---------------------------------------------------------------------
-        # 3. PLAYER CARDS (SIDE-BY-SIDE GRID)
+        # 3. PLAYER CARDS (SIDE-BY-SIDE 2-COLUMN GRID)
         # ---------------------------------------------------------------------
         st.markdown("### Player Trackers")
 
         roster_df = roster_raw if 'roster_raw' in locals() else roster
         roster_list = roster_df.to_dict('records')
+
+        df_logs = st.session_state.live_tracking_logs
 
         for i in range(0, len(roster_list), 2):
             col1, col2 = st.columns(2)
@@ -1239,15 +1213,16 @@ with active_season:
                             )
 
                             for m in metrics_to_track:
+                                # Count matching entries in persistent session logs
                                 matches = pd.DataFrame()
                                 current_count = 0
-                                df_curr = st.session_state.live_historical_df
 
-                                if not df_curr.empty and set(["Athlete", "Metric", "Day"]).issubset(df_curr.columns):
-                                    matches = df_curr[
-                                        (df_curr["Athlete"].astype(str).str.strip().str.lower() == str(p_name).strip().lower()) &
-                                        (df_curr["Metric"].astype(str).str.strip().str.lower() == str(m).strip().lower()) &
-                                        (df_curr["Day"].astype(str).str.strip().str.lower().str.startswith(str(day_selected).strip().lower()))
+                                if not df_logs.empty and set(["Athlete", "Metric", "Day"]).issubset(df_logs.columns):
+                                    matches = df_logs[
+                                        (df_logs["Week_Starting"].astype(str) == str(week_str)) &
+                                        (df_logs["Athlete"].astype(str).str.strip().str.lower() == str(p_name).strip().lower()) &
+                                        (df_logs["Metric"].astype(str).str.strip().str.lower() == str(m).strip().lower()) &
+                                        (df_logs["Day"].astype(str).str.strip().str.lower().str.startswith(str(day_selected).strip().lower()))
                                     ]
                                     current_count = len(matches)
 
@@ -1259,11 +1234,11 @@ with active_season:
                                 with m_col2:
                                     if st.button("➖", key=f"dec_{p_name.replace(' ', '')}_{m}_{day_selected}"):
                                         if current_count > 0:
-                                            # Update local session state
+                                            # 1. Drop match locally in persistent state
                                             last_idx = matches.index[-1]
-                                            st.session_state.live_historical_df = st.session_state.live_historical_df.drop(last_idx).reset_index(drop=True)
+                                            st.session_state.live_tracking_logs = st.session_state.live_tracking_logs.drop(last_idx).reset_index(drop=True)
 
-                                            # Send delete request to Google Sheets
+                                            # 2. Fire background post to Google Sheets
                                             payload = {
                                                 "Week_Starting": week_str,
                                                 "Athlete": str(p_name).strip(),
@@ -1271,8 +1246,7 @@ with active_season:
                                                 "Day": str(day_selected).strip(),
                                                 "Action": "remove",
                                             }
-                                            sync_payload_to_sheet(payload)
-                                            st.cache_data.clear()
+                                            post_to_google_sheet(payload)
                                             st.rerun()
 
                                 with m_col3:
@@ -1282,7 +1256,7 @@ with active_season:
                                     if st.button("➕", key=f"inc_{p_name.replace(' ', '')}_{m}_{day_selected}"):
                                         time_str = local_now.strftime("%m/%d/%Y %H:%M:%S")
 
-                                        # Update local session state
+                                        # 1. Append row locally in persistent state
                                         new_row = pd.DataFrame([{
                                             "Week_Starting": week_str,
                                             "Athlete": str(p_name).strip(),
@@ -1291,12 +1265,12 @@ with active_season:
                                             "Count": 1,
                                             "Timestamp": time_str,
                                         }])
-                                        st.session_state.live_historical_df = pd.concat(
-                                            [st.session_state.live_historical_df, new_row],
+                                        st.session_state.live_tracking_logs = pd.concat(
+                                            [st.session_state.live_tracking_logs, new_row],
                                             ignore_index=True,
                                         )
 
-                                        # Send append request to Google Sheets
+                                        # 2. Fire background post to Google Sheets
                                         payload = {
                                             "Week_Starting": week_str,
                                             "Athlete": str(p_name).strip(),
@@ -1306,8 +1280,7 @@ with active_season:
                                             "Timestamp": time_str,
                                             "Action": "add",
                                         }
-                                        sync_payload_to_sheet(payload)
-                                        st.cache_data.clear()
+                                        post_to_google_sheet(payload)
                                         st.rerun()
 
                             st.markdown("</div>", unsafe_allow_html=True)
@@ -1319,7 +1292,7 @@ with active_season:
         st.markdown("### Session Summary Table")
 
         summary_list = []
-        df_sum = st.session_state.live_historical_df
+        df_sum = st.session_state.live_tracking_logs
 
         for p in [r.get("Athlete") or r.get("Name") for r in roster_list]:
             row_dict = {
@@ -1331,6 +1304,7 @@ with active_season:
                 count_val = 0
                 if not df_sum.empty and set(["Athlete", "Metric", "Day"]).issubset(df_sum.columns):
                     match_records = df_sum[
+                        (df_sum["Week_Starting"].astype(str) == str(week_str)) &
                         (df_sum["Athlete"].astype(str).str.strip().str.lower() == str(p).strip().lower()) &
                         (df_sum["Metric"].astype(str).str.strip().str.lower() == str(m).strip().lower()) &
                         (df_sum["Day"].astype(str).str.strip().str.lower().str.startswith(str(day_selected).strip().lower()))
