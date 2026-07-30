@@ -1117,7 +1117,7 @@ with active_season:
             st.plotly_chart(fig_jump_trend, use_container_width=True)
 
    # =========================================================================
-    # TAB 6: LIVE TRACKING (EXACT RECOVERY HUB ARCHITECTURE)
+    # TAB 6: LIVE TRACKING (EXACT RECOVERY HUB ENGINE)
     # =========================================================================
     elif main_tab == "Live Tracking":
         st.markdown(
@@ -1126,7 +1126,7 @@ with active_season:
         )
 
         # ---------------------------------------------------------------------
-        # 1. CONTINUOUS CLOUD READ ENGINE
+        # 1. CLOUD READ ENGINE
         # ---------------------------------------------------------------------
         def load_live_historical_data():
             try:
@@ -1151,7 +1151,7 @@ with active_season:
         if "live_historical_df" not in st.session_state:
             st.session_state.live_historical_df = load_live_historical_data()
 
-        # Sidebar Force Refresh Trigger
+        # Sidebar Refresh Trigger
         if st.sidebar.button("Force Cloud Refresh"):
             st.session_state.live_historical_df = load_live_historical_data()
             st.rerun()
@@ -1211,11 +1211,10 @@ with active_season:
 
             # Metrics Row Controls
             for m in metrics_to_track:
-                # Calculate metric tally directly from live_historical_df
+                # Compute total occurrences directly from in-memory DataFrame
                 current_count = 0
-                if not live_historical_df.empty and set(["Week_Starting", "Athlete", "Metric", "Day"]).issubset(live_historical_df.columns):
+                if not live_historical_df.empty and set(["Athlete", "Metric", "Day"]).issubset(live_historical_df.columns):
                     match_records = live_historical_df[
-                        (live_historical_df["Week_Starting"].astype(str) == week_str) &
                         (live_historical_df["Athlete"] == player_name) &
                         (live_historical_df["Metric"] == m) &
                         (live_historical_df["Day"] == day_selected)
@@ -1230,16 +1229,17 @@ with active_season:
                 with m_col2:
                     if st.button("➖", key=f"dec_{player_name}_{m}"):
                         if current_count > 0:
-                            # 1. Update in-memory DataFrame
-                            st.session_state.live_historical_df = st.session_state.live_historical_df[
-                                ~(
-                                    (st.session_state.live_historical_df["Week_Starting"].astype(str) == week_str) &
-                                    (st.session_state.live_historical_df["Athlete"] == player_name) &
-                                    (st.session_state.live_historical_df["Metric"] == m) &
-                                    (st.session_state.live_historical_df["Day"] == day_selected)
-                                )
+                            # 1. Find and drop 1 matching row from local in-memory DataFrame
+                            matches = st.session_state.live_historical_df[
+                                (st.session_state.live_historical_df["Athlete"] == player_name) &
+                                (st.session_state.live_historical_df["Metric"] == m) &
+                                (st.session_state.live_historical_df["Day"] == day_selected)
                             ]
-                            # 2. Resilient Webhook Sync
+                            if not matches.empty:
+                                last_index = matches.index[-1]
+                                st.session_state.live_historical_df = st.session_state.live_historical_df.drop(last_index)
+
+                            # 2. Send remove command to Google Apps Script
                             target_url = (
                                 st.secrets.get("MACRO_URL") 
                                 or st.secrets.get("Live Track") 
@@ -1257,7 +1257,7 @@ with active_season:
                                 try:
                                     requests.post(target_url, json=payload, timeout=4)
                                 except Exception as err:
-                                    st.error(f"Sync error: {err}")
+                                    print(f"Sync error: {err}")
 
                             st.cache_data.clear()
                             st.rerun()
@@ -1267,9 +1267,9 @@ with active_season:
 
                 with m_col4:
                     if st.button("➕", key=f"inc_{player_name}_{m}"):
-                        time_str = local_now.strftime("%H:%M:%S")
+                        time_str = local_now.strftime("%m/%d/%Y %H:%M:%S")
                         
-                        # 1. Update in-memory DataFrame
+                        # 1. Append 1 row to local in-memory DataFrame
                         new_row = pd.DataFrame([{
                             "Week_Starting": week_str,
                             "Athlete": player_name,
@@ -1283,7 +1283,7 @@ with active_season:
                             ignore_index=True,
                         )
 
-                        # 2. Resilient Webhook Sync
+                        # 2. Send add command to Google Apps Script
                         target_url = (
                             st.secrets.get("MACRO_URL") 
                             or st.secrets.get("Live Track") 
@@ -1301,7 +1301,7 @@ with active_season:
                             try:
                                 requests.post(target_url, json=payload, timeout=4)
                             except Exception as err:
-                                st.error(f"Sync error: {err}")
+                                print(f"Sync error: {err}")
 
                         st.cache_data.clear()
                         st.rerun()
@@ -1323,9 +1323,8 @@ with active_season:
             }
             for m in metrics_to_track:
                 count_val = 0
-                if not live_historical_df.empty and set(["Week_Starting", "Athlete", "Metric", "Day"]).issubset(live_historical_df.columns):
+                if not live_historical_df.empty and set(["Athlete", "Metric", "Day"]).issubset(live_historical_df.columns):
                     match_records = live_historical_df[
-                        (live_historical_df["Week_Starting"].astype(str) == week_str) &
                         (live_historical_df["Athlete"] == p) &
                         (live_historical_df["Metric"] == m) &
                         (live_historical_df["Day"] == day_selected)
