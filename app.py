@@ -1117,7 +1117,7 @@ with active_season:
             st.plotly_chart(fig_jump_trend, use_container_width=True)
 
  # =========================================================================
-    # TAB 6: LIVE TRACKING (PERMANENT DASHBOARD SESSION SAVE)
+    # TAB 6: LIVE TRACKING (CACHE-BYPASS PERSISTENT ENGINE)
     # =========================================================================
     elif main_tab == "Live Tracking":
         st.markdown(
@@ -1126,36 +1126,55 @@ with active_season:
         )
 
         # ---------------------------------------------------------------------
-        # 1. INITIAL LOAD FROM SHEET (RUNS ONLY ONCE WHEN APP STARTS)
+        # 1. READ FRESH LOGS FROM GOOGLE SHEET (DIRECT CONNECTION / CACHE BYPASS)
         # ---------------------------------------------------------------------
-        def fetch_initial_sheet_logs():
+        def fetch_sheet_logs():
+            # Try official Streamlit GSheets connection first if available
+            try:
+                conn = st.connection("gsheets", type=GSheetsConnection)
+                df = conn.read(ttl=0) # ttl=0 forces an instant live pull, no cache
+                df.columns = [str(c).strip() for c in df.columns]
+                return df
+            except Exception:
+                pass
+
+            # Fallback to direct raw CSV fetch with randomized anti-cache query
             try:
                 if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
                     url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-                    csv_url = url.replace("/edit", "/gviz/tq?tqx=out:csv&sheet=Sheet1")
+                    # Random integer forces Google's CDN to bypass stale CSV cache
+                    import random
+                    nocache_id = random.randint(100000, 999999)
+                    csv_url = url.replace("/edit", f"/gviz/tq?tqx=out:csv&sheet=Sheet1&nocache={nocache_id}")
                     df = pd.read_csv(csv_url)
                     df.columns = [str(c).strip() for c in df.columns]
                     return df
             except Exception as e:
                 print(f"Sheet load error: {e}")
+
             return pd.DataFrame(columns=["Week_Starting", "Athlete", "Metric", "Day", "Count", "Timestamp"])
 
-        # Persistent storage: Loads from sheet once on app launch, then stays in memory
+        # Fetch fresh data on initial load
         if "live_historical_df" not in st.session_state:
-            st.session_state.live_historical_df = fetch_initial_sheet_logs()
+            st.session_state.live_historical_df = fetch_sheet_logs()
 
-        # Webhook handler for background Google Sheets persistence
-        def sync_to_google_sheets(payload):
+        # Synchronous webhook poster
+        def sync_payload_to_sheet(payload):
             target_url = (
-                st.secrets.get("live_track_url") 
+                st.secrets.get("MACRO_URL") 
                 or st.secrets.get("Live Track") 
                 or st.secrets.get("sheets", {}).get("live_track_url")
             )
-            if target_url:
-                try:
-                    requests.post(target_url, json=payload, timeout=4)
-                except Exception as err:
-                    print(f"Sync note: {err}")
+            if not target_url:
+                st.error("❌ Error: No MACRO_URL found in st.secrets!")
+                return False
+
+            try:
+                res = requests.post(target_url, json=payload, timeout=6)
+                return res.status_code == 200
+            except Exception as err:
+                st.error(f"❌ Webhook sync failed: {err}")
+                return False
 
         # ---------------------------------------------------------------------
         # 2. SESSION CONTROLS
@@ -1182,7 +1201,7 @@ with active_season:
         st.divider()
 
         # ---------------------------------------------------------------------
-        # 3. PLAYER CARDS (2-COLUMN GRID)
+        # 3. PLAYER CARDS (SIDE-BY-SIDE GRID)
         # ---------------------------------------------------------------------
         st.markdown("### Player Trackers")
 
@@ -1239,11 +1258,11 @@ with active_season:
                                 with m_col2:
                                     if st.button("➖", key=f"dec_{p_name.replace(' ', '')}_{m}_{day_selected}"):
                                         if current_count > 0:
-                                            # Drop row directly in session state
+                                            # Update local session state
                                             last_idx = matches.index[-1]
                                             st.session_state.live_historical_df = st.session_state.live_historical_df.drop(last_idx).reset_index(drop=True)
 
-                                            # Send remove request to Apps Script
+                                            # Send delete request to Google Sheets
                                             payload = {
                                                 "Week_Starting": week_str,
                                                 "Athlete": str(p_name).strip(),
@@ -1251,7 +1270,8 @@ with active_season:
                                                 "Day": str(day_selected).strip(),
                                                 "Action": "remove",
                                             }
-                                            sync_to_google_sheets(payload)
+                                            sync_payload_to_sheet(payload)
+                                            st.cache_data.clear()
                                             st.rerun()
 
                                 with m_col3:
@@ -1261,7 +1281,7 @@ with active_season:
                                     if st.button("➕", key=f"inc_{p_name.replace(' ', '')}_{m}_{day_selected}"):
                                         time_str = local_now.strftime("%m/%d/%Y %H:%M:%S")
 
-                                        # Append row directly in session state
+                                        # Update local session state
                                         new_row = pd.DataFrame([{
                                             "Week_Starting": week_str,
                                             "Athlete": str(p_name).strip(),
@@ -1275,7 +1295,7 @@ with active_season:
                                             ignore_index=True,
                                         )
 
-                                        # Send add request to Apps Script
+                                        # Send append request to Google Sheets
                                         payload = {
                                             "Week_Starting": week_str,
                                             "Athlete": str(p_name).strip(),
@@ -1285,7 +1305,8 @@ with active_season:
                                             "Timestamp": time_str,
                                             "Action": "add",
                                         }
-                                        sync_to_google_sheets(payload)
+                                        sync_payload_to_sheet(payload)
+                                        st.cache_data.clear()
                                         st.rerun()
 
                             st.markdown("</div>", unsafe_allow_html=True)
