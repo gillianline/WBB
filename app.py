@@ -1117,7 +1117,7 @@ with active_season:
             st.plotly_chart(fig_jump_trend, use_container_width=True)
 
  # =========================================================================
-    # TAB 6: LIVE TRACKING
+    # TAB 6: LIVE TRACKING (2-COLUMN GRID & EXPLICIT COUNT COLUMN)
     # =========================================================================
     elif main_tab == "Live Tracking":
         st.markdown(
@@ -1184,127 +1184,130 @@ with active_season:
         st.divider()
 
         # ---------------------------------------------------------------------
-        # 3. PLAYER CARDS (SPACED CONTAINER LAYOUT)
+        # 3. PLAYER CARDS (2-COLUMN SIDE-BY-SIDE GRID)
         # ---------------------------------------------------------------------
         st.markdown("### Player Trackers")
 
         roster_df = roster_raw if 'roster_raw' in locals() else roster
+        roster_list = roster_df.to_dict('records')
 
-        for idx, (_, row) in enumerate(roster_df.iterrows()):
-            p_name = row["Athlete"] if "Athlete" in row else row["Name"]
-            p_pos = row["Position"] if "Position" in row else "Guard / Forward"
-            p_img = str(row["Picture"]) if ("Picture" in row and pd.notna(row["Picture"])) else "https://cdn-icons-png.flaticon.com/512/186/186037.png"
+        for i in range(0, len(roster_list), 2):
+            col1, col2 = st.columns(2)
+            cols = [col1, col2]
 
-            # Distinct container block per player with visual separation
-            with st.container():
-                st.markdown(
-                    f"""
-                    <div style="background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px; padding: 18px; margin-bottom: 25px; box-shadow: 0 2px 6px rgba(0,0,0,0.03);">
-                        <div style="display: flex; align-items: center; justify-content: space-between; padding-bottom: 12px; border-bottom: 1px solid #E2E8F0; margin-bottom: 15px;">
-                            <div style="display: flex; align-items: center; gap: 14px;">
-                                <img src="{p_img}" style="width:55px; height:55px; border-radius:50%; border:2px solid #FF8200; object-fit:cover;">
-                                <div>
-                                    <h3 style="margin:0; font-size:1.2rem; color:#0F172A; font-weight:700;">{p_name}</h3>
-                                    <span style="color:#64748B; font-size:0.85rem;">{p_pos}</span>
-                                </div>
-                            </div>
-                            <div>
-                                <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Week: {week_str}</span>
-                            </div>
-                        </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+            for j in range(2):
+                if i + j < len(roster_list):
+                    player_data = roster_list[i + j]
+                    p_name = player_data.get("Athlete") or player_data.get("Name")
+                    p_pos = player_data.get("Position", "Guard / Forward")
+                    p_img = str(player_data.get("Picture")) if pd.notna(player_data.get("Picture")) else "https://cdn-icons-png.flaticon.com/512/186/186037.png"
 
-                for m in metrics_to_track:
-                    # Calculate metric tally directly from live_historical_df
-                    matches = live_historical_df[
-                        (live_historical_df["Athlete"] == p_name) &
-                        (live_historical_df["Metric"] == m) &
-                        (live_historical_df["Day"] == day_selected)
-                    ]
-                    current_count = len(matches)
-
-                    m_col1, m_col2, m_col3, m_col4 = st.columns([3, 1, 1, 1])
-
-                    with m_col1:
-                        st.markdown(f"<div style='font-size:1rem; font-weight:600; color:#0F172A; padding-top:4px;'>{m}</div>", unsafe_allow_html=True)
-
-                    with m_col2:
-                        if st.button("➖", key=f"dec_{p_name.replace(' ', '')}_{m}_{day_selected}"):
-                            if current_count > 0:
-                                # 1. Drop 1 row locally from in-memory DataFrame
-                                last_match_index = matches.index[-1]
-                                st.session_state.live_historical_df = st.session_state.live_historical_df.drop(last_match_index)
-
-                                # 2. Send remove command to Google Sheet
-                                target_url = (
-                                    st.secrets.get("MACRO_URL") 
-                                    or st.secrets.get("Live Track") 
-                                    or st.secrets.get("sheets", {}).get("live_track_url")
-                                )
-                                payload = {
-                                    "Week_Starting": week_str,
-                                    "Athlete": p_name,
-                                    "Metric": m,
-                                    "Day": day_selected,
-                                    "Timestamp": "",
-                                    "Action": "remove",
-                                }
-                                if target_url:
-                                    try:
-                                        requests.post(target_url, json=payload, timeout=4)
-                                    except Exception as err:
-                                        print(f"Sync note: {err}")
-
-                                st.cache_data.clear()
-                                st.rerun()
-
-                    with m_col3:
-                        st.markdown(f"<div style='text-align:center; font-size:1.2rem; font-weight:800; color:#FF8200; padding-top:2px;'>{current_count}</div>", unsafe_allow_html=True)
-
-                    with m_col4:
-                        if st.button("➕", key=f"inc_{p_name.replace(' ', '')}_{m}_{day_selected}"):
-                            time_str = local_now.strftime("%m/%d/%Y %H:%M:%S")
-
-                            # 1. Append 1 row locally to in-memory DataFrame
-                            new_row = pd.DataFrame([{
-                                "Week_Starting": week_str,
-                                "Athlete": p_name,
-                                "Metric": m,
-                                "Day": day_selected,
-                                "Count": 1,
-                                "Timestamp": time_str,
-                            }])
-                            st.session_state.live_historical_df = pd.concat(
-                                [st.session_state.live_historical_df, new_row],
-                                ignore_index=True,
+                    with cols[j]:
+                        with st.container():
+                            st.markdown(
+                                f"""
+                                <div style="background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px; padding: 16px; margin-bottom: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.03);">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; padding-bottom: 10px; border-bottom: 1px solid #E2E8F0; margin-bottom: 12px;">
+                                        <div style="display: flex; align-items: center; gap: 12px;">
+                                            <img src="{p_img}" style="width:50px; height:50px; border-radius:50%; border:2px solid #FF8200; object-fit:cover;">
+                                            <div>
+                                                <h4 style="margin:0; font-size:1.1rem; color:#0F172A; font-weight:700;">{p_name}</h4>
+                                                <span style="color:#64748B; font-size:0.8rem;">{p_pos}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                """,
+                                unsafe_allow_html=True,
                             )
 
-                            # 2. Send add command to Google Sheet
-                            target_url = (
-                                st.secrets.get("MACRO_URL") 
-                                or st.secrets.get("Live Track") 
-                                or st.secrets.get("sheets", {}).get("live_track_url")
-                            )
-                            payload = {
-                                "Week_Starting": week_str,
-                                "Athlete": p_name,
-                                "Metric": m,
-                                "Day": day_selected,
-                                "Timestamp": time_str,
-                                "Action": "add",
-                            }
-                            if target_url:
-                                try:
-                                    requests.post(target_url, json=payload, timeout=4)
-                                except Exception as err:
-                                    print(f"Sync note: {err}")
+                            for m in metrics_to_track:
+                                matches = live_historical_df[
+                                    (live_historical_df["Athlete"] == p_name) &
+                                    (live_historical_df["Metric"] == m) &
+                                    (live_historical_df["Day"] == day_selected)
+                                ]
+                                current_count = len(matches)
 
-                            st.cache_data.clear()
-                            st.rerun()
+                                m_col1, m_col2, m_col3, m_col4 = st.columns([2.8, 1, 1, 1])
 
-                st.markdown("</div>", unsafe_allow_html=True)
+                                with m_col1:
+                                    st.markdown(f"<div style='font-size:0.9rem; font-weight:600; color:#0F172A; padding-top:4px;'>{m}</div>", unsafe_allow_html=True)
+
+                                with m_col2:
+                                    if st.button("➖", key=f"dec_{p_name.replace(' ', '')}_{m}_{day_selected}"):
+                                        if current_count > 0:
+                                            # Drop 1 row locally
+                                            last_match_index = matches.index[-1]
+                                            st.session_state.live_historical_df = st.session_state.live_historical_df.drop(last_match_index)
+
+                                            # Send remove request to Apps Script
+                                            target_url = (
+                                                st.secrets.get("MACRO_URL") 
+                                                or st.secrets.get("Live Track") 
+                                                or st.secrets.get("sheets", {}).get("live_track_url")
+                                            )
+                                            payload = {
+                                                "Week_Starting": week_str,
+                                                "Athlete": p_name,
+                                                "Metric": m,
+                                                "Day": day_selected,
+                                                "Timestamp": "",
+                                                "Action": "remove",
+                                            }
+                                            if target_url:
+                                                try:
+                                                    requests.post(target_url, json=payload, timeout=4)
+                                                except Exception as err:
+                                                    print(f"Sync note: {err}")
+
+                                            st.cache_data.clear()
+                                            st.rerun()
+
+                                with m_col3:
+                                    st.markdown(f"<div style='text-align:center; font-size:1.1rem; font-weight:800; color:#FF8200; padding-top:2px;'>{current_count}</div>", unsafe_allow_html=True)
+
+                                with m_col4:
+                                    if st.button("➕", key=f"inc_{p_name.replace(' ', '')}_{m}_{day_selected}"):
+                                        time_str = local_now.strftime("%m/%d/%Y %H:%M:%S")
+
+                                        # Append 1 row locally
+                                        new_row = pd.DataFrame([{
+                                            "Week_Starting": week_str,
+                                            "Athlete": p_name,
+                                            "Metric": m,
+                                            "Day": day_selected,
+                                            "Count": 1,
+                                            "Timestamp": time_str,
+                                        }])
+                                        st.session_state.live_historical_df = pd.concat(
+                                            [st.session_state.live_historical_df, new_row],
+                                            ignore_index=True,
+                                        )
+
+                                        # Send add request to Apps Script
+                                        target_url = (
+                                            st.secrets.get("MACRO_URL") 
+                                            or st.secrets.get("Live Track") 
+                                            or st.secrets.get("sheets", {}).get("live_track_url")
+                                        )
+                                        payload = {
+                                            "Week_Starting": week_str,
+                                            "Athlete": p_name,
+                                            "Metric": m,
+                                            "Day": day_selected,
+                                            "Timestamp": time_str,
+                                            "Action": "add",
+                                        }
+                                        if target_url:
+                                            try:
+                                                requests.post(target_url, json=payload, timeout=4)
+                                            except Exception as err:
+                                                print(f"Sync note: {err}")
+
+                                        st.cache_data.clear()
+                                        st.rerun()
+
+                            st.markdown("</div>", unsafe_allow_html=True)
 
         # ---------------------------------------------------------------------
         # 4. TRACKING SUMMARY TABLE
@@ -1313,7 +1316,7 @@ with active_season:
         st.markdown("### Session Summary Table")
 
         summary_list = []
-        for p in roster_df["Athlete" if "Athlete" in roster_df.columns else "Name"]:
+        for p in [r.get("Athlete") or r.get("Name") for r in roster_list]:
             row_dict = {
                 "Week_Starting": week_str,
                 "Athlete": p,
