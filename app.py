@@ -1119,6 +1119,9 @@ with active_season:
   # =========================================================================
     # TAB 6: LIVE TRACKING (EXACT RECOVERY ENGINE PATTERN)
     # =========================================================================
+    # =========================================================================
+    # TAB 6: LIVE TRACKING (EXACT RECOVERY ENGINE PATTERN)
+    # =========================================================================
     elif main_tab == "Live Tracking":
         st.title("Daily Live Metric Entry")
 
@@ -1126,7 +1129,7 @@ with active_season:
         def load_historical_data():
             try:
                 url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-                cache_buster = f"&cache={datetime.datetime.now().timestamp()}"
+                cache_buster = f"&cache={pd.to_datetime('now').timestamp()}"
                 csv_url = url.replace(
                     "/edit", f"/gviz/tq?tqx=out:csv&sheet=Logs{cache_buster}"
                 )
@@ -1154,19 +1157,19 @@ with active_season:
 
         historical_df = st.session_state.historical_df
 
-        # 2. Week & Day Controls (EST Sync)
-        local_now = datetime.datetime.utcnow() - datetime.timedelta(hours=4)
+        # 2. Week & Day Controls (EST Sync using Pandas native time)
+        local_now = pd.to_datetime("now") - pd.Timedelta(hours=4)
         today = local_now.date()
-        current_monday = today - datetime.timedelta(days=today.weekday())
+        current_monday = today - pd.Timedelta(days=today.weekday())
 
         col_s1, col_s2, col_s3 = st.columns([1, 1, 1])
         with col_s1:
             selected_monday = st.date_input("Select Week", value=current_monday, key="live_selected_monday")
             if selected_monday.weekday() != 0:
-                selected_monday = selected_monday - datetime.timedelta(days=selected_monday.weekday())
+                selected_monday = selected_monday - pd.Timedelta(days=selected_monday.weekday())
             week_str = selected_monday.strftime("%Y-%m-%d")
         with col_s2:
-            DAYS = [(selected_monday + datetime.timedelta(days=i)).strftime("%A (%m/%d)") for i in range(7)]
+            DAYS = [(selected_monday + pd.Timedelta(days=i)).strftime("%A (%m/%d)") for i in range(7)]
             day_selected = st.selectbox("Select Day:", DAYS, index=0, key="live_day_selected")
         with col_s3:
             st.caption(f"Logging For: `{day_selected}`")
