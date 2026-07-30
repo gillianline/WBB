@@ -1250,17 +1250,17 @@ with active_season:
                                 with m_col2:
                                     if st.button("➖", key=f"dec_{p_name.replace(' ', '')}_{m}_{day_selected}"):
                                         if current_count > 0:
-                                            # Drop row in local state immediately
+                                            # 1. Update session state locally immediately
                                             last_idx = matches.index[-1]
                                             st.session_state.live_historical_df = st.session_state.live_historical_df.drop(last_idx).reset_index(drop=True)
 
-                                            # Send remove request to Apps Script
+                                            # 2. Synchronous payload to delete row in Google Sheets
                                             payload = {
-                                                "Week_Starting": week_str,
+                                                "Action": "remove",  # Explicit action string
+                                                "Week_Starting": str(week_str),
                                                 "Athlete": str(p_name).strip(),
                                                 "Metric": str(m).strip(),
                                                 "Day": str(day_selected).strip(),
-                                                "Action": "remove",
                                             }
                                             execute_sheet_mutation(payload)
                                             st.cache_data.clear()
