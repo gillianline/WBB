@@ -1147,7 +1147,7 @@ with active_season:
         # Webhook handler for background Google Sheets persistence
         def sync_to_google_sheets(payload):
             target_url = (
-                st.secrets.get("MACRO_URL") 
+                st.secrets.get("live_track_url") 
                 or st.secrets.get("Live Track") 
                 or st.secrets.get("sheets", {}).get("live_track_url")
             )
