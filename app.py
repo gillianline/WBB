@@ -1116,11 +1116,8 @@ with active_season:
 
             st.plotly_chart(fig_jump_trend, use_container_width=True)
 
-  # =========================================================================
-    # TAB 6: LIVE TRACKING (EXACT RECOVERY ENGINE PATTERN)
-    # =========================================================================
-    # =========================================================================
-    # TAB 6: LIVE TRACKING (EXACT RECOVERY ENGINE PATTERN)
+ # =========================================================================
+    # TAB 6: LIVE TRACKING (RECOVERY ENGINE WITH MULTI-COUNTING)
     # =========================================================================
     elif main_tab == "Live Tracking":
         st.title("Daily Live Metric Entry")
@@ -1179,7 +1176,7 @@ with active_season:
         st.write("---")
 
         # ---------------------------------------------------------------------
-        # 3. PLAYER CARDS GRID (EXACT RECOVERY UI & LOGIC)
+        # 3. PLAYER CARDS GRID (WITH TALLY COUNTERS)
         # ---------------------------------------------------------------------
         grid_cols = st.columns(4)
         
@@ -1193,73 +1190,91 @@ with active_season:
 
             with grid_cols[idx % 4]:
                 st.markdown(
-                    f'<img src="{img_url}" class="athlete-card-img">',
+                    f'<img src="{img_url}" class="athlete-card-img" style="width:60px; height:60px; border-radius:50%; object-fit:cover; margin-bottom:10px;">',
                     unsafe_allow_html=True,
                 )
-                st.markdown(f"**{athlete_name}**")
+                st.markdown(f"<div style='font-weight:700; font-size:1.1rem; line-height:1.2;'>{athlete_name}</div>", unsafe_allow_html=True)
                 if lift_group:
                     st.caption(f"Group {lift_group}")
 
+                st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
+
                 for station in STATIONS:
-                    # Check if entry currently exists in historical_df
-                    exists = not historical_df[
+                    # COUNT how many times this combination exists in historical_df
+                    matches = historical_df[
                         (historical_df["Week_Starting"] == week_str) &
                         (historical_df["Athlete"] == athlete_name) &
                         (historical_df["Station"] == station) &
                         (historical_df["Day"] == day_selected)
-                    ].empty
+                    ]
+                    current_count = len(matches)
 
-                    cb_key = f"cb_{athlete_name.replace(' ', '_').replace(',', '')}_{station}_{week_str}_{day_selected.replace(' ', '_')}"
+                    # Layout for the counter row
+                    sc1, sc2, sc3, sc4 = st.columns([2.5, 1, 1, 1])
+                    
+                    with sc1:
+                        st.markdown(f"<div style='font-size:0.9rem; padding-top:6px;'>{station}</div>", unsafe_allow_html=True)
+                        
+                    with sc2:
+                        if st.button("➖", key=f"dec_{athlete_name.replace(' ', '')}_{station}_{week_str}_{day_selected[:3]}"):
+                            if current_count > 0:
+                                # Drop exactly ONE matching row from in-memory DataFrame
+                                last_match_index = matches.index[-1]
+                                st.session_state.historical_df = st.session_state.historical_df.drop(last_match_index)
+                                
+                                # Post remove action to Apps Script
+                                payload = {
+                                    "Week_Starting": week_str,
+                                    "Athlete": athlete_name,
+                                    "Lift_Group": str(lift_group),
+                                    "Station": station,
+                                    "Day": day_selected,
+                                    "Timestamp": "",
+                                    "Action": "remove",
+                                }
+                                try:
+                                    requests.post(st.secrets["MACRO_URL"], json=payload, timeout=4)
+                                except Exception:
+                                    pass
+                                st.cache_data.clear()
+                                st.rerun()
 
-                    if cb_key not in st.session_state:
-                        st.session_state[cb_key] = exists
+                    with sc3:
+                        st.markdown(f"<div style='text-align:center; font-weight:800; color:#FF8200; font-size:1.1rem; padding-top:4px;'>{current_count}</div>", unsafe_allow_html=True)
 
-                    checked = st.checkbox(label=station, key=cb_key)
-
-                    # When checkbox state changes (Add or Remove)
-                    if checked != exists:
-                        action_value = "add" if checked else "remove"
-                        current_time_str = get_eastern_time_str() if action_value == "add" else ""
-
-                        if action_value == "add":
+                    with sc4:
+                        if st.button("➕", key=f"inc_{athlete_name.replace(' ', '')}_{station}_{week_str}_{day_selected[:3]}"):
+                            time_str = local_now.strftime("%H:%M:%S")
+                            
+                            # Append exactly ONE row to in-memory DataFrame
                             new_row = pd.DataFrame([{
                                 "Week_Starting": week_str,
                                 "Athlete": athlete_name,
                                 "Lift_Group": str(lift_group),
                                 "Station": station,
                                 "Day": day_selected,
-                                "Timestamp": current_time_str,
+                                "Timestamp": time_str,
                             }])
                             st.session_state.historical_df = pd.concat(
                                 [st.session_state.historical_df, new_row],
                                 ignore_index=True,
                             )
-                        else:
-                            st.session_state.historical_df = st.session_state.historical_df[
-                                ~(
-                                    (st.session_state.historical_df["Week_Starting"] == week_str) &
-                                    (st.session_state.historical_df["Athlete"] == athlete_name) &
-                                    (st.session_state.historical_df["Station"] == station) &
-                                    (st.session_state.historical_df["Day"] == day_selected)
-                                )
-                            ]
-
-                        payload = {
-                            "Week_Starting": week_str,
-                            "Athlete": athlete_name,
-                            "Lift_Group": str(lift_group),
-                            "Station": station,
-                            "Day": day_selected,
-                            "Timestamp": current_time_str,
-                            "Action": action_value,
-                        }
-
-                        try:
-                            requests.post(st.secrets["MACRO_URL"], json=payload, timeout=4)
-                        except Exception:
-                            pass
-
-                        st.cache_data.clear()
-                        st.rerun()
-
+                            
+                            # Post add action to Apps Script
+                            payload = {
+                                "Week_Starting": week_str,
+                                "Athlete": athlete_name,
+                                "Lift_Group": str(lift_group),
+                                "Station": station,
+                                "Day": day_selected,
+                                "Timestamp": time_str,
+                                "Action": "add",
+                            }
+                            try:
+                                requests.post(st.secrets["MACRO_URL"], json=payload, timeout=4)
+                            except Exception:
+                                pass
+                            st.cache_data.clear()
+                            st.rerun()
+                
                 st.write("---")
