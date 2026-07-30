@@ -1117,7 +1117,7 @@ with active_season:
             st.plotly_chart(fig_jump_trend, use_container_width=True)
 
  # =========================================================================
-    # TAB 6: LIVE TRACKING (DASHBOARD-ONLY MASTER CONTROLLER)
+    # TAB 6: LIVE TRACKING (PERMANENT PERSISTENT RECOVERY ENGINE)
     # =========================================================================
     elif main_tab == "Live Tracking":
         st.markdown(
@@ -1126,22 +1126,25 @@ with active_season:
         )
 
         # ---------------------------------------------------------------------
-        # 1. INITIALIZE LOCAL STORAGE
+        # 1. READ DIRECTLY FROM SHEET ON LOAD (NO STALE CACHING)
         # ---------------------------------------------------------------------
-        def load_initial_logs():
+        def load_persistent_logs():
             try:
                 if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
                     url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-                    csv_url = url.replace("/edit", "/gviz/tq?tqx=out:csv&sheet=Sheet1")
+                    # Add unique cache buster so browser/Streamlit never returns stale data on refresh
+                    cache_buster = f"&t={pd.to_datetime('now').timestamp()}"
+                    csv_url = url.replace("/edit", f"/gviz/tq?tqx=out:csv&sheet=Sheet1{cache_buster}")
                     df = pd.read_csv(csv_url)
                     df.columns = [str(c).strip() for c in df.columns]
                     return df
             except Exception as e:
-                print(f"Initial sheet load error: {e}")
+                print(f"Sheet load error: {e}")
             return pd.DataFrame(columns=["Week_Starting", "Athlete", "Metric", "Day", "Count", "Timestamp"])
 
+        # Load fresh data from Google Sheets when session starts or on explicit refresh
         if "live_historical_df" not in st.session_state:
-            st.session_state.live_historical_df = load_initial_logs()
+            st.session_state.live_historical_df = load_persistent_logs()
 
         # ---------------------------------------------------------------------
         # 2. SESSION CONTROLS
@@ -1163,14 +1166,16 @@ with active_season:
                 key="lt_day_selected"
             )
         with col_s3:
-            st.caption(f"Logging Day: `{day_selected}`")
+            if st.button("🔄 Reload Saved Data", key="force_reload_logs"):
+                st.session_state.live_historical_df = load_persistent_logs()
+                st.rerun()
 
         metrics_to_track = ["Box Out", "Turnovers", "Offensive Rebounds"]
 
         st.divider()
 
         # ---------------------------------------------------------------------
-        # 3. PLAYER CARDS (SIDE-BY-SIDE 2-COLUMN GRID)
+        # 3. PLAYER CARDS (2-COLUMN SIDE-BY-SIDE GRID)
         # ---------------------------------------------------------------------
         st.markdown("### Player Trackers")
 
@@ -1207,7 +1212,7 @@ with active_season:
                             )
 
                             for m in metrics_to_track:
-                                # Count occurrences from session state
+                                # Count occurrences directly from in-memory session state
                                 matches = pd.DataFrame()
                                 current_count = 0
                                 df_curr = st.session_state.live_historical_df
@@ -1228,11 +1233,11 @@ with active_season:
                                 with m_col2:
                                     if st.button("➖", key=f"dec_{p_name.replace(' ', '')}_{m}_{day_selected}"):
                                         if current_count > 0:
-                                            # 1. Update local counter immediately
+                                            # 1. Update local state immediately
                                             last_idx = matches.index[-1]
                                             st.session_state.live_historical_df = st.session_state.live_historical_df.drop(last_idx).reset_index(drop=True)
 
-                                            # 2. Webhook payload to update Google Sheet
+                                            # 2. Webhook payload to delete row permanently in Google Sheets
                                             target_url = (
                                                 st.secrets.get("MACRO_URL") 
                                                 or st.secrets.get("Live Track") 
@@ -1260,7 +1265,7 @@ with active_season:
                                     if st.button("➕", key=f"inc_{p_name.replace(' ', '')}_{m}_{day_selected}"):
                                         time_str = local_now.strftime("%m/%d/%Y %H:%M:%S")
 
-                                        # 1. Update local counter immediately
+                                        # 1. Update local state immediately
                                         new_row = pd.DataFrame([{
                                             "Week_Starting": week_str,
                                             "Athlete": str(p_name).strip(),
@@ -1274,7 +1279,7 @@ with active_season:
                                             ignore_index=True,
                                         )
 
-                                        # 2. Webhook payload to update Google Sheet
+                                        # 2. Webhook payload to write row permanently to Google Sheets
                                         target_url = (
                                             st.secrets.get("MACRO_URL") 
                                             or st.secrets.get("Live Track") 
