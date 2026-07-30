@@ -161,7 +161,30 @@ def load_sheet_data():
 
 vol_raw, int_raw, comp_raw, weekly_raw, cmj_raw, roster_raw = load_sheet_data()
 
-
+def auto_save_live_tally(player_name, metric, new_val, track_date, session_type):
+    """Sends immediate updates to your secret Google Sheet backend."""
+    save_url = st.secrets["sheets"].get("live_tracking_url")
+    if save_url:
+        payload = {
+            "Date": str(track_date),
+            "Session": session_type,
+            "Player": player_name,
+            "Metric": metric,
+            "Value": new_val,
+        }
+        try:
+            req = urllib.request.Request(
+                save_url,
+                data=str(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req) as resp:
+                pass
+        except Exception as e:
+            # Silent fallback / background log so UI stays fast
+            print(f"Auto-save warning: {e}")
+            
 # -----------------------------------------------------------------------------
 # 4. HELPER FUNCTIONS
 # -----------------------------------------------------------------------------
@@ -1082,19 +1105,19 @@ with active_season:
         # ---------------------------------------------------------------------
         # A. TRACKING DATE & SESSION SETUP
         # ---------------------------------------------------------------------
-        col_setup1, col_setup2, col_setup3 = st.columns([1, 1, 2])
+        col_setup1, col_setup2, _ = st.columns([1, 1, 2])
         with col_setup1:
             track_date = st.date_input("Tracking Date:", pd.to_datetime("today"))
         with col_setup2:
             session_type = st.selectbox("Session Type:", ["Practice", "Scrimmage", "Game"])
 
-        # Initialize local counter state for roster players
+        # Initialize session state for tally tracking
         if "live_tally" not in st.session_state:
             st.session_state["live_tally"] = {}
 
         metrics_to_track = ["Box Out", "Turnovers", "Offensive Rebounds"]
 
-        # Ensure every player has a counter initialized
+        # Ensure every player has metrics initialized
         for p in roster_players:
             if p not in st.session_state["live_tally"]:
                 st.session_state["live_tally"][p] = {m: 0 for m in metrics_to_track}
@@ -1102,14 +1125,14 @@ with active_season:
         st.divider()
 
         # ---------------------------------------------------------------------
-        # B. INTERACTIVE PLAYER CARDS WITH COUTNERS (+ / -)
+        # B. FULLY UNIFIED PLAYER CARDS WITH EMBEDDED TRACKERS
         # ---------------------------------------------------------------------
-        st.markdown("### Active Player Input Grid")
+        st.markdown("### Active Player Tracking Grid")
 
-        # Grid: 2 players per row
+        # 2 Players per row layout
         for i in range(0, len(roster_players), 2):
-            c1, c2 = st.columns(2)
-            cols = [c1, c2]
+            col1, col2 = st.columns(2)
+            cols = [col1, col2]
 
             for j in range(2):
                 if i + j < len(roster_players):
@@ -1119,49 +1142,61 @@ with active_season:
                     p_img = p_row["Picture"].values[0] if not p_row.empty else "https://via.placeholder.com/60"
 
                     with cols[j]:
-                        st.markdown(
-                            f"""
-                            <div class="athlete-card" style="margin-bottom: 10px; padding: 12px 16px;">
-                                <img src="{p_img}" class="athlete-avatar" style="width:50px; height:50px;">
-                                <div>
-                                    <h4 style="margin:0; font-size:1.05rem; color:#0F172A;">{p_name}</h4>
-                                    <span style="color:#64748B; font-size:0.78rem;">{p_pos}</span>
-                                </div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
-                        )
+                        # OUTER UNIFIED CARD CONTAINER
+                        with st.container():
+                            st.markdown(
+                                f"""
+                                <div style="background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px; padding: 16px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.03);">
+                                    <div style="display: flex; align-items: center; gap: 14px; padding-bottom: 12px; border-bottom: 1px solid #F1F5F9; margin-bottom: 12px;">
+                                        <img src="{p_img}" class="athlete-avatar" style="width:52px; height:52px;">
+                                        <div>
+                                            <h4 style="margin:0; font-size:1.1rem; color:#0F172A; font-weight:700;">{p_name}</h4>
+                                            <span style="color:#64748B; font-size:0.8rem;">{p_pos}</span>
+                                        </div>
+                                    </div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
 
-                        # Increment / Decrement Row per Metric
-                        for m in metrics_to_track:
-                            m_col1, m_col2, m_col3, m_col4 = st.columns([2, 1, 1, 1])
-                            with m_col1:
-                                st.markdown(f"**{m}**")
-                            with m_col2:
-                                if st.button("➖", key=f"dec_{p_name}_{m}"):
-                                    if st.session_state["live_tally"][p_name][m] > 0:
-                                        st.session_state["live_tally"][p_name][m] -= 1
+                            # EMBEDDED METRIC COUNTERS INSIDE THE CARD
+                            for m in metrics_to_track:
+                                m_col1, m_col2, m_col3, m_col4 = st.columns([2.5, 1, 1, 1])
+                                
+                                with m_col1:
+                                    st.markdown(f"<span style='font-size:0.9rem; font-weight:600; color:#334155;'>{m}</span>", unsafe_allow_html=True)
+                                
+                                with m_col2:
+                                    if st.button("➖", key=f"dec_{p_name}_{m}"):
+                                        if st.session_state["live_tally"][p_name][m] > 0:
+                                            st.session_state["live_tally"][p_name][m] -= 1
+                                            # AUTO-SAVE TO GOOGLE SHEET ON CLICK
+                                            auto_save_live_tally(p_name, m, st.session_state["live_tally"][p_name][m], track_date, session_type)
+                                            st.rerun()
+                                
+                                with m_col3:
+                                    val = st.session_state["live_tally"][p_name][m]
+                                    st.markdown(
+                                        f"<div style='text-align:center; font-size:1.1rem; font-weight:800; color:#FF8200;'>{val}</div>",
+                                        unsafe_allow_html=True,
+                                    )
+                                
+                                with m_col4:
+                                    if st.button("➕", key=f"inc_{p_name}_{m}"):
+                                        st.session_state["live_tally"][p_name][m] += 1
+                                        # AUTO-SAVE TO GOOGLE SHEET ON CLICK
+                                        auto_save_live_tally(p_name, m, st.session_state["live_tally"][p_name][m], track_date, session_type)
                                         st.rerun()
-                            with m_col3:
-                                val = st.session_state["live_tally"][p_name][m]
-                                st.markdown(
-                                    f"<h4 style='text-align:center; margin:0; color:#FF8200;'>{val}</h4>",
-                                    unsafe_allow_html=True,
-                                )
-                            with m_col4:
-                                if st.button("➕", key=f"inc_{p_name}_{m}"):
-                                    st.session_state["live_tally"][p_name][m] += 1
-                                    st.rerun()
 
-                        st.markdown("<hr style='margin: 15px 0;'>", unsafe_allow_html=True)
+                            # CLOSE UNIFIED CARD HTML
+                            st.markdown("</div>", unsafe_allow_html=True)
 
         # ---------------------------------------------------------------------
-        # C. CURRENT SESSION SUMMARY TABLE & SAVE ACTION
+        # C. LIVE AGGREGATED SUMMARY TABLE
         # ---------------------------------------------------------------------
         st.divider()
-        st.markdown("### Current Session Summary")
+        st.markdown("### Daily Session Summary")
 
-        summary_data = []
+        summary_rows = []
         for p_name in roster_players:
             row_dict = {
                 "Date": str(track_date),
@@ -1169,41 +1204,12 @@ with active_season:
                 "Player": p_name,
             }
             row_dict.update(st.session_state["live_tally"][p_name])
-            summary_data.append(row_dict)
+            summary_rows.append(row_dict)
 
-        df_live_summary = pd.DataFrame(summary_data)
+        df_live_summary = pd.DataFrame(summary_rows)
         st.markdown(render_vball_table(df_live_summary), unsafe_allow_html=True)
 
-        col_save1, col_save2 = st.columns([1, 3])
-        with col_save1:
-            if st.button("💾 Save Session Data to Secret Sheet", type="primary"):
-                try:
-                    # Optional: Post data via Webhook / Google Sheet Script endpoint
-                    save_url = st.secrets["sheets"].get("live_tracking_url")
-                    
-                    if save_url:
-                        payload = df_live_summary.to_dict(orient="records")
-                        req = urllib.request.Request(
-                            save_url,
-                            data=str(payload).encode("utf-8"),
-                            headers={"Content-Type": "application/json"},
-                            method="POST",
-                        )
-                        with urllib.request.urlopen(req) as resp:
-                            pass
-                        
-                    st.success("Session data saved successfully!")
-                    
-                    # Reset tallies after successful save
-                    for p in roster_players:
-                        st.session_state["live_tally"][p] = {m: 0 for m in metrics_to_track}
-                    st.rerun()
-                    
-                except Exception as e:
-                    st.error(f"Saved locally, but secret sheet sync failed: {e}")
-
-        with col_save2:
-            if st.button("🔄 Reset Current Counters"):
-                for p in roster_players:
-                    st.session_state["live_tally"][p] = {m: 0 for m in metrics_to_track}
-                st.rerun()
+        if st.button("🔄 Reset Session Counters"):
+            for p in roster_players:
+                st.session_state["live_tally"][p] = {m: 0 for m in metrics_to_track}
+            st.rerun()
