@@ -6,6 +6,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 import requests
+from streamlit_gsheets import GSheetsConnection
 
 def save_to_secret_sheet(athlete, metric, count_val):
     sheet_url = st.secrets.get("Live Track") or st.secrets.get("sheets", {}).get("live_track_url")
