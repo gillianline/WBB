@@ -1126,7 +1126,7 @@ with active_season:
         )
 
         # ---------------------------------------------------------------------
-        # A. SESSION CONTROLS & DATE CALCULATIONS
+        # A. SESSION CONTROLS
         # ---------------------------------------------------------------------
         today_date = pd.to_datetime("today").date()
         current_monday = today_date - pd.Timedelta(days=today_date.weekday())
@@ -1143,38 +1143,60 @@ with active_season:
         with col_s3:
             st.caption("Auto-Sync: Connected to Google Sheet")
 
-        # 1. DEFINE METRICS FIRST
         metrics_to_track = ["Box Out", "Turnovers", "Offensive Rebounds"]
 
         # ---------------------------------------------------------------------
-        # B. INITIALIZE STATE & LOAD FROM HISTORICAL DATA
+        # B. LOAD LIVE DATA FROM GOOGLE SHEETS ON EVERY REFRESH
         # ---------------------------------------------------------------------
-        if "live_tally" not in st.session_state:
-            st.session_state["live_tally"] = {}
+        @st.cache_data(ttl=5)  # Quick 5-second cache to stay synchronized
+        def fetch_live_track_logs():
+            try:
+                sheet_url = (
+                    st.secrets.get("MACRO_URL") 
+                    or st.secrets.get("Live Track") 
+                    or st.secrets.get("sheets", {}).get("live_track_url")
+                )
+                if not sheet_url:
+                    return pd.DataFrame()
+                
+                # Fetch raw CSV/JSON from sheet if standard spreadsheet connection exists
+                if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
+                    url = st.secrets["connections"]["gsheets"]["spreadsheet"]
+                    csv_url = url.replace("/edit", "/gviz/tq?tqx=out:csv&sheet=Sheet1")
+                    return pd.read_csv(csv_url)
+            except Exception as e:
+                print(f"Fetch error: {e}")
+            return pd.DataFrame()
 
-        # 2. INITIALIZE STATE FOR ALL ROSTER PLAYERS
+        # Load historical sheet logs
+        logs_df = fetch_live_track_logs()
+
+        # Compute persistent metric counts from sheet data
+        live_counts = {}
         for p in roster_players:
-            if p not in st.session_state["live_tally"]:
-                st.session_state["live_tally"][p] = {m: 0 for m in metrics_to_track}
-
-        # 3. SYNC EXISTING COUNTS IF HISTORICAL DATA EXISTS
-        if "historical_df" in st.session_state and not st.session_state.historical_df.empty:
-            hdf = st.session_state.historical_df
-            for p in roster_players:
-                for m in metrics_to_track:
-                    match = hdf[
-                        (hdf["Week_Starting"] == week_str) &
-                        (hdf["Athlete"] == p) &
-                        (hdf["Metric"] == m) &
-                        (hdf["Day"] == day_selected)
+            live_counts[p] = {}
+            for m in metrics_to_track:
+                if not logs_df.empty and set(["Week_Starting", "Athlete", "Metric", "Day", "Count"]).issubset(logs_df.columns):
+                    match = logs_df[
+                        (logs_df["Week_Starting"].astype(str) == week_str) &
+                        (logs_df["Athlete"].astype(str) == p) &
+                        (logs_df["Metric"].astype(str) == m) &
+                        (logs_df["Day"].astype(str) == day_selected)
                     ]
-                    if not match.empty and "Count" in match.columns:
-                        st.session_state["live_tally"][p][m] = int(match["Count"].values[0])
+                    if not match.empty:
+                        # Sums all logged entries or takes the most recent tally
+                        live_counts[p][m] = int(pd.to_numeric(match["Count"], errors="coerce").sum())
+                    else:
+                        live_counts[p][m] = 0
+                else:
+                    live_counts[p][m] = 0
+
+        st.divider()
 
         # ---------------------------------------------------------------------
-        # C. AUTO-SAVE HELPER (PANDAS NATIVE TIMESTAMP)
+        # C. AUTO-SAVE HELPER (APPEND ONLY)
         # ---------------------------------------------------------------------
-        def sync_tally_to_sheet(athlete, metric, new_val):
+        def sync_tally_to_sheet(athlete, metric, delta_val):
             macro_url = (
                 st.secrets.get("MACRO_URL") 
                 or st.secrets.get("Live Track") 
@@ -1190,24 +1212,21 @@ with active_season:
                 "Athlete": athlete,
                 "Metric": metric,
                 "Day": day_selected,
-                "Count": int(new_val),
-                # Native Pandas Timestamp formatting (fixes NameError)
-                "Timestamp": pd.to_datetime("now").strftime("%H:%M:%S"),
+                "Count": delta_val,  # Sends the logged event count (+1 or -1)
+                "Timestamp": pd.to_datetime("now").strftime("%Y-%m-%d %H:%M:%S"),
             }
             
             try:
-                res = requests.post(macro_url, json=payload, timeout=4)
-                if res.status_code != 200:
-                    st.warning(f"⚠️ Google Sheets returned HTTP {res.status_code}")
+                requests.post(macro_url, json=payload, timeout=4)
+                st.cache_data.clear()  # Clears cache so next refresh pulls updated total
             except Exception as e:
                 st.error(f"❌ Network/Sync Error: {e}")
 
         # ---------------------------------------------------------------------
-        # D. UNIFIED PLAYER CARDS GRID (RECOVERY DASHBOARD STYLE)
+        # D. UNIFIED PLAYER CARDS GRID
         # ---------------------------------------------------------------------
         st.markdown("### Player Tracker Cards")
 
-        # Display 2 players per row
         for i in range(0, len(roster_players), 2):
             c1, c2 = st.columns(2)
             cols = [c1, c2]
@@ -1221,7 +1240,6 @@ with active_season:
 
                     with cols[j]:
                         with st.container():
-                            # Unified Card Shell
                             st.markdown(
                                 f"""
                                 <div style="background-color: #FFFFFF; border: 2px solid #E2E8F0; border-radius: 12px; padding: 18px; margin-bottom: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.03);">
@@ -1236,7 +1254,6 @@ with active_season:
                                 unsafe_allow_html=True,
                             )
 
-                            # Metrics Increment/Decrement Buttons
                             for m in metrics_to_track:
                                 m_col1, m_col2, m_col3, m_col4 = st.columns([3, 1, 1, 1])
 
@@ -1245,25 +1262,23 @@ with active_season:
 
                                 with m_col2:
                                     if st.button("➖", key=f"dec_{p_name}_{m}"):
-                                        if st.session_state["live_tally"][p_name][m] > 0:
-                                            st.session_state["live_tally"][p_name][m] -= 1
-                                            sync_tally_to_sheet(p_name, m, st.session_state["live_tally"][p_name][m])
+                                        if live_counts[p_name][m] > 0:
+                                            sync_tally_to_sheet(p_name, m, -1)
                                             st.rerun()
 
                                 with m_col3:
-                                    val = st.session_state["live_tally"][p_name][m]
+                                    val = live_counts[p_name][m]
                                     st.markdown(f"<div style='text-align:center; font-size:1.2rem; font-weight:800; color:#FF8200; padding-top:4px;'>{val}</div>", unsafe_allow_html=True)
 
                                 with m_col4:
                                     if st.button("➕", key=f"inc_{p_name}_{m}"):
-                                        st.session_state["live_tally"][p_name][m] += 1
-                                        sync_tally_to_sheet(p_name, m, st.session_state["live_tally"][p_name][m])
+                                        sync_tally_to_sheet(p_name, m, 1)
                                         st.rerun()
 
                             st.markdown("</div>", unsafe_allow_html=True)
 
         # ---------------------------------------------------------------------
-        # E. DAILY & WEEKLY SUMMARY TABLES
+        # E. DAILY & WEEKLY SUMMARY TABLE
         # ---------------------------------------------------------------------
         st.divider()
         st.markdown("### Session Summary Table")
@@ -1275,7 +1290,8 @@ with active_season:
                 "Athlete": p,
                 "Day": day_selected,
             }
-            row_dict.update(st.session_state["live_tally"][p])
+            for m in metrics_to_track:
+                row_dict[m] = live_counts[p][m]
             summary_list.append(row_dict)
 
         df_live_summary = pd.DataFrame(summary_list)
