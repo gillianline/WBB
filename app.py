@@ -1117,7 +1117,7 @@ with active_season:
             st.plotly_chart(fig_jump_trend, use_container_width=True)
 
  # =========================================================================
-    # TAB 6: LIVE TRACKING (SYNCHRONOUS GUARANTEED SAVE)
+    # TAB 6: LIVE TRACKING (AUTOMATIC SYNCHRONOUS PERSISTENT ENGINE)
     # =========================================================================
     elif main_tab == "Live Tracking":
         st.markdown(
@@ -1126,13 +1126,12 @@ with active_season:
         )
 
         # ---------------------------------------------------------------------
-        # 1. READ FRESH LOGS FROM GOOGLE SHEET
+        # 1. READ LOGS FROM GOOGLE SHEET ON LOAD
         # ---------------------------------------------------------------------
-        def load_persistent_logs():
+        def fetch_sheet_logs():
             try:
                 if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
                     url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-                    # Timestamp cache buster ensures fresh sheet data
                     cache_buster = f"&t={pd.to_datetime('now').timestamp()}"
                     csv_url = url.replace("/edit", f"/gviz/tq?tqx=out:csv&sheet=Sheet1{cache_buster}")
                     df = pd.read_csv(csv_url)
@@ -1142,12 +1141,12 @@ with active_season:
                 print(f"Sheet load error: {e}")
             return pd.DataFrame(columns=["Week_Starting", "Athlete", "Metric", "Day", "Count", "Timestamp"])
 
-        # Always pull fresh data if missing from session state
+        # Auto-load fresh logs from Google Sheets if not in session state
         if "live_historical_df" not in st.session_state:
-            st.session_state.live_historical_df = load_persistent_logs()
+            st.session_state.live_historical_df = fetch_sheet_logs()
 
-        # Helper function for sending synchronous webhook calls
-        def send_sync_payload(payload):
+        # Helper function for synchronous POST to Google Sheets
+        def sync_to_google_sheets(payload):
             target_url = (
                 st.secrets.get("MACRO_URL") 
                 or st.secrets.get("Live Track") 
@@ -1155,11 +1154,9 @@ with active_season:
             )
             if target_url:
                 try:
-                    response = requests.post(target_url, json=payload, timeout=8)
-                    return response.status_code == 200
+                    requests.post(target_url, json=payload, timeout=8)
                 except Exception as err:
                     print(f"Sync error: {err}")
-            return False
 
         # ---------------------------------------------------------------------
         # 2. SESSION CONTROLS
@@ -1168,7 +1165,7 @@ with active_season:
         today = local_now.date()
         current_monday = today - pd.Timedelta(days=today.weekday())
 
-        col_s1, col_s2, col_s3 = st.columns([1, 1, 1])
+        col_s1, col_s2 = st.columns([1, 1])
         with col_s1:
             selected_monday = st.date_input("Week Starting:", value=current_monday, key="lt_selected_monday")
             if selected_monday.weekday() != 0:
@@ -1180,10 +1177,6 @@ with active_season:
                 ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
                 key="lt_day_selected"
             )
-        with col_s3:
-            if st.button("🔄 Reload Saved Sheet Data", key="force_reload_logs"):
-                st.session_state.live_historical_df = load_persistent_logs()
-                st.rerun()
 
         metrics_to_track = ["Box Out", "Turnovers", "Offensive Rebounds"]
 
@@ -1227,7 +1220,6 @@ with active_season:
                             )
 
                             for m in metrics_to_track:
-                                # Count occurrences directly from session state
                                 matches = pd.DataFrame()
                                 current_count = 0
                                 df_curr = st.session_state.live_historical_df
@@ -1248,11 +1240,11 @@ with active_season:
                                 with m_col2:
                                     if st.button("➖", key=f"dec_{p_name.replace(' ', '')}_{m}_{day_selected}"):
                                         if current_count > 0:
-                                            # 1. Update local state immediately
+                                            # 1. Update session state locally immediately
                                             last_idx = matches.index[-1]
                                             st.session_state.live_historical_df = st.session_state.live_historical_df.drop(last_idx).reset_index(drop=True)
 
-                                            # 2. Synchronous payload execution
+                                            # 2. Sync removal to Google Sheet permanently
                                             payload = {
                                                 "Week_Starting": week_str,
                                                 "Athlete": str(p_name).strip(),
@@ -1260,7 +1252,7 @@ with active_season:
                                                 "Day": str(day_selected).strip(),
                                                 "Action": "remove",
                                             }
-                                            send_sync_payload(payload)
+                                            sync_to_google_sheets(payload)
                                             st.rerun()
 
                                 with m_col3:
@@ -1270,7 +1262,7 @@ with active_season:
                                     if st.button("➕", key=f"inc_{p_name.replace(' ', '')}_{m}_{day_selected}"):
                                         time_str = local_now.strftime("%m/%d/%Y %H:%M:%S")
 
-                                        # 1. Update local state immediately
+                                        # 1. Update session state locally immediately
                                         new_row = pd.DataFrame([{
                                             "Week_Starting": week_str,
                                             "Athlete": str(p_name).strip(),
@@ -1284,7 +1276,7 @@ with active_season:
                                             ignore_index=True,
                                         )
 
-                                        # 2. Synchronous payload execution
+                                        # 2. Sync addition to Google Sheet permanently
                                         payload = {
                                             "Week_Starting": week_str,
                                             "Athlete": str(p_name).strip(),
@@ -1294,7 +1286,7 @@ with active_season:
                                             "Timestamp": time_str,
                                             "Action": "add",
                                         }
-                                        send_sync_payload(payload)
+                                        sync_to_google_sheets(payload)
                                         st.rerun()
 
                             st.markdown("</div>", unsafe_allow_html=True)
