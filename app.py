@@ -1254,10 +1254,10 @@ with active_season:
                                             last_idx = matches.index[-1]
                                             st.session_state.live_historical_df = st.session_state.live_historical_df.drop(last_idx).reset_index(drop=True)
 
-                                            # 2. Synchronous payload to delete row in Google Sheets
+                                            # 2. Fire clean remove payload
                                             payload = {
-                                                "Action": "remove",  # Explicit action string
-                                                "Week_Starting": str(week_str),
+                                                "Action": "remove",
+                                                "Week_Starting": str(week_str).strip(),
                                                 "Athlete": str(p_name).strip(),
                                                 "Metric": str(m).strip(),
                                                 "Day": str(day_selected).strip(),
