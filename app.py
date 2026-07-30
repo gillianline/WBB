@@ -1172,25 +1172,35 @@ with active_season:
                         st.session_state["live_tally"][p][m] = int(match["Count"].values[0])
 
         # ---------------------------------------------------------------------
-        # C. AUTO-SAVE HELPER (MATCHES RECOVERY WEBHOOK PATTERN)
+        # C. AUTO-SAVE HELPER (PANDAS NATIVE TIMESTAMP)
         # ---------------------------------------------------------------------
         def sync_tally_to_sheet(athlete, metric, new_val):
-            # Tries MACRO_URL or "Live Track" key from secrets
-            macro_url = st.secrets.get("MACRO_URL") or st.secrets.get("Live Track") or st.secrets.get("sheets", {}).get("live_track_url")
+            macro_url = (
+                st.secrets.get("MACRO_URL") 
+                or st.secrets.get("Live Track") 
+                or st.secrets.get("sheets", {}).get("live_track_url")
+            )
             
-            if macro_url:
-                payload = {
-                    "Week_Starting": week_str,
-                    "Athlete": athlete,
-                    "Metric": metric,
-                    "Day": day_selected,
-                    "Count": new_val,
-                    "Timestamp": datetime.datetime.now().strftime("%H:%M:%S"),
-                }
-                try:
-                    requests.post(macro_url, json=payload, timeout=4)
-                except Exception as e:
-                    print(f"Sync warning: {e}")
+            if not macro_url:
+                st.error("❌ Sync Error: No Webhook URL found in st.secrets!")
+                return
+
+            payload = {
+                "Week_Starting": week_str,
+                "Athlete": athlete,
+                "Metric": metric,
+                "Day": day_selected,
+                "Count": int(new_val),
+                # Native Pandas Timestamp formatting (fixes NameError)
+                "Timestamp": pd.to_datetime("now").strftime("%H:%M:%S"),
+            }
+            
+            try:
+                res = requests.post(macro_url, json=payload, timeout=4)
+                if res.status_code != 200:
+                    st.warning(f"⚠️ Google Sheets returned HTTP {res.status_code}")
+            except Exception as e:
+                st.error(f"❌ Network/Sync Error: {e}")
 
         # ---------------------------------------------------------------------
         # D. UNIFIED PLAYER CARDS GRID (RECOVERY DASHBOARD STYLE)
