@@ -1118,7 +1118,7 @@ with active_season:
             st.plotly_chart(fig_jump_trend, use_container_width=True)
 
  # =========================================================================
-    # TAB 6: LIVE TRACKING (PERSISTENT RECOVERY ENGINE ARCHITECTURE)
+    # TAB 6: LIVE TRACKING (HYBRID PERSISTENT DISK + CLOUD LOADER)
     # =========================================================================
     elif main_tab == "Live Tracking":
         st.markdown(
@@ -1127,14 +1127,36 @@ with active_season:
         )
 
         # ---------------------------------------------------------------------
-        # 1. PERSISTENT DISK/MEMORY LOG STORE
+        # 1. READ SAVED HISTORY FROM GOOGLE SHEET ON PAGE REFRESH
         # ---------------------------------------------------------------------
-        # Using a cached state container ensures data persists across page refreshes
+        @st.cache_data(ttl=5) # 5-second cache prevents stale hits while fetching saved data
+        def load_saved_google_sheet_logs():
+            try:
+                # 1. Try native Streamlit GSheets connection
+                if hasattr(st, "connection"):
+                    conn = st.connection("gsheets", type=GSheetsConnection)
+                    df = conn.read(ttl=5)
+                    df.columns = [str(c).strip() for c in df.columns]
+                    return df
+            except Exception:
+                pass
+
+            try:
+                # 2. Fallback to direct raw CSV read
+                if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
+                    url = st.secrets["connections"]["gsheets"]["spreadsheet"]
+                    csv_url = url.replace("/edit", "/gviz/tq?tqx=out:csv&sheet=Sheet1")
+                    df = pd.read_csv(csv_url)
+                    df.columns = [str(c).strip() for c in df.columns]
+                    return df
+            except Exception as e:
+                print(f"Sheet load error: {e}")
+
+            return pd.DataFrame(columns=["Week_Starting", "Athlete", "Metric", "Day", "Count", "Timestamp"])
+
+        # POPULATE SESSION STATE FROM GOOGLE SHEET ONLY IF SESSION IS BRAND NEW / REFRESHED
         if "live_tracking_logs" not in st.session_state:
-            # Initialize persistent DataFrame structure
-            st.session_state.live_tracking_logs = pd.DataFrame(
-                columns=["Week_Starting", "Athlete", "Metric", "Day", "Count", "Timestamp"]
-            )
+            st.session_state.live_tracking_logs = load_saved_google_sheet_logs()
 
         # Helper function to fire background webhook calls to Google Sheets
         def post_to_google_sheet(payload):
@@ -1213,13 +1235,11 @@ with active_season:
                             )
 
                             for m in metrics_to_track:
-                                # Count matching entries in persistent session logs
                                 matches = pd.DataFrame()
                                 current_count = 0
 
                                 if not df_logs.empty and set(["Athlete", "Metric", "Day"]).issubset(df_logs.columns):
                                     matches = df_logs[
-                                        (df_logs["Week_Starting"].astype(str) == str(week_str)) &
                                         (df_logs["Athlete"].astype(str).str.strip().str.lower() == str(p_name).strip().lower()) &
                                         (df_logs["Metric"].astype(str).str.strip().str.lower() == str(m).strip().lower()) &
                                         (df_logs["Day"].astype(str).str.strip().str.lower().str.startswith(str(day_selected).strip().lower()))
@@ -1234,11 +1254,11 @@ with active_season:
                                 with m_col2:
                                     if st.button("➖", key=f"dec_{p_name.replace(' ', '')}_{m}_{day_selected}"):
                                         if current_count > 0:
-                                            # 1. Drop match locally in persistent state
+                                            # 1. Update local state immediately
                                             last_idx = matches.index[-1]
                                             st.session_state.live_tracking_logs = st.session_state.live_tracking_logs.drop(last_idx).reset_index(drop=True)
 
-                                            # 2. Fire background post to Google Sheets
+                                            # 2. Sync deletion to Google Sheet
                                             payload = {
                                                 "Week_Starting": week_str,
                                                 "Athlete": str(p_name).strip(),
@@ -1247,6 +1267,7 @@ with active_season:
                                                 "Action": "remove",
                                             }
                                             post_to_google_sheet(payload)
+                                            st.cache_data.clear() # Clear cache so next refresh gets updated sheet
                                             st.rerun()
 
                                 with m_col3:
@@ -1256,7 +1277,7 @@ with active_season:
                                     if st.button("➕", key=f"inc_{p_name.replace(' ', '')}_{m}_{day_selected}"):
                                         time_str = local_now.strftime("%m/%d/%Y %H:%M:%S")
 
-                                        # 1. Append row locally in persistent state
+                                        # 1. Update local state immediately
                                         new_row = pd.DataFrame([{
                                             "Week_Starting": week_str,
                                             "Athlete": str(p_name).strip(),
@@ -1270,7 +1291,7 @@ with active_season:
                                             ignore_index=True,
                                         )
 
-                                        # 2. Fire background post to Google Sheets
+                                        # 2. Sync addition to Google Sheet
                                         payload = {
                                             "Week_Starting": week_str,
                                             "Athlete": str(p_name).strip(),
@@ -1281,6 +1302,7 @@ with active_season:
                                             "Action": "add",
                                         }
                                         post_to_google_sheet(payload)
+                                        st.cache_data.clear() # Clear cache so next refresh gets updated sheet
                                         st.rerun()
 
                             st.markdown("</div>", unsafe_allow_html=True)
@@ -1304,7 +1326,6 @@ with active_season:
                 count_val = 0
                 if not df_sum.empty and set(["Athlete", "Metric", "Day"]).issubset(df_sum.columns):
                     match_records = df_sum[
-                        (df_sum["Week_Starting"].astype(str) == str(week_str)) &
                         (df_sum["Athlete"].astype(str).str.strip().str.lower() == str(p).strip().lower()) &
                         (df_sum["Metric"].astype(str).str.strip().str.lower() == str(m).strip().lower()) &
                         (df_sum["Day"].astype(str).str.strip().str.lower().str.startswith(str(day_selected).strip().lower()))
