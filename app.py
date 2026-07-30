@@ -1117,7 +1117,7 @@ with active_season:
             st.plotly_chart(fig_jump_trend, use_container_width=True)
 
  # =========================================================================
-    # TAB 6: LIVE TRACKING (AUTOMATIC SYNCHRONOUS PERSISTENT ENGINE)
+    # TAB 6: LIVE TRACKING (PERMANENT DASHBOARD SESSION SAVE)
     # =========================================================================
     elif main_tab == "Live Tracking":
         st.markdown(
@@ -1126,14 +1126,13 @@ with active_season:
         )
 
         # ---------------------------------------------------------------------
-        # 1. READ LOGS FROM GOOGLE SHEET ON LOAD
+        # 1. INITIAL LOAD FROM SHEET (RUNS ONLY ONCE WHEN APP STARTS)
         # ---------------------------------------------------------------------
-        def fetch_sheet_logs():
+        def fetch_initial_sheet_logs():
             try:
                 if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
                     url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-                    cache_buster = f"&t={pd.to_datetime('now').timestamp()}"
-                    csv_url = url.replace("/edit", f"/gviz/tq?tqx=out:csv&sheet=Sheet1{cache_buster}")
+                    csv_url = url.replace("/edit", "/gviz/tq?tqx=out:csv&sheet=Sheet1")
                     df = pd.read_csv(csv_url)
                     df.columns = [str(c).strip() for c in df.columns]
                     return df
@@ -1141,11 +1140,11 @@ with active_season:
                 print(f"Sheet load error: {e}")
             return pd.DataFrame(columns=["Week_Starting", "Athlete", "Metric", "Day", "Count", "Timestamp"])
 
-        # Auto-load fresh logs from Google Sheets if not in session state
+        # Persistent storage: Loads from sheet once on app launch, then stays in memory
         if "live_historical_df" not in st.session_state:
-            st.session_state.live_historical_df = fetch_sheet_logs()
+            st.session_state.live_historical_df = fetch_initial_sheet_logs()
 
-        # Helper function for synchronous POST to Google Sheets
+        # Webhook handler for background Google Sheets persistence
         def sync_to_google_sheets(payload):
             target_url = (
                 st.secrets.get("MACRO_URL") 
@@ -1154,9 +1153,9 @@ with active_season:
             )
             if target_url:
                 try:
-                    requests.post(target_url, json=payload, timeout=8)
+                    requests.post(target_url, json=payload, timeout=4)
                 except Exception as err:
-                    print(f"Sync error: {err}")
+                    print(f"Sync note: {err}")
 
         # ---------------------------------------------------------------------
         # 2. SESSION CONTROLS
@@ -1240,11 +1239,11 @@ with active_season:
                                 with m_col2:
                                     if st.button("➖", key=f"dec_{p_name.replace(' ', '')}_{m}_{day_selected}"):
                                         if current_count > 0:
-                                            # 1. Update session state locally immediately
+                                            # Drop row directly in session state
                                             last_idx = matches.index[-1]
                                             st.session_state.live_historical_df = st.session_state.live_historical_df.drop(last_idx).reset_index(drop=True)
 
-                                            # 2. Sync removal to Google Sheet permanently
+                                            # Send remove request to Apps Script
                                             payload = {
                                                 "Week_Starting": week_str,
                                                 "Athlete": str(p_name).strip(),
@@ -1262,7 +1261,7 @@ with active_season:
                                     if st.button("➕", key=f"inc_{p_name.replace(' ', '')}_{m}_{day_selected}"):
                                         time_str = local_now.strftime("%m/%d/%Y %H:%M:%S")
 
-                                        # 1. Update session state locally immediately
+                                        # Append row directly in session state
                                         new_row = pd.DataFrame([{
                                             "Week_Starting": week_str,
                                             "Athlete": str(p_name).strip(),
@@ -1276,7 +1275,7 @@ with active_season:
                                             ignore_index=True,
                                         )
 
-                                        # 2. Sync addition to Google Sheet permanently
+                                        # Send add request to Apps Script
                                         payload = {
                                             "Week_Starting": week_str,
                                             "Athlete": str(p_name).strip(),
