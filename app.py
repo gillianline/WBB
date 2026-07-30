@@ -1118,7 +1118,7 @@ with active_season:
             st.plotly_chart(fig_jump_trend, use_container_width=True)
 
  # =========================================================================
-    # TAB 6: LIVE TRACKING (CACHE-INVALIDATED LIVE GSHEETS ENGINE)
+    # TAB 6: LIVE TRACKING (FIXED DECREMENT & DIRECT STATE MUTATION)
     # =========================================================================
     elif main_tab == "Live Tracking":
         st.markdown(
@@ -1126,17 +1126,11 @@ with active_season:
             unsafe_allow_html=True,
         )
 
-        # Track mutation version to force cache invalidation across reruns/refreshes
-        if "sync_version" not in st.session_state:
-            st.session_state.sync_version = 0
-
         # ---------------------------------------------------------------------
-        # 1. READ LOGS DIRECTLY FROM GOOGLE SHEETS API
+        # 1. READ SAVED HISTORY FROM GOOGLE SHEET ON LOAD
         # ---------------------------------------------------------------------
-        @st.cache_data(ttl=0, show_spinner=False)
-        def fetch_live_gsheet(version_key):
+        def fetch_live_gsheet():
             try:
-                # 1. Official GSheetsConnection (Zero-delay read)
                 if hasattr(st, "connection"):
                     conn = st.connection("gsheets", type=GSheetsConnection)
                     df = conn.read(ttl=0)
@@ -1146,7 +1140,6 @@ with active_season:
                 pass
 
             try:
-                # 2. Direct Raw CSV Query with forced unique timestamp
                 if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
                     url = st.secrets["connections"]["gsheets"]["spreadsheet"]
                     import time
@@ -1159,10 +1152,13 @@ with active_season:
 
             return pd.DataFrame(columns=["Week_Starting", "Athlete", "Metric", "Day", "Count", "Timestamp"])
 
-        # Pull fresh dataframe tied to current sync_version
-        live_historical_df = fetch_live_gsheet(st.session_state.sync_version)
+        # Load into session state once per session
+        if "live_historical_df" not in st.session_state:
+            st.session_state.live_historical_df = fetch_live_gsheet()
 
-        # Helper function for synchronous Apps Script post
+        live_historical_df = st.session_state.live_historical_df
+
+        # Helper function for sending POST requests to Google Sheets
         def execute_sheet_mutation(payload):
             target_url = (
                 st.secrets.get("MACRO_URL") 
@@ -1171,11 +1167,9 @@ with active_season:
             )
             if target_url:
                 try:
-                    res = requests.post(target_url, json=payload, timeout=6)
-                    return res.status_code == 200
+                    requests.post(target_url, json=payload, timeout=4)
                 except Exception as err:
                     print(f"Mutation sync note: {err}")
-            return False
 
         # ---------------------------------------------------------------------
         # 2. SESSION CONTROLS
@@ -1202,7 +1196,7 @@ with active_season:
         st.divider()
 
         # ---------------------------------------------------------------------
-        # 3. PLAYER CARDS (2-COLUMN SIDE-BY-SIDE GRID)
+        # 3. PLAYER CARDS (2-COLUMN GRID SIDE-BY-SIDE)
         # ---------------------------------------------------------------------
         st.markdown("### Player Trackers")
 
@@ -1239,14 +1233,15 @@ with active_season:
                             )
 
                             for m in metrics_to_track:
+                                # Find matches in current session_state dataframe
                                 matches = pd.DataFrame()
                                 current_count = 0
 
-                                if not live_historical_df.empty and set(["Athlete", "Metric", "Day"]).issubset(live_historical_df.columns):
-                                    matches = live_historical_df[
-                                        (live_historical_df["Athlete"].astype(str).str.strip().str.lower() == str(p_name).strip().lower()) &
-                                        (live_historical_df["Metric"].astype(str).str.strip().str.lower() == str(m).strip().lower()) &
-                                        (live_historical_df["Day"].astype(str).str.strip().str.lower().str.startswith(str(day_selected).strip().lower()))
+                                if not st.session_state.live_historical_df.empty and set(["Athlete", "Metric", "Day"]).issubset(st.session_state.live_historical_df.columns):
+                                    matches = st.session_state.live_historical_df[
+                                        (st.session_state.live_historical_df["Athlete"].astype(str).str.strip().str.lower() == str(p_name).strip().lower()) &
+                                        (st.session_state.live_historical_df["Metric"].astype(str).str.strip().str.lower() == str(m).strip().lower()) &
+                                        (st.session_state.live_historical_df["Day"].astype(str).str.strip().str.lower().str.startswith(str(day_selected).strip().lower()))
                                     ]
                                     current_count = len(matches)
 
@@ -1258,6 +1253,11 @@ with active_season:
                                 with m_col2:
                                     if st.button("➖", key=f"dec_{p_name.replace(' ', '')}_{m}_{day_selected}"):
                                         if current_count > 0:
+                                            # 1. DROP ROW LOCALLY IMMEDIATELY (DECREMENT COUNT ON DASHBOARD)
+                                            last_idx = matches.index[-1]
+                                            st.session_state.live_historical_df = st.session_state.live_historical_df.drop(last_idx).reset_index(drop=True)
+
+                                            # 2. FIRE REMOVE ACTION TO GOOGLE SHEETS IN BACKGROUND
                                             payload = {
                                                 "Week_Starting": week_str,
                                                 "Athlete": str(p_name).strip(),
@@ -1266,9 +1266,6 @@ with active_season:
                                                 "Action": "remove",
                                             }
                                             execute_sheet_mutation(payload)
-                                            # Mutate version key to force cache invalidation
-                                            st.session_state.sync_version += 1
-                                            st.cache_data.clear()
                                             st.rerun()
 
                                 with m_col3:
@@ -1278,6 +1275,21 @@ with active_season:
                                     if st.button("➕", key=f"inc_{p_name.replace(' ', '')}_{m}_{day_selected}"):
                                         time_str = local_now.strftime("%m/%d/%Y %H:%M:%S")
 
+                                        # 1. ADD ROW LOCALLY IMMEDIATELY (INCREMENT COUNT ON DASHBOARD)
+                                        new_row = pd.DataFrame([{
+                                            "Week_Starting": week_str,
+                                            "Athlete": str(p_name).strip(),
+                                            "Metric": str(m).strip(),
+                                            "Day": str(day_selected).strip(),
+                                            "Count": 1,
+                                            "Timestamp": time_str,
+                                        }])
+                                        st.session_state.live_historical_df = pd.concat(
+                                            [st.session_state.live_historical_df, new_row],
+                                            ignore_index=True,
+                                        )
+
+                                        # 2. FIRE ADD ACTION TO GOOGLE SHEETS IN BACKGROUND
                                         payload = {
                                             "Week_Starting": week_str,
                                             "Athlete": str(p_name).strip(),
@@ -1288,9 +1300,6 @@ with active_season:
                                             "Action": "add",
                                         }
                                         execute_sheet_mutation(payload)
-                                        # Mutate version key to force cache invalidation
-                                        st.session_state.sync_version += 1
-                                        st.cache_data.clear()
                                         st.rerun()
 
                             st.markdown("</div>", unsafe_allow_html=True)
@@ -1302,6 +1311,8 @@ with active_season:
         st.markdown("### Session Summary Table")
 
         summary_list = []
+        df_sum = st.session_state.live_historical_df
+
         for p in [r.get("Athlete") or r.get("Name") for r in roster_list]:
             row_dict = {
                 "Week_Starting": week_str,
@@ -1310,11 +1321,11 @@ with active_season:
             }
             for m in metrics_to_track:
                 count_val = 0
-                if not live_historical_df.empty and set(["Athlete", "Metric", "Day"]).issubset(live_historical_df.columns):
-                    match_records = live_historical_df[
-                        (live_historical_df["Athlete"].astype(str).str.strip().str.lower() == str(p).strip().lower()) &
-                        (live_historical_df["Metric"].astype(str).str.strip().str.lower() == str(m).strip().lower()) &
-                        (live_historical_df["Day"].astype(str).str.strip().str.lower().str.startswith(str(day_selected).strip().lower()))
+                if not df_sum.empty and set(["Athlete", "Metric", "Day"]).issubset(df_sum.columns):
+                    match_records = df_sum[
+                        (df_sum["Athlete"].astype(str).str.strip().str.lower() == str(p).strip().lower()) &
+                        (df_sum["Metric"].astype(str).str.strip().str.lower() == str(m).strip().lower()) &
+                        (df_sum["Day"].astype(str).str.strip().str.lower().str.startswith(str(day_selected).strip().lower()))
                     ]
                     count_val = len(match_records)
                 row_dict[m] = count_val
