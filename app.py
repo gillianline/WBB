@@ -1117,7 +1117,7 @@ with active_season:
             st.plotly_chart(fig_jump_trend, use_container_width=True)
 
  # =========================================================================
-    # TAB 6: LIVE TRACKING (PERMANENT PERSISTENT RECOVERY ENGINE)
+    # TAB 6: LIVE TRACKING (SYNCHRONOUS GUARANTEED SAVE)
     # =========================================================================
     elif main_tab == "Live Tracking":
         st.markdown(
@@ -1126,13 +1126,13 @@ with active_season:
         )
 
         # ---------------------------------------------------------------------
-        # 1. READ DIRECTLY FROM SHEET ON LOAD (NO STALE CACHING)
+        # 1. READ FRESH LOGS FROM GOOGLE SHEET
         # ---------------------------------------------------------------------
         def load_persistent_logs():
             try:
                 if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
                     url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-                    # Add unique cache buster so browser/Streamlit never returns stale data on refresh
+                    # Timestamp cache buster ensures fresh sheet data
                     cache_buster = f"&t={pd.to_datetime('now').timestamp()}"
                     csv_url = url.replace("/edit", f"/gviz/tq?tqx=out:csv&sheet=Sheet1{cache_buster}")
                     df = pd.read_csv(csv_url)
@@ -1142,9 +1142,24 @@ with active_season:
                 print(f"Sheet load error: {e}")
             return pd.DataFrame(columns=["Week_Starting", "Athlete", "Metric", "Day", "Count", "Timestamp"])
 
-        # Load fresh data from Google Sheets when session starts or on explicit refresh
+        # Always pull fresh data if missing from session state
         if "live_historical_df" not in st.session_state:
             st.session_state.live_historical_df = load_persistent_logs()
+
+        # Helper function for sending synchronous webhook calls
+        def send_sync_payload(payload):
+            target_url = (
+                st.secrets.get("MACRO_URL") 
+                or st.secrets.get("Live Track") 
+                or st.secrets.get("sheets", {}).get("live_track_url")
+            )
+            if target_url:
+                try:
+                    response = requests.post(target_url, json=payload, timeout=8)
+                    return response.status_code == 200
+                except Exception as err:
+                    print(f"Sync error: {err}")
+            return False
 
         # ---------------------------------------------------------------------
         # 2. SESSION CONTROLS
@@ -1166,7 +1181,7 @@ with active_season:
                 key="lt_day_selected"
             )
         with col_s3:
-            if st.button("🔄 Reload Saved Data", key="force_reload_logs"):
+            if st.button("🔄 Reload Saved Sheet Data", key="force_reload_logs"):
                 st.session_state.live_historical_df = load_persistent_logs()
                 st.rerun()
 
@@ -1175,7 +1190,7 @@ with active_season:
         st.divider()
 
         # ---------------------------------------------------------------------
-        # 3. PLAYER CARDS (2-COLUMN SIDE-BY-SIDE GRID)
+        # 3. PLAYER CARDS (2-COLUMN GRID)
         # ---------------------------------------------------------------------
         st.markdown("### Player Trackers")
 
@@ -1212,7 +1227,7 @@ with active_season:
                             )
 
                             for m in metrics_to_track:
-                                # Count occurrences directly from in-memory session state
+                                # Count occurrences directly from session state
                                 matches = pd.DataFrame()
                                 current_count = 0
                                 df_curr = st.session_state.live_historical_df
@@ -1237,12 +1252,7 @@ with active_season:
                                             last_idx = matches.index[-1]
                                             st.session_state.live_historical_df = st.session_state.live_historical_df.drop(last_idx).reset_index(drop=True)
 
-                                            # 2. Webhook payload to delete row permanently in Google Sheets
-                                            target_url = (
-                                                st.secrets.get("MACRO_URL") 
-                                                or st.secrets.get("Live Track") 
-                                                or st.secrets.get("sheets", {}).get("live_track_url")
-                                            )
+                                            # 2. Synchronous payload execution
                                             payload = {
                                                 "Week_Starting": week_str,
                                                 "Athlete": str(p_name).strip(),
@@ -1250,12 +1260,7 @@ with active_season:
                                                 "Day": str(day_selected).strip(),
                                                 "Action": "remove",
                                             }
-                                            if target_url:
-                                                try:
-                                                    requests.post(target_url, json=payload, timeout=4)
-                                                except Exception as err:
-                                                    print(f"Sync error: {err}")
-
+                                            send_sync_payload(payload)
                                             st.rerun()
 
                                 with m_col3:
@@ -1279,12 +1284,7 @@ with active_season:
                                             ignore_index=True,
                                         )
 
-                                        # 2. Webhook payload to write row permanently to Google Sheets
-                                        target_url = (
-                                            st.secrets.get("MACRO_URL") 
-                                            or st.secrets.get("Live Track") 
-                                            or st.secrets.get("sheets", {}).get("live_track_url")
-                                        )
+                                        # 2. Synchronous payload execution
                                         payload = {
                                             "Week_Starting": week_str,
                                             "Athlete": str(p_name).strip(),
@@ -1294,12 +1294,7 @@ with active_season:
                                             "Timestamp": time_str,
                                             "Action": "add",
                                         }
-                                        if target_url:
-                                            try:
-                                                requests.post(target_url, json=payload, timeout=4)
-                                            except Exception as err:
-                                                print(f"Sync error: {err}")
-
+                                        send_sync_payload(payload)
                                         st.rerun()
 
                             st.markdown("</div>", unsafe_allow_html=True)
