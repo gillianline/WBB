@@ -1117,7 +1117,7 @@ with active_season:
             st.plotly_chart(fig_jump_trend, use_container_width=True)
 
  # =========================================================================
-    # TAB 6: LIVE TRACKING (2-COLUMN GRID & EXPLICIT COUNT COLUMN)
+    # TAB 6: LIVE TRACKING (SIDE-BY-SIDE CARDS + EXPLICIT COUNT COLUMN)
     # =========================================================================
     elif main_tab == "Live Tracking":
         st.markdown(
@@ -1251,6 +1251,7 @@ with active_season:
                                                 "Athlete": p_name,
                                                 "Metric": m,
                                                 "Day": day_selected,
+                                                "Count": 1,
                                                 "Timestamp": "",
                                                 "Action": "remove",
                                             }
@@ -1295,6 +1296,7 @@ with active_season:
                                             "Athlete": p_name,
                                             "Metric": m,
                                             "Day": day_selected,
+                                            "Count": 1,
                                             "Timestamp": time_str,
                                             "Action": "add",
                                         }
