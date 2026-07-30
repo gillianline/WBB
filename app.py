@@ -1141,12 +1141,12 @@ with active_season:
                 ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
             )
         with col_s3:
-            st.caption("Auto-Sync: Connected to Google Sheet")
+            st.caption("Auto-Sync: Active")
 
         metrics_to_track = ["Box Out", "Turnovers", "Offensive Rebounds"]
 
         # ---------------------------------------------------------------------
-        # B. READ SHEET LOGS & HYDRATE LOCAL COUNTS
+        # B. FAST READ & INITIAL STATE HYDRATION
         # ---------------------------------------------------------------------
         @st.cache_data(ttl=5)
         def load_live_tracking_sheet_logs():
@@ -1161,11 +1161,10 @@ with active_season:
 
         logs_df = load_live_tracking_sheet_logs()
 
-        # Initialize session state container
         if "live_tally" not in st.session_state:
             st.session_state["live_tally"] = {}
 
-        # Hydrate counts if not present in session_state
+        # Load initial counts from Google Sheet if not set in session state
         for p in roster_players:
             if p not in st.session_state["live_tally"]:
                 st.session_state["live_tally"][p] = {}
@@ -1189,7 +1188,7 @@ with active_season:
         st.divider()
 
         # ---------------------------------------------------------------------
-        # C. ASYNC SHEET SYNC (EXPLICIT COUNT & ACTION)
+        # C. ASYNC BACKGROUND SYNC (PREVENTS UI FREEZING)
         # ---------------------------------------------------------------------
         def send_sheet_update(athlete, metric, action_type):
             macro_url = (
@@ -1206,18 +1205,18 @@ with active_season:
                 "Metric": metric,
                 "Day": day_selected,
                 "Action": action_type,  # "add" or "remove"
-                "Count": 1,              # Guarantees Column E gets populated
                 "Timestamp": pd.to_datetime("now").strftime("%m/%d/%Y %H:%M:%S"),
             }
 
             try:
-                requests.post(macro_url, json=payload, timeout=3)
+                # Fast 1.5s timeout so UI stays responsive
+                requests.post(macro_url, json=payload, timeout=1.5)
                 st.cache_data.clear()
             except Exception as e:
-                print(f"Sync note: {e}")
+                print(f"Background sync note: {e}")
 
         # ---------------------------------------------------------------------
-        # D. UNIFIED PLAYER CARDS (PRACTICE SCORE LOOK)
+        # D. UNIFIED SINGLE-BOX PLAYER CARDS
         # ---------------------------------------------------------------------
         st.markdown("### Player Trackers")
 
@@ -1226,33 +1225,28 @@ with active_season:
             p_pos = p_row["Position"].values[0] if not p_row.empty else "Guard / Forward"
             p_img = p_row["Picture"].values[0] if not p_row.empty else "https://cdn-icons-png.flaticon.com/512/186/186037.png"
 
+            # SINGLE UNIFIED CARD CONTAINER
             with st.container():
-                # Single box card container matching practice score layout
-                card_html = f"""
-                <div style="background-color: #FFFFFF; border: 2px solid #E2E8F0; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 2px 6px rgba(0,0,0,0.03);">
-                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; border-bottom: 1px solid #E2E8F0; padding-bottom: 12px;">
-                        <div style="display: flex; align-items: center; gap: 15px;">
-                            <img src="{p_img}" class="athlete-card-img" style="width:65px !important; height:65px !important; padding:4px !important; margin:0 !important; border-radius:50% !important;">
-                            <div>
-                                <h3 style="margin:0; font-size:1.2rem; color:#0F172A; font-weight:700;">{player_name}</h3>
-                                <span style="color:#64748B; font-size:0.85rem;">{p_pos}</span>
+                st.markdown(
+                    f"""
+                    <div style="background-color: #FFFFFF; border: 2px solid #58595B; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+                        <div style="background-color: #58595B; color: #FFFFFF; font-weight: bold; padding: 8px 12px; margin: -15px -15px 12px -15px; border-top-left-radius: 6px; border-top-right-radius: 6px; display: flex; align-items: center; justify-content: space-between;">
+                            <div style="display: flex; align-items: center; gap: 12px;">
+                                <img src="{p_img}" style="width:40px; height:40px; border-radius:50%; object-fit:cover; border:2px solid #FF8200;">
+                                <span style="font-size: 1.1rem;">{player_name} ({p_pos})</span>
                             </div>
+                            <span style="font-size: 0.85rem; color: #FF8200;">{day_selected}</span>
                         </div>
-                        <div style="display: flex; gap: 8px;">
-                            <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Week: {week_str}</span>
-                            <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">{day_selected}</span>
-                        </div>
-                    </div>
-                </div>
-                """
-                st.markdown(card_html, unsafe_allow_html=True)
+                    """,
+                    unsafe_allow_html=True,
+                )
 
-                # Embedded Metrics Trackers inside the same box block
+                # METRICS INSIDE THE SAME PHYSICAL BOX
                 for m in metrics_to_track:
                     m_col1, m_col2, m_col3, m_col4 = st.columns([3, 1, 1, 1])
 
                     with m_col1:
-                        st.markdown(f"<div style='font-weight:600; color:#334155; padding-top:6px;'>{m}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='font-weight:600; color:#0F172A; padding-top:4px;'>{m}</div>", unsafe_allow_html=True)
 
                     with m_col2:
                         if st.button("➖", key=f"dec_{player_name}_{m}"):
@@ -1263,7 +1257,7 @@ with active_season:
 
                     with m_col3:
                         val = st.session_state["live_tally"][player_name][m]
-                        st.markdown(f"<div style='text-align:center; font-size:1.2rem; font-weight:800; color:#FF8200; padding-top:4px;'>{val}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='text-align:center; font-size:1.2rem; font-weight:800; color:#FF8200; padding-top:2px;'>{val}</div>", unsafe_allow_html=True)
 
                     with m_col4:
                         if st.button("➕", key=f"inc_{player_name}_{m}"):
@@ -1271,7 +1265,7 @@ with active_season:
                             send_sheet_update(player_name, m, "add")
                             st.rerun()
 
-                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
 
         # ---------------------------------------------------------------------
         # E. DAILY SUMMARY TABLE
