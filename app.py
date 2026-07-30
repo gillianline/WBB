@@ -1121,7 +1121,7 @@ with active_season:
     # =========================================================================
     elif main_tab == "Live Tracking":
         st.markdown(
-            '<div class="vball-section-title">Live Practice & Game Tracking</div>',
+            '<div class="vball-section-title">Live Tracking</div>',
             unsafe_allow_html=True,
         )
 
@@ -1130,127 +1130,138 @@ with active_season:
         # ---------------------------------------------------------------------
         col_s1, col_s2, col_s3 = st.columns([1, 1, 1])
         with col_s1:
-            week_starting = st.date_input("Week Starting:", pd.to_datetime("today"))
+            week_starting = st.date_input("Week Starting:", value=current_monday)
+            week_str = week_starting.strftime("%Y-%m-%d")
         with col_s2:
-            day_selected = st.selectbox("Day:", ["Day 1", "Day 2", "Day 3", "Day 4", "Day 5"])
+            day_selected = st.selectbox("Day:", DAYS if 'DAYS' in locals() else ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"])
         with col_s3:
-            st.caption("Auto-Sync: Enabled")
+            st.caption("Auto-Sync: Connected to Google Sheet")
 
         metrics_to_track = ["Box Out", "Turnovers", "Offensive Rebounds"]
 
-        # Initialize session tallies
+        # ---------------------------------------------------------------------
+        # B. INITIALIZE STATE & LOAD FROM HISTORICAL DATA
+        # ---------------------------------------------------------------------
         if "live_tally" not in st.session_state:
             st.session_state["live_tally"] = {}
 
+        # Hydrate state for all roster players
         for p in roster_players:
             if p not in st.session_state["live_tally"]:
                 st.session_state["live_tally"][p] = {m: 0 for m in metrics_to_track}
 
+        # Sync existing counts if historical DataFrame exists
+        if "historical_df" in st.session_state and not st.session_state.historical_df.empty:
+            hdf = st.session_state.historical_df
+            for p in roster_players:
+                for m in metrics_to_track:
+                    match = hdf[
+                        (hdf["Week_Starting"] == week_str) &
+                        (hdf["Athlete"] == p) &
+                        (hdf["Metric"] == m) &
+                        (hdf["Day"] == day_selected)
+                    ]
+                    if not match.empty and "Count" in match.columns:
+                        st.session_state["live_tally"][p][m] = int(match["Count"].values[0])
+
         st.divider()
 
         # ---------------------------------------------------------------------
-        # B. AUTO-SAVE HELPER TO SECRET GOOGLE SHEET (JSON WEBHOOK)
+        # C. AUTO-SAVE HELPER (MATCHES RECOVERY WEBHOOK PATTERN)
         # ---------------------------------------------------------------------
-        def save_to_secret_sheet(athlete, metric, count_val):
-            sheet_url = st.secrets.get("Live Track") or st.secrets.get("sheets", {}).get("live_track_url")
+        def sync_tally_to_sheet(athlete, metric, new_val):
+            # Tries MACRO_URL or "Live Track" key from secrets
+            macro_url = st.secrets.get("MACRO_URL") or st.secrets.get("Live Track") or st.secrets.get("sheets", {}).get("live_track_url")
             
-            if sheet_url:
+            if macro_url:
                 payload = {
-                    "Week_Starting": str(week_starting),
+                    "Week_Starting": week_str,
                     "Athlete": athlete,
                     "Metric": metric,
                     "Day": day_selected,
-                    "Count": int(count_val),
+                    "Count": new_val,
+                    "Timestamp": datetime.datetime.now().strftime("%H:%M:%S"),
                 }
                 try:
-                    import json
-                    json_bytes = json.dumps(payload).encode("utf-8")
-                    req = urllib.request.Request(
-                        sheet_url,
-                        data=json_bytes,
-                        headers={"Content-Type": "application/json"},
-                    )
-                    with urllib.request.urlopen(req) as response:
-                        pass
+                    requests.post(macro_url, json=payload, timeout=4)
                 except Exception as e:
-                    print(f"Sync error: {e}")
+                    print(f"Sync warning: {e}")
 
         # ---------------------------------------------------------------------
-        # C. UNIFIED PRACTICE SCORE CARD LAYOUT
+        # D. UNIFIED PLAYER CARDS GRID (RECOVERY DASHBOARD STYLE)
         # ---------------------------------------------------------------------
-        st.markdown("### Player Trackers")
+        st.markdown("### Player Tracker Cards")
 
-        for player_name in roster_players:
-            p_row = roster_raw[roster_raw["Name"] == player_name]
-            p_pos = p_row["Position"].values[0] if not p_row.empty else "Guard / Forward"
-            p_img = p_row["Picture"].values[0] if not p_row.empty else "https://via.placeholder.com/70"
+        # Display 2 players per row
+        for i in range(0, len(roster_players), 2):
+            c1, c2 = st.columns(2)
+            cols = [c1, c2]
 
-            # Outer container wrapper for one solid unified card
-            with st.container():
-                # Card Header
-                st.markdown(
-                    f"""
-                    <div style="background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px; padding: 20px 20px 10px 20px; margin-bottom: 25px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
-                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; border-bottom: 1px solid #E2E8F0; padding-bottom: 12px;">
-                            <div style="display: flex; align-items: center; gap: 15px;">
-                                <img src="{p_img}" style="width:60px; height:60px; border-radius:50%; border:3px solid #FF8200; object-fit:cover;">
-                                <div>
-                                    <h3 style="margin:0; font-size:1.3rem; color:#0F172A; font-weight:700;">{player_name}</h3>
-                                    <span style="color:#64748B; font-size:0.85rem;">{p_pos}</span>
-                                </div>
-                            </div>
-                            <div style="display: flex; gap: 8px;">
-                                <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Week Starting: {week_starting}</span>
-                                <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">{day_selected}</span>
-                            </div>
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+            for j in range(2):
+                if i + j < len(roster_players):
+                    p_name = roster_players[i + j]
+                    p_row = roster_raw[roster_raw["Name"] == p_name]
+                    p_pos = p_row["Position"].values[0] if not p_row.empty else "Guard / Forward"
+                    p_img = p_row["Picture"].values[0] if not p_row.empty else "https://cdn-icons-png.flaticon.com/512/186/186037.png"
 
-                # Metrics Trackers (+ / -) embedded directly below the header
-                for m in metrics_to_track:
-                    m_col1, m_col2, m_col3, m_col4 = st.columns([3, 1, 1, 1])
-                    
-                    with m_col1:
-                        st.markdown(f"<div style='font-size:1rem; font-weight:600; color:#0F172A; padding-top:4px;'>{m}</div>", unsafe_allow_html=True)
-                    
-                    with m_col2:
-                        if st.button("➖", key=f"dec_{player_name}_{m}"):
-                            if st.session_state["live_tally"][player_name][m] > 0:
-                                st.session_state["live_tally"][player_name][m] -= 1
-                                save_to_secret_sheet(player_name, m, st.session_state["live_tally"][player_name][m])
-                                st.rerun()
-                    
-                    with m_col3:
-                        val = st.session_state["live_tally"][player_name][m]
-                        st.markdown(f"<div style='text-align:center; font-size:1.3rem; font-weight:800; color:#FF8200;'>{val}</div>", unsafe_allow_html=True)
-                    
-                    with m_col4:
-                        if st.button("➕", key=f"inc_{player_name}_{m}"):
-                            st.session_state["live_tally"][player_name][m] += 1
-                            save_to_secret_sheet(player_name, m, st.session_state["live_tally"][player_name][m])
-                            st.rerun()
+                    with cols[j]:
+                        with st.container():
+                            # Unified Card Shell
+                            st.markdown(
+                                f"""
+                                <div style="background-color: #FFFFFF; border: 2px solid #E2E8F0; border-radius: 12px; padding: 18px; margin-bottom: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.03);">
+                                    <div style="display: flex; align-items: center; gap: 15px; padding-bottom: 12px; border-bottom: 1px solid #F1F5F9; margin-bottom: 15px;">
+                                        <img src="{p_img}" class="athlete-card-img" style="width:70px !important; height:70px !important; padding:4px !important; margin:0 !important;">
+                                        <div>
+                                            <h3 style="margin:0; font-size:1.2rem; color:#0F172A; font-weight:700;">{p_name}</h3>
+                                            <span style="color:#64748B; font-size:0.85rem;">{p_pos}</span>
+                                        </div>
+                                    </div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
 
-                st.markdown("<br>", unsafe_allow_html=True)
+                            # Metrics Increment/Decrement Buttons
+                            for m in metrics_to_track:
+                                m_col1, m_col2, m_col3, m_col4 = st.columns([3, 1, 1, 1])
+
+                                with m_col1:
+                                    st.markdown(f"<div style='font-weight:600; color:#334155; padding-top:6px;'>{m}</div>", unsafe_allow_html=True)
+
+                                with m_col2:
+                                    if st.button("➖", key=f"dec_{p_name}_{m}"):
+                                        if st.session_state["live_tally"][p_name][m] > 0:
+                                            st.session_state["live_tally"][p_name][m] -= 1
+                                            sync_tally_to_sheet(p_name, m, st.session_state["live_tally"][p_name][m])
+                                            st.rerun()
+
+                                with m_col3:
+                                    val = st.session_state["live_tally"][p_name][m]
+                                    st.markdown(f"<div style='text-align:center; font-size:1.2rem; font-weight:800; color:#FF8200; padding-top:4px;'>{val}</div>", unsafe_allow_html=True)
+
+                                with m_col4:
+                                    if st.button("➕", key=f"inc_{p_name}_{m}"):
+                                        st.session_state["live_tally"][p_name][m] += 1
+                                        sync_tally_to_sheet(p_name, m, st.session_state["live_tally"][p_name][m])
+                                        st.rerun()
+
+                            st.markdown("</div>", unsafe_allow_html=True)
 
         # ---------------------------------------------------------------------
-        # D. SUMMARY TABLE
+        # E. DAILY & WEEKLY SUMMARY TABLES
         # ---------------------------------------------------------------------
         st.divider()
-        st.markdown("### Tracking Summary")
+        st.markdown("### Session Summary Table")
 
-        summary_data = []
+        summary_list = []
         for p in roster_players:
-            for m in metrics_to_track:
-                summary_data.append({
-                    "Week_Starting": str(week_starting),
-                    "Athlete": p,
-                    "Metric": m,
-                    "Day": day_selected,
-                    "Count": st.session_state["live_tally"][p][m],
-                })
+            row_dict = {
+                "Week_Starting": week_str,
+                "Athlete": p,
+                "Day": day_selected,
+            }
+            row_dict.update(st.session_state["live_tally"][p])
+            summary_list.append(row_dict)
 
-        df_summary = pd.DataFrame(summary_data)
-        st.markdown(render_vball_table(df_summary), unsafe_allow_html=True)
+        df_live_summary = pd.DataFrame(summary_list)
+        st.markdown(render_vball_table(df_live_summary), unsafe_allow_html=True)
