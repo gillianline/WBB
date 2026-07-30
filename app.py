@@ -1117,221 +1117,118 @@ with active_season:
             st.plotly_chart(fig_jump_trend, use_container_width=True)
 
    # =========================================================================
-    # TAB 6: LIVE TRACKING (EXACT RECOVERY HUB ENGINE)
+    # TAB 6: LIVE TRACKING (EXACT RECOVERY ENGINE PATTERN)
     # =========================================================================
     elif main_tab == "Live Tracking":
-        st.markdown(
-            '<div class="vball-section-title">Live Practice & Game Tracking</div>',
-            unsafe_allow_html=True,
-        )
+        st.title("Daily Live Metric Entry")
 
-        # ---------------------------------------------------------------------
-        # 1. CLOUD READ ENGINE
-        # ---------------------------------------------------------------------
-        def load_live_historical_data():
-            try:
-                if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
-                    url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-                    cache_buster = f"&cache={pd.to_datetime('now').timestamp()}"
-                    csv_url = url.replace("/edit", f"/gviz/tq?tqx=out:csv&sheet=Sheet1{cache_buster}")
-                    return pd.read_csv(csv_url)
-            except Exception as e:
-                print(f"Read error: {e}")
-            return pd.DataFrame(
-                columns=[
-                    "Week_Starting",
-                    "Athlete",
-                    "Metric",
-                    "Day",
-                    "Count",
-                    "Timestamp",
-                ]
-            )
+        # 1. Ensure persistent historical_df exists in session state
+        if "historical_df" not in st.session_state:
+            st.session_state.historical_df = load_historical_data()
 
-        if "live_historical_df" not in st.session_state:
-            st.session_state.live_historical_df = load_live_historical_data()
+        historical_df = st.session_state.historical_df
 
-        # Sidebar Refresh Trigger
-        if st.sidebar.button("Force Cloud Refresh"):
-            st.session_state.live_historical_df = load_live_historical_data()
-            st.rerun()
-
-        live_historical_df = st.session_state.live_historical_df
-
-        # ---------------------------------------------------------------------
-        # 2. SESSION & DATE CONTROLS
-        # ---------------------------------------------------------------------
-        local_now = pd.to_datetime("now") - pd.Timedelta(hours=4)
+        # 2. Week & Day Controls (EST Time Sync)
+        local_now = datetime.datetime.utcnow() - datetime.timedelta(hours=4)
         today = local_now.date()
-        current_monday = today - pd.Timedelta(days=today.weekday())
+        current_monday = today - datetime.timedelta(days=today.weekday())
 
         col_s1, col_s2, col_s3 = st.columns([1, 1, 1])
         with col_s1:
-            selected_monday = st.date_input("Week Starting:", value=current_monday)
+            selected_monday = st.date_input("Select Week", value=current_monday)
+            if selected_monday.weekday() != 0:
+                selected_monday = selected_monday - datetime.timedelta(days=selected_monday.weekday())
             week_str = selected_monday.strftime("%Y-%m-%d")
         with col_s2:
-            day_selected = st.selectbox(
-                "Day:", 
-                ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-            )
+            DAYS = [(selected_monday + datetime.timedelta(days=i)).strftime("%A (%m/%d)") for i in range(7)]
+            current_day_str = local_now.strftime("%A (%m/%d)")
+            day_selected = st.selectbox("Select Day:", DAYS, index=0)
         with col_s3:
-            st.caption("Auto-Sync: Connected to Google Sheet")
+            st.caption(f"Logging For: `{day_selected}`")
 
-        metrics_to_track = ["Box Out", "Turnovers", "Offensive Rebounds"]
+        STATIONS = ["Box Out", "Turnovers", "Offensive Rebounds"]
 
-        st.divider()
+        st.write("---")
 
         # ---------------------------------------------------------------------
-        # 3. PLAYER CARDS & METRIC COUNTERS
+        # 3. PLAYER CARDS GRID (EXACT RECOVERY UI & LOGIC)
         # ---------------------------------------------------------------------
-        st.markdown("### Player Trackers")
+        grid_cols = st.columns(4)
+        
+        for idx, row in roster.iterrows():
+            athlete_name = row["Athlete"]
+            lift_group = row["Lift Group"] if "Lift Group" in row else ""
+            img_url = str(row["Picture"]) if pd.notna(row["Picture"]) else "https://cdn-icons-png.flaticon.com/512/186/186037.png"
 
-        for player_name in roster_players:
-            p_row = roster_raw[roster_raw["Name"] == player_name]
-            p_pos = p_row["Position"].values[0] if not p_row.empty else "Guard / Forward"
-            p_img = p_row["Picture"].values[0] if not p_row.empty else "https://via.placeholder.com/70"
+            with grid_cols[idx % 4]:
+                st.markdown(
+                    f'<img src="{img_url}" class="athlete-card-img">',
+                    unsafe_allow_html=True,
+                )
+                st.markdown(f"**{athlete_name}**")
+                if lift_group:
+                    st.caption(f"Group {lift_group}")
 
-            card_header_html = f"""
-            <div style="background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px; padding: 20px 20px 5px 20px; margin-bottom: 25px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; border-bottom: 1px solid #E2E8F0; padding-bottom: 12px;">
-                    <div style="display: flex; align-items: center; gap: 15px;">
-                        <img src="{p_img}" style="width:60px; height:60px; border-radius:50%; border:3px solid #FF8200; object-fit:cover;">
-                        <div>
-                            <h3 style="margin:0; font-size:1.3rem; color:#0F172A; font-weight:700;">{player_name}</h3>
-                            <span style="color:#64748B; font-size:0.85rem;">{p_pos}</span>
-                        </div>
-                    </div>
-                    <div style="display: flex; gap: 8px;">
-                        <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Week: {week_str}</span>
-                        <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">{day_selected}</span>
-                    </div>
-                </div>
-            """
-            st.markdown(card_header_html, unsafe_allow_html=True)
+                for station in STATIONS:
+                    # Check if entry currently exists in historical_df
+                    exists = not historical_df[
+                        (historical_df["Week_Starting"] == week_str) &
+                        (historical_df["Athlete"] == athlete_name) &
+                        (historical_df["Station"] == station) &
+                        (historical_df["Day"] == day_selected)
+                    ].empty
 
-            # Metrics Row Controls
-            for m in metrics_to_track:
-                # Compute total occurrences directly from in-memory DataFrame
-                current_count = 0
-                if not live_historical_df.empty and set(["Athlete", "Metric", "Day"]).issubset(live_historical_df.columns):
-                    match_records = live_historical_df[
-                        (live_historical_df["Athlete"] == player_name) &
-                        (live_historical_df["Metric"] == m) &
-                        (live_historical_df["Day"] == day_selected)
-                    ]
-                    current_count = len(match_records)
+                    cb_key = f"cb_{athlete_name.replace(' ', '_').replace(',', '')}_{station}_{week_str}_{day_selected.replace(' ', '_')}"
 
-                m_col1, m_col2, m_col3, m_col4 = st.columns([3, 1, 1, 1])
+                    if cb_key not in st.session_state:
+                        st.session_state[cb_key] = exists
 
-                with m_col1:
-                    st.markdown(f"<div style='font-size:1rem; font-weight:600; color:#0F172A; padding-top:4px;'>{m}</div>", unsafe_allow_html=True)
+                    checked = st.checkbox(label=station, key=cb_key)
 
-                with m_col2:
-                    if st.button("➖", key=f"dec_{player_name}_{m}"):
-                        if current_count > 0:
-                            # 1. Find and drop 1 matching row from local in-memory DataFrame
-                            matches = st.session_state.live_historical_df[
-                                (st.session_state.live_historical_df["Athlete"] == player_name) &
-                                (st.session_state.live_historical_df["Metric"] == m) &
-                                (st.session_state.live_historical_df["Day"] == day_selected)
-                            ]
-                            if not matches.empty:
-                                last_index = matches.index[-1]
-                                st.session_state.live_historical_df = st.session_state.live_historical_df.drop(last_index)
+                    # When checkbox state changes (Add or Remove)
+                    if checked != exists:
+                        action_value = "add" if checked else "remove"
+                        current_time_str = get_eastern_time_str() if action_value == "add" else ""
 
-                            # 2. Send remove command to Google Apps Script
-                            target_url = (
-                                st.secrets.get("MACRO_URL") 
-                                or st.secrets.get("Live Track") 
-                                or st.secrets.get("sheets", {}).get("live_track_url")
-                            )
-                            payload = {
+                        if action_value == "add":
+                            new_row = pd.DataFrame([{
                                 "Week_Starting": week_str,
-                                "Athlete": player_name,
-                                "Metric": m,
+                                "Athlete": athlete_name,
+                                "Lift_Group": str(lift_group),
+                                "Station": station,
                                 "Day": day_selected,
-                                "Timestamp": "",
-                                "Action": "remove",
-                            }
-                            if target_url:
-                                try:
-                                    requests.post(target_url, json=payload, timeout=4)
-                                except Exception as err:
-                                    print(f"Sync error: {err}")
+                                "Timestamp": current_time_str,
+                            }])
+                            st.session_state.historical_df = pd.concat(
+                                [st.session_state.historical_df, new_row],
+                                ignore_index=True,
+                            )
+                        else:
+                            st.session_state.historical_df = st.session_state.historical_df[
+                                ~(
+                                    (st.session_state.historical_df["Week_Starting"] == week_str) &
+                                    (st.session_state.historical_df["Athlete"] == athlete_name) &
+                                    (st.session_state.historical_df["Station"] == station) &
+                                    (st.session_state.historical_df["Day"] == day_selected)
+                                )
+                            ]
 
-                            st.cache_data.clear()
-                            st.rerun()
-
-                with m_col3:
-                    st.markdown(f"<div style='text-align:center; font-size:1.3rem; font-weight:800; color:#FF8200;'>{current_count}</div>", unsafe_allow_html=True)
-
-                with m_col4:
-                    if st.button("➕", key=f"inc_{player_name}_{m}"):
-                        time_str = local_now.strftime("%m/%d/%Y %H:%M:%S")
-                        
-                        # 1. Append 1 row to local in-memory DataFrame
-                        new_row = pd.DataFrame([{
-                            "Week_Starting": week_str,
-                            "Athlete": player_name,
-                            "Metric": m,
-                            "Day": day_selected,
-                            "Count": 1,
-                            "Timestamp": time_str,
-                        }])
-                        st.session_state.live_historical_df = pd.concat(
-                            [st.session_state.live_historical_df, new_row],
-                            ignore_index=True,
-                        )
-
-                        # 2. Send add command to Google Apps Script
-                        target_url = (
-                            st.secrets.get("MACRO_URL") 
-                            or st.secrets.get("Live Track") 
-                            or st.secrets.get("sheets", {}).get("live_track_url")
-                        )
                         payload = {
                             "Week_Starting": week_str,
-                            "Athlete": player_name,
-                            "Metric": m,
+                            "Athlete": athlete_name,
+                            "Lift_Group": str(lift_group),
+                            "Station": station,
                             "Day": day_selected,
-                            "Timestamp": time_str,
-                            "Action": "add",
+                            "Timestamp": current_time_str,
+                            "Action": action_value,
                         }
-                        if target_url:
-                            try:
-                                requests.post(target_url, json=payload, timeout=4)
-                            except Exception as err:
-                                print(f"Sync error: {err}")
+
+                        try:
+                            requests.post(st.secrets["MACRO_URL"], json=payload, timeout=4)
+                        except Exception:
+                            pass
 
                         st.cache_data.clear()
                         st.rerun()
 
-            st.markdown("</div>", unsafe_allow_html=True)
-
-        # ---------------------------------------------------------------------
-        # 4. SUMMARY TABLE
-        # ---------------------------------------------------------------------
-        st.divider()
-        st.markdown("### Tracking Summary")
-
-        summary_list = []
-        for p in roster_players:
-            row_dict = {
-                "Week_Starting": week_str,
-                "Athlete": p,
-                "Day": day_selected,
-            }
-            for m in metrics_to_track:
-                count_val = 0
-                if not live_historical_df.empty and set(["Athlete", "Metric", "Day"]).issubset(live_historical_df.columns):
-                    match_records = live_historical_df[
-                        (live_historical_df["Athlete"] == p) &
-                        (live_historical_df["Metric"] == m) &
-                        (live_historical_df["Day"] == day_selected)
-                    ]
-                    count_val = len(match_records)
-                row_dict[m] = count_val
-            summary_list.append(row_dict)
-
-        df_live_summary = pd.DataFrame(summary_list)
-        st.markdown(render_vball_table(df_live_summary), unsafe_allow_html=True)
+                st.write("---")
