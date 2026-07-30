@@ -1126,25 +1126,27 @@ with active_season:
         )
 
         # ---------------------------------------------------------------------
-        # 1. CONTINUOUS CLOUD READ ENGINE (DIRECT FROM RECOVERY CODE)
+        # 1. CONTINUOUS CLOUD READ ENGINE
         # ---------------------------------------------------------------------
         def load_live_historical_data():
             try:
-                url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-                cache_buster = f"&cache={pd.to_datetime('now').timestamp()}"
-                csv_url = url.replace("/edit", f"/gviz/tq?tqx=out:csv&sheet=Sheet1{cache_buster}")
-                return pd.read_csv(csv_url)
-            except Exception:
-                return pd.DataFrame(
-                    columns=[
-                        "Week_Starting",
-                        "Athlete",
-                        "Metric",
-                        "Day",
-                        "Count",
-                        "Timestamp",
-                    ]
-                )
+                if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
+                    url = st.secrets["connections"]["gsheets"]["spreadsheet"]
+                    cache_buster = f"&cache={pd.to_datetime('now').timestamp()}"
+                    csv_url = url.replace("/edit", f"/gviz/tq?tqx=out:csv&sheet=Sheet1{cache_buster}")
+                    return pd.read_csv(csv_url)
+            except Exception as e:
+                print(f"Read error: {e}")
+            return pd.DataFrame(
+                columns=[
+                    "Week_Starting",
+                    "Athlete",
+                    "Metric",
+                    "Day",
+                    "Count",
+                    "Timestamp",
+                ]
+            )
 
         if "live_historical_df" not in st.session_state:
             st.session_state.live_historical_df = load_live_historical_data()
@@ -1189,7 +1191,6 @@ with active_season:
             p_pos = p_row["Position"].values[0] if not p_row.empty else "Guard / Forward"
             p_img = p_row["Picture"].values[0] if not p_row.empty else "https://via.placeholder.com/70"
 
-            # Outer Practice Score Card Layout Box
             card_header_html = f"""
             <div style="background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px; padding: 20px 20px 5px 20px; margin-bottom: 25px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; border-bottom: 1px solid #E2E8F0; padding-bottom: 12px;">
@@ -1229,7 +1230,7 @@ with active_season:
                 with m_col2:
                     if st.button("➖", key=f"dec_{player_name}_{m}"):
                         if current_count > 0:
-                            # 1. Update session state DataFrame in-memory immediately (Instant UI Response)
+                            # 1. Update in-memory DataFrame
                             st.session_state.live_historical_df = st.session_state.live_historical_df[
                                 ~(
                                     (st.session_state.live_historical_df["Week_Starting"].astype(str) == week_str) &
@@ -1238,7 +1239,12 @@ with active_season:
                                     (st.session_state.live_historical_df["Day"] == day_selected)
                                 )
                             ]
-                            # 2. Post remove action webhook (matches Recovery pattern)
+                            # 2. Resilient Webhook Sync
+                            target_url = (
+                                st.secrets.get("MACRO_URL") 
+                                or st.secrets.get("Live Track") 
+                                or st.secrets.get("sheets", {}).get("live_track_url")
+                            )
                             payload = {
                                 "Week_Starting": week_str,
                                 "Athlete": player_name,
@@ -1247,10 +1253,11 @@ with active_season:
                                 "Timestamp": "",
                                 "Action": "remove",
                             }
-                            try:
-                                requests.post(st.secrets["MACRO_URL"], json=payload, timeout=4)
-                            except Exception:
-                                pass
+                            if target_url:
+                                try:
+                                    requests.post(target_url, json=payload, timeout=4)
+                                except Exception as err:
+                                    st.error(f"Sync error: {err}")
 
                             st.cache_data.clear()
                             st.rerun()
@@ -1262,7 +1269,7 @@ with active_season:
                     if st.button("➕", key=f"inc_{player_name}_{m}"):
                         time_str = local_now.strftime("%H:%M:%S")
                         
-                        # 1. Update session state DataFrame in-memory immediately
+                        # 1. Update in-memory DataFrame
                         new_row = pd.DataFrame([{
                             "Week_Starting": week_str,
                             "Athlete": player_name,
@@ -1276,7 +1283,12 @@ with active_season:
                             ignore_index=True,
                         )
 
-                        # 2. Post add action webhook
+                        # 2. Resilient Webhook Sync
+                        target_url = (
+                            st.secrets.get("MACRO_URL") 
+                            or st.secrets.get("Live Track") 
+                            or st.secrets.get("sheets", {}).get("live_track_url")
+                        )
                         payload = {
                             "Week_Starting": week_str,
                             "Athlete": player_name,
@@ -1285,10 +1297,11 @@ with active_season:
                             "Timestamp": time_str,
                             "Action": "add",
                         }
-                        try:
-                            requests.post(st.secrets["MACRO_URL"], json=payload, timeout=4)
-                        except Exception:
-                            pass
+                        if target_url:
+                            try:
+                                requests.post(target_url, json=payload, timeout=4)
+                            except Exception as err:
+                                st.error(f"Sync error: {err}")
 
                         st.cache_data.clear()
                         st.rerun()
