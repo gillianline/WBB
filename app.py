@@ -1126,10 +1126,9 @@ with active_season:
         st.divider()
 
         # ---------------------------------------------------------------------
-        # B. AUTO-SAVE HELPER TO SECRET GOOGLE SHEET
+        # B. AUTO-SAVE HELPER TO SECRET GOOGLE SHEET (JSON WEBHOOK)
         # ---------------------------------------------------------------------
         def save_to_secret_sheet(athlete, metric, count_val):
-            # Fetch URL from secrets under "Live Track" or "live_track_url"
             sheet_url = st.secrets.get("Live Track") or st.secrets.get("sheets", {}).get("live_track_url")
             
             if sheet_url:
@@ -1138,18 +1137,23 @@ with active_season:
                     "Athlete": athlete,
                     "Metric": metric,
                     "Day": day_selected,
-                    "Count": count_val,
+                    "Count": int(count_val),
                 }
                 try:
-                    data = urllib.parse.urlencode(payload).encode("utf-8")
-                    req = urllib.request.Request(sheet_url, data=data, method="POST")
+                    import json
+                    json_bytes = json.dumps(payload).encode("utf-8")
+                    req = urllib.request.Request(
+                        sheet_url,
+                        data=json_bytes,
+                        headers={"Content-Type": "application/json"},
+                    )
                     with urllib.request.urlopen(req) as response:
                         pass
                 except Exception as e:
                     print(f"Sync error: {e}")
 
         # ---------------------------------------------------------------------
-        # C. PRACTICE SCORE SINGLE-BOX CARD LAYOUT
+        # C. UNIFIED PRACTICE SCORE CARD LAYOUT
         # ---------------------------------------------------------------------
         st.markdown("### Player Trackers")
 
@@ -1158,27 +1162,31 @@ with active_season:
             p_pos = p_row["Position"].values[0] if not p_row.empty else "Guard / Forward"
             p_img = p_row["Picture"].values[0] if not p_row.empty else "https://via.placeholder.com/70"
 
-            # Render top portion of the Practice Score styled card
-            card_header_html = f"""
-            <div style="background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; border-bottom: 1px solid #E2E8F0; padding-bottom: 12px;">
-                    <div style="display: flex; align-items: center; gap: 15px;">
-                        <img src="{p_img}" style="width:60px; height:60px; border-radius:50%; border:3px solid #FF8200; object-fit:cover;">
-                        <div>
-                            <h3 style="margin:0; font-size:1.3rem; color:#0F172A; font-weight:700;">{player_name}</h3>
-                            <span style="color:#64748B; font-size:0.85rem;">{p_pos}</span>
+            # Outer container wrapper for one solid unified card
+            with st.container():
+                # Card Header
+                st.markdown(
+                    f"""
+                    <div style="background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px; padding: 20px 20px 10px 20px; margin-bottom: 25px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; border-bottom: 1px solid #E2E8F0; padding-bottom: 12px;">
+                            <div style="display: flex; align-items: center; gap: 15px;">
+                                <img src="{p_img}" style="width:60px; height:60px; border-radius:50%; border:3px solid #FF8200; object-fit:cover;">
+                                <div>
+                                    <h3 style="margin:0; font-size:1.3rem; color:#0F172A; font-weight:700;">{player_name}</h3>
+                                    <span style="color:#64748B; font-size:0.85rem;">{p_pos}</span>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 8px;">
+                                <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Week Starting: {week_starting}</span>
+                                <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">{day_selected}</span>
+                            </div>
                         </div>
                     </div>
-                    <div style="display: flex; gap: 8px;">
-                        <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Week Starting: {week_starting}</span>
-                        <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">{day_selected}</span>
-                    </div>
-                </div>
-            """
-            st.markdown(card_header_html, unsafe_allow_html=True)
+                    """,
+                    unsafe_allow_html=True,
+                )
 
-            # Embedded Tracker Section inside the same physical card
-            with st.container():
+                # Metrics Trackers (+ / -) embedded directly below the header
                 for m in metrics_to_track:
                     m_col1, m_col2, m_col3, m_col4 = st.columns([3, 1, 1, 1])
                     
@@ -1202,11 +1210,10 @@ with active_season:
                             save_to_secret_sheet(player_name, m, st.session_state["live_tally"][player_name][m])
                             st.rerun()
 
-            # Closing div for the outer Practice Score box
-            st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown("<br>", unsafe_allow_html=True)
 
         # ---------------------------------------------------------------------
-        # D. SUMMARY TABLE matching Week_Starting | Athlete | Metric | Day
+        # D. SUMMARY TABLE
         # ---------------------------------------------------------------------
         st.divider()
         st.markdown("### Tracking Summary")
