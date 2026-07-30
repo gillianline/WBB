@@ -1118,7 +1118,7 @@ with active_season:
             st.plotly_chart(fig_jump_trend, use_container_width=True)
 
  # =========================================================================
-    # TAB 6: LIVE TRACKING (FIXED DECREMENT & DIRECT STATE MUTATION)
+    # TAB 6: LIVE TRACKING (SYNCHRONOUS GUARANTEED DELETE & PERSISTENCE)
     # =========================================================================
     elif main_tab == "Live Tracking":
         st.markdown(
@@ -1127,7 +1127,7 @@ with active_season:
         )
 
         # ---------------------------------------------------------------------
-        # 1. READ SAVED HISTORY FROM GOOGLE SHEET ON LOAD
+        # 1. READ FRESH LOGS FROM GOOGLE SHEET ON INITIAL LOAD
         # ---------------------------------------------------------------------
         def fetch_live_gsheet():
             try:
@@ -1152,13 +1152,11 @@ with active_season:
 
             return pd.DataFrame(columns=["Week_Starting", "Athlete", "Metric", "Day", "Count", "Timestamp"])
 
-        # Load into session state once per session
+        # Populate session state once per browser session
         if "live_historical_df" not in st.session_state:
             st.session_state.live_historical_df = fetch_live_gsheet()
 
-        live_historical_df = st.session_state.live_historical_df
-
-        # Helper function for sending POST requests to Google Sheets
+        # Synchronous execution helper
         def execute_sheet_mutation(payload):
             target_url = (
                 st.secrets.get("MACRO_URL") 
@@ -1167,9 +1165,11 @@ with active_season:
             )
             if target_url:
                 try:
-                    requests.post(target_url, json=payload, timeout=4)
+                    res = requests.post(target_url, json=payload, timeout=6)
+                    return res.status_code == 200
                 except Exception as err:
                     print(f"Mutation sync note: {err}")
+            return False
 
         # ---------------------------------------------------------------------
         # 2. SESSION CONTROLS
@@ -1233,7 +1233,6 @@ with active_season:
                             )
 
                             for m in metrics_to_track:
-                                # Find matches in current session_state dataframe
                                 matches = pd.DataFrame()
                                 current_count = 0
 
@@ -1253,11 +1252,11 @@ with active_season:
                                 with m_col2:
                                     if st.button("➖", key=f"dec_{p_name.replace(' ', '')}_{m}_{day_selected}"):
                                         if current_count > 0:
-                                            # 1. DROP ROW LOCALLY IMMEDIATELY (DECREMENT COUNT ON DASHBOARD)
+                                            # 1. Update local state immediately
                                             last_idx = matches.index[-1]
                                             st.session_state.live_historical_df = st.session_state.live_historical_df.drop(last_idx).reset_index(drop=True)
 
-                                            # 2. FIRE REMOVE ACTION TO GOOGLE SHEETS IN BACKGROUND
+                                            # 2. Fire payload and wait for synchronous completion
                                             payload = {
                                                 "Week_Starting": week_str,
                                                 "Athlete": str(p_name).strip(),
@@ -1266,6 +1265,7 @@ with active_season:
                                                 "Action": "remove",
                                             }
                                             execute_sheet_mutation(payload)
+                                            st.cache_data.clear()
                                             st.rerun()
 
                                 with m_col3:
@@ -1275,7 +1275,7 @@ with active_season:
                                     if st.button("➕", key=f"inc_{p_name.replace(' ', '')}_{m}_{day_selected}"):
                                         time_str = local_now.strftime("%m/%d/%Y %H:%M:%S")
 
-                                        # 1. ADD ROW LOCALLY IMMEDIATELY (INCREMENT COUNT ON DASHBOARD)
+                                        # 1. Update local state immediately
                                         new_row = pd.DataFrame([{
                                             "Week_Starting": week_str,
                                             "Athlete": str(p_name).strip(),
@@ -1289,7 +1289,7 @@ with active_season:
                                             ignore_index=True,
                                         )
 
-                                        # 2. FIRE ADD ACTION TO GOOGLE SHEETS IN BACKGROUND
+                                        # 2. Fire payload and wait for synchronous completion
                                         payload = {
                                             "Week_Starting": week_str,
                                             "Athlete": str(p_name).strip(),
@@ -1300,6 +1300,7 @@ with active_season:
                                             "Action": "add",
                                         }
                                         execute_sheet_mutation(payload)
+                                        st.cache_data.clear()
                                         st.rerun()
 
                             st.markdown("</div>", unsafe_allow_html=True)
