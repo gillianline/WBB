@@ -1148,48 +1148,60 @@ with active_season:
         # ---------------------------------------------------------------------
         # B. LOAD LIVE DATA FROM GOOGLE SHEETS ON EVERY REFRESH
         # ---------------------------------------------------------------------
-        @st.cache_data(ttl=5)  # Quick 5-second cache to stay synchronized
+        @st.cache_data(ttl=3)  # Short 3-second cache for instant UI refresh
         def fetch_live_track_logs():
             try:
-                sheet_url = (
-                    st.secrets.get("MACRO_URL") 
-                    or st.secrets.get("Live Track") 
-                    or st.secrets.get("sheets", {}).get("live_track_url")
-                )
-                if not sheet_url:
-                    return pd.DataFrame()
-                
-                # Fetch raw CSV/JSON from sheet if standard spreadsheet connection exists
+                # 1. Try fetching via gsheets connection in secrets
                 if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
                     url = st.secrets["connections"]["gsheets"]["spreadsheet"]
                     csv_url = url.replace("/edit", "/gviz/tq?tqx=out:csv&sheet=Sheet1")
+                    return pd.read_csv(csv_url)
+                
+                # 2. Direct fallback URL from secrets
+                csv_url = st.secrets.get("LIVE_TRACK_CSV_URL") or st.secrets.get("sheets", {}).get("live_track_csv")
+                if csv_url:
                     return pd.read_csv(csv_url)
             except Exception as e:
                 print(f"Fetch error: {e}")
             return pd.DataFrame()
 
-        # Load historical sheet logs
+        # Load historical logs from Google Sheets
         logs_df = fetch_live_track_logs()
 
-        # Compute persistent metric counts from sheet data
+        # Initialize session state for instant UI responsiveness
+        if "live_tally" not in st.session_state:
+            st.session_state["live_tally"] = {}
+
         live_counts = {}
         for p in roster_players:
             live_counts[p] = {}
+            if p not in st.session_state["live_tally"]:
+                st.session_state["live_tally"][p] = {}
+
             for m in metrics_to_track:
-                if not logs_df.empty and set(["Week_Starting", "Athlete", "Metric", "Day", "Count"]).issubset(logs_df.columns):
-                    match = logs_df[
-                        (logs_df["Week_Starting"].astype(str) == week_str) &
-                        (logs_df["Athlete"].astype(str) == p) &
-                        (logs_df["Metric"].astype(str) == m) &
-                        (logs_df["Day"].astype(str) == day_selected)
-                    ]
-                    if not match.empty:
-                        # Sums all logged entries or takes the most recent tally
-                        live_counts[p][m] = int(pd.to_numeric(match["Count"], errors="coerce").sum())
-                    else:
-                        live_counts[p][m] = 0
-                else:
-                    live_counts[p][m] = 0
+                # 1. Calculate historical sum from Google Sheet
+                sheet_total = 0
+                if not logs_df.empty:
+                    # Clean column names (strip whitespace)
+                    logs_df.columns = [str(c).strip() for c in logs_df.columns]
+                    
+                    required_cols = {"Week_Starting", "Athlete", "Metric", "Day", "Count"}
+                    if required_cols.issubset(set(logs_df.columns)):
+                        match = logs_df[
+                            (logs_df["Week_Starting"].astype(str).str.strip() == week_str) &
+                            (logs_df["Athlete"].astype(str).str.strip() == p) &
+                            (logs_df["Metric"].astype(str).str.strip() == m) &
+                            (logs_df["Day"].astype(str).str.strip() == day_selected)
+                        ]
+                        if not match.empty:
+                            sheet_total = int(pd.to_numeric(match["Count"], errors="coerce").fillna(0).sum())
+
+                # 2. Use session state override if active, else fall back to Google Sheet total
+                if m not in st.session_state["live_tally"][p]:
+                    st.session_state["live_tally"][p][m] = sheet_total
+                
+                live_counts[p][m] = st.session_state["live_tally"][p][m]
+                
 
         st.divider()
 
@@ -1203,24 +1215,21 @@ with active_season:
                 or st.secrets.get("sheets", {}).get("live_track_url")
             )
             
-            if not macro_url:
-                st.error("❌ Sync Error: No Webhook URL found in st.secrets!")
-                return
-
             payload = {
                 "Week_Starting": week_str,
                 "Athlete": athlete,
                 "Metric": metric,
                 "Day": day_selected,
-                "Count": delta_val,  # Sends the logged event count (+1 or -1)
+                "Count": delta_val,
                 "Timestamp": pd.to_datetime("now").strftime("%Y-%m-%d %H:%M:%S"),
             }
             
             try:
-                requests.post(macro_url, json=payload, timeout=4)
-                st.cache_data.clear()  # Clears cache so next refresh pulls updated total
+                if macro_url:
+                    requests.post(macro_url, json=payload, timeout=4)
+                st.cache_data.clear()
             except Exception as e:
-                st.error(f"❌ Network/Sync Error: {e}")
+                print(f"Sync error: {e}")
 
         # ---------------------------------------------------------------------
         # D. UNIFIED PLAYER CARDS GRID
@@ -1262,19 +1271,20 @@ with active_season:
 
                                 with m_col2:
                                     if st.button("➖", key=f"dec_{p_name}_{m}"):
-                                        if live_counts[p_name][m] > 0:
+                                        if st.session_state["live_tally"][p_name][m] > 0:
+                                            st.session_state["live_tally"][p_name][m] -= 1
                                             sync_tally_to_sheet(p_name, m, -1)
                                             st.rerun()
 
                                 with m_col3:
-                                    val = live_counts[p_name][m]
+                                    val = st.session_state["live_tally"][p_name][m]
                                     st.markdown(f"<div style='text-align:center; font-size:1.2rem; font-weight:800; color:#FF8200; padding-top:4px;'>{val}</div>", unsafe_allow_html=True)
 
                                 with m_col4:
                                     if st.button("➕", key=f"inc_{p_name}_{m}"):
+                                        st.session_state["live_tally"][p_name][m] += 1
                                         sync_tally_to_sheet(p_name, m, 1)
                                         st.rerun()
-
                             st.markdown("</div>", unsafe_allow_html=True)
 
         # ---------------------------------------------------------------------
