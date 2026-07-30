@@ -1126,10 +1126,9 @@ with active_season:
         )
 
         # ---------------------------------------------------------------------
-        # A. SESSION CONTROLS & DATE CALCULATIONS (Pandas Native)
+        # A. SESSION CONTROLS & DATE CALCULATIONS
         # ---------------------------------------------------------------------
         today_date = pd.to_datetime("today").date()
-        # Uses pd.Timedelta to avoid missing datetime module imports
         current_monday = today_date - pd.Timedelta(days=today_date.weekday())
 
         col_s1, col_s2, col_s3 = st.columns([1, 1, 1])
@@ -1143,18 +1142,22 @@ with active_season:
             )
         with col_s3:
             st.caption("Auto-Sync: Connected to Google Sheet")
+
+        # 1. DEFINE METRICS FIRST
+        metrics_to_track = ["Box Out", "Turnovers", "Offensive Rebounds"]
+
         # ---------------------------------------------------------------------
         # B. INITIALIZE STATE & LOAD FROM HISTORICAL DATA
         # ---------------------------------------------------------------------
         if "live_tally" not in st.session_state:
             st.session_state["live_tally"] = {}
 
-        # Hydrate state for all roster players
+        # 2. INITIALIZE STATE FOR ALL ROSTER PLAYERS
         for p in roster_players:
             if p not in st.session_state["live_tally"]:
                 st.session_state["live_tally"][p] = {m: 0 for m in metrics_to_track}
 
-        # Sync existing counts if historical DataFrame exists
+        # 3. SYNC EXISTING COUNTS IF HISTORICAL DATA EXISTS
         if "historical_df" in st.session_state and not st.session_state.historical_df.empty:
             hdf = st.session_state.historical_df
             for p in roster_players:
@@ -1167,8 +1170,6 @@ with active_season:
                     ]
                     if not match.empty and "Count" in match.columns:
                         st.session_state["live_tally"][p][m] = int(match["Count"].values[0])
-
-        st.divider()
 
         # ---------------------------------------------------------------------
         # C. AUTO-SAVE HELPER (MATCHES RECOVERY WEBHOOK PATTERN)
