@@ -5,6 +5,29 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+import requests
+
+def save_to_secret_sheet(athlete, metric, count_val):
+    sheet_url = st.secrets.get("Live Track") or st.secrets.get("sheets", {}).get("live_track_url")
+    
+    if not sheet_url:
+        print("Sync Error: No URL found in st.secrets")
+        return
+
+    payload = {
+        "Week_Starting": str(week_starting),
+        "Athlete": athlete,
+        "Metric": metric,
+        "Day": day_selected,
+        "Count": int(count_val),
+    }
+
+    try:
+        # requests.post automatically follows Google's 302 redirects while preserving payload data
+        response = requests.post(sheet_url, json=payload, timeout=5)
+        print(f"Sync Response: {response.status_code}")
+    except Exception as e:
+        print(f"Sync error: {e}")
 
 # -----------------------------------------------------------------------------
 # 1. PAGE CONFIGURATION & STYLING
