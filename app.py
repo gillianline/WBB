@@ -1117,33 +1117,37 @@ with active_season:
             st.plotly_chart(fig_jump_trend, use_container_width=True)
 
  # =========================================================================
-    # TAB 6: LIVE TRACKING (RECOVERY ENGINE WITH MULTI-COUNTING)
+    # TAB 6: LIVE TRACKING (EXACT RECOVERY ENGINE PATTERN WITH MULTI-COUNTING)
     # =========================================================================
     elif main_tab == "Live Tracking":
         st.title("Daily Live Metric Entry")
 
-        # --- RECOVERY CONTINUOUS READ ENGINE ---
+        # ---------------------------------------------------------------------
+        # 1. CONTINUOUS CLOUD READ ENGINE (RECOVERY ARCHITECTURE)
+        # ---------------------------------------------------------------------
         def load_historical_data():
             try:
-                url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-                cache_buster = f"&cache={pd.to_datetime('now').timestamp()}"
-                csv_url = url.replace(
-                    "/edit", f"/gviz/tq?tqx=out:csv&sheet=Logs{cache_buster}"
-                )
-                return pd.read_csv(csv_url)
-            except Exception:
-                return pd.DataFrame(
-                    columns=[
-                        "Week_Starting",
-                        "Athlete",
-                        "Lift_Group",
-                        "Station",
-                        "Day",
-                        "Timestamp",
-                    ]
-                )
+                if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
+                    url = st.secrets["connections"]["gsheets"]["spreadsheet"]
+                    cache_buster = f"&cache={pd.to_datetime('now').timestamp()}"
+                    csv_url = url.replace(
+                        "/edit", f"/gviz/tq?tqx=out:csv&sheet=Logs{cache_buster}"
+                    )
+                    return pd.read_csv(csv_url)
+            except Exception as e:
+                print(f"Sheet read error: {e}")
+            return pd.DataFrame(
+                columns=[
+                    "Week_Starting",
+                    "Athlete",
+                    "Lift_Group",
+                    "Station",
+                    "Day",
+                    "Timestamp",
+                ]
+            )
 
-        # 1. Initialize or load historical dataframe into persistent session state
+        # Initialize or load historical dataframe into persistent session state
         if "historical_df" not in st.session_state:
             st.session_state.historical_df = load_historical_data()
 
@@ -1154,7 +1158,9 @@ with active_season:
 
         historical_df = st.session_state.historical_df
 
-        # 2. Week & Day Controls (EST Sync using Pandas native time)
+        # ---------------------------------------------------------------------
+        # 2. WEEK & DAY CONTROLS (EST TIME SYNC USING PANDAS NATIVE TIME)
+        # ---------------------------------------------------------------------
         local_now = pd.to_datetime("now") - pd.Timedelta(hours=4)
         today = local_now.date()
         current_monday = today - pd.Timedelta(days=today.weekday())
@@ -1176,7 +1182,7 @@ with active_season:
         st.write("---")
 
         # ---------------------------------------------------------------------
-        # 3. PLAYER CARDS GRID (WITH TALLY COUNTERS)
+        # 3. PLAYER CARDS GRID (WITH MULTI-COUNTING COUNTERS)
         # ---------------------------------------------------------------------
         grid_cols = st.columns(4)
         
@@ -1202,7 +1208,7 @@ with active_season:
                 for station in STATIONS:
                     # COUNT how many times this combination exists in historical_df
                     matches = historical_df[
-                        (historical_df["Week_Starting"] == week_str) &
+                        (historical_df["Week_Starting"].astype(str) == week_str) &
                         (historical_df["Athlete"] == athlete_name) &
                         (historical_df["Station"] == station) &
                         (historical_df["Day"] == day_selected)
@@ -1218,11 +1224,17 @@ with active_season:
                     with sc2:
                         if st.button("➖", key=f"dec_{athlete_name.replace(' ', '')}_{station}_{week_str}_{day_selected[:3]}"):
                             if current_count > 0:
-                                # Drop exactly ONE matching row from in-memory DataFrame
+                                # 1. Drop exactly ONE matching row from local in-memory DataFrame
                                 last_match_index = matches.index[-1]
                                 st.session_state.historical_df = st.session_state.historical_df.drop(last_match_index)
                                 
-                                # Post remove action to Apps Script
+                                # 2. Resilient URL lookup across all secret key names
+                                macro_url = (
+                                    st.secrets.get("MACRO_URL") 
+                                    or st.secrets.get("Live Track") 
+                                    or st.secrets.get("sheets", {}).get("live_track_url")
+                                )
+                                
                                 payload = {
                                     "Week_Starting": week_str,
                                     "Athlete": athlete_name,
@@ -1232,10 +1244,15 @@ with active_season:
                                     "Timestamp": "",
                                     "Action": "remove",
                                 }
-                                try:
-                                    requests.post(st.secrets["MACRO_URL"], json=payload, timeout=4)
-                                except Exception:
-                                    pass
+                                
+                                if macro_url:
+                                    try:
+                                        requests.post(macro_url, json=payload, timeout=4)
+                                    except Exception as err:
+                                        print(f"Sync error: {err}")
+                                else:
+                                    st.error("❌ Sync Error: No Webhook URL found in st.secrets!")
+
                                 st.cache_data.clear()
                                 st.rerun()
 
@@ -1246,7 +1263,7 @@ with active_season:
                         if st.button("➕", key=f"inc_{athlete_name.replace(' ', '')}_{station}_{week_str}_{day_selected[:3]}"):
                             time_str = local_now.strftime("%H:%M:%S")
                             
-                            # Append exactly ONE row to in-memory DataFrame
+                            # 1. Append exactly ONE row to local in-memory DataFrame
                             new_row = pd.DataFrame([{
                                 "Week_Starting": week_str,
                                 "Athlete": athlete_name,
@@ -1260,7 +1277,13 @@ with active_season:
                                 ignore_index=True,
                             )
                             
-                            # Post add action to Apps Script
+                            # 2. Resilient URL lookup across all secret key names
+                            macro_url = (
+                                st.secrets.get("MACRO_URL") 
+                                or st.secrets.get("Live Track") 
+                                or st.secrets.get("sheets", {}).get("live_track_url")
+                            )
+                            
                             payload = {
                                 "Week_Starting": week_str,
                                 "Athlete": athlete_name,
@@ -1270,10 +1293,15 @@ with active_season:
                                 "Timestamp": time_str,
                                 "Action": "add",
                             }
-                            try:
-                                requests.post(st.secrets["MACRO_URL"], json=payload, timeout=4)
-                            except Exception:
-                                pass
+                            
+                            if macro_url:
+                                try:
+                                    requests.post(macro_url, json=payload, timeout=4)
+                                except Exception as err:
+                                    print(f"Sync error: {err}")
+                            else:
+                                st.error("❌ Sync Error: No Webhook URL found in st.secrets!")
+
                             st.cache_data.clear()
                             st.rerun()
                 
