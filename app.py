@@ -1103,21 +1103,22 @@ with active_season:
         )
 
         # ---------------------------------------------------------------------
-        # A. TRACKING DATE & SESSION SETUP
+        # A. SESSION CONTROLS
         # ---------------------------------------------------------------------
-        col_setup1, col_setup2, _ = st.columns([1, 1, 2])
-        with col_setup1:
-            track_date = st.date_input("Tracking Date:", pd.to_datetime("today"))
-        with col_setup2:
-            session_type = st.selectbox("Session Type:", ["Practice", "Scrimmage", "Game"])
-
-        # Initialize session state for tally tracking
-        if "live_tally" not in st.session_state:
-            st.session_state["live_tally"] = {}
+        col_s1, col_s2, col_s3 = st.columns([1, 1, 1])
+        with col_s1:
+            week_starting = st.date_input("Week Starting:", pd.to_datetime("today"))
+        with col_s2:
+            day_selected = st.selectbox("Day:", ["Day 1", "Day 2", "Day 3", "Day 4", "Day 5"])
+        with col_s3:
+            st.caption("Auto-Sync: Enabled")
 
         metrics_to_track = ["Box Out", "Turnovers", "Offensive Rebounds"]
 
-        # Ensure every player has metrics initialized
+        # Initialize session tallies
+        if "live_tally" not in st.session_state:
+            st.session_state["live_tally"] = {}
+
         for p in roster_players:
             if p not in st.session_state["live_tally"]:
                 st.session_state["live_tally"][p] = {m: 0 for m in metrics_to_track}
@@ -1125,91 +1126,101 @@ with active_season:
         st.divider()
 
         # ---------------------------------------------------------------------
-        # B. FULLY UNIFIED PLAYER CARDS WITH EMBEDDED TRACKERS
+        # B. AUTO-SAVE HELPER TO SECRET GOOGLE SHEET
         # ---------------------------------------------------------------------
-        st.markdown("### Active Player Tracking Grid")
-
-        # 2 Players per row layout
-        for i in range(0, len(roster_players), 2):
-            col1, col2 = st.columns(2)
-            cols = [col1, col2]
-
-            for j in range(2):
-                if i + j < len(roster_players):
-                    p_name = roster_players[i + j]
-                    p_row = roster_raw[roster_raw["Name"] == p_name]
-                    p_pos = p_row["Position"].values[0] if not p_row.empty else "Guard / Forward"
-                    p_img = p_row["Picture"].values[0] if not p_row.empty else "https://via.placeholder.com/60"
-
-                    with cols[j]:
-                        # OUTER UNIFIED CARD CONTAINER
-                        with st.container():
-                            st.markdown(
-                                f"""
-                                <div style="background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px; padding: 16px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.03);">
-                                    <div style="display: flex; align-items: center; gap: 14px; padding-bottom: 12px; border-bottom: 1px solid #F1F5F9; margin-bottom: 12px;">
-                                        <img src="{p_img}" class="athlete-avatar" style="width:52px; height:52px;">
-                                        <div>
-                                            <h4 style="margin:0; font-size:1.1rem; color:#0F172A; font-weight:700;">{p_name}</h4>
-                                            <span style="color:#64748B; font-size:0.8rem;">{p_pos}</span>
-                                        </div>
-                                    </div>
-                                """,
-                                unsafe_allow_html=True,
-                            )
-
-                            # EMBEDDED METRIC COUNTERS INSIDE THE CARD
-                            for m in metrics_to_track:
-                                m_col1, m_col2, m_col3, m_col4 = st.columns([2.5, 1, 1, 1])
-                                
-                                with m_col1:
-                                    st.markdown(f"<span style='font-size:0.9rem; font-weight:600; color:#334155;'>{m}</span>", unsafe_allow_html=True)
-                                
-                                with m_col2:
-                                    if st.button("➖", key=f"dec_{p_name}_{m}"):
-                                        if st.session_state["live_tally"][p_name][m] > 0:
-                                            st.session_state["live_tally"][p_name][m] -= 1
-                                            # AUTO-SAVE TO GOOGLE SHEET ON CLICK
-                                            auto_save_live_tally(p_name, m, st.session_state["live_tally"][p_name][m], track_date, session_type)
-                                            st.rerun()
-                                
-                                with m_col3:
-                                    val = st.session_state["live_tally"][p_name][m]
-                                    st.markdown(
-                                        f"<div style='text-align:center; font-size:1.1rem; font-weight:800; color:#FF8200;'>{val}</div>",
-                                        unsafe_allow_html=True,
-                                    )
-                                
-                                with m_col4:
-                                    if st.button("➕", key=f"inc_{p_name}_{m}"):
-                                        st.session_state["live_tally"][p_name][m] += 1
-                                        # AUTO-SAVE TO GOOGLE SHEET ON CLICK
-                                        auto_save_live_tally(p_name, m, st.session_state["live_tally"][p_name][m], track_date, session_type)
-                                        st.rerun()
-
-                            # CLOSE UNIFIED CARD HTML
-                            st.markdown("</div>", unsafe_allow_html=True)
+        def save_to_secret_sheet(athlete, metric, count_val):
+            # Fetch URL from secrets under "Live Track" or "live_track_url"
+            sheet_url = st.secrets.get("Live Track") or st.secrets.get("sheets", {}).get("live_track_url")
+            
+            if sheet_url:
+                payload = {
+                    "Week_Starting": str(week_starting),
+                    "Athlete": athlete,
+                    "Metric": metric,
+                    "Day": day_selected,
+                    "Count": count_val,
+                }
+                try:
+                    data = urllib.parse.urlencode(payload).encode("utf-8")
+                    req = urllib.request.Request(sheet_url, data=data, method="POST")
+                    with urllib.request.urlopen(req) as response:
+                        pass
+                except Exception as e:
+                    print(f"Sync error: {e}")
 
         # ---------------------------------------------------------------------
-        # C. LIVE AGGREGATED SUMMARY TABLE
+        # C. PRACTICE SCORE SINGLE-BOX CARD LAYOUT
+        # ---------------------------------------------------------------------
+        st.markdown("### Player Trackers")
+
+        for player_name in roster_players:
+            p_row = roster_raw[roster_raw["Name"] == player_name]
+            p_pos = p_row["Position"].values[0] if not p_row.empty else "Guard / Forward"
+            p_img = p_row["Picture"].values[0] if not p_row.empty else "https://via.placeholder.com/70"
+
+            # Render top portion of the Practice Score styled card
+            card_header_html = f"""
+            <div style="background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; border-bottom: 1px solid #E2E8F0; padding-bottom: 12px;">
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <img src="{p_img}" style="width:60px; height:60px; border-radius:50%; border:3px solid #FF8200; object-fit:cover;">
+                        <div>
+                            <h3 style="margin:0; font-size:1.3rem; color:#0F172A; font-weight:700;">{player_name}</h3>
+                            <span style="color:#64748B; font-size:0.85rem;">{p_pos}</span>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Week Starting: {week_starting}</span>
+                        <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">{day_selected}</span>
+                    </div>
+                </div>
+            """
+            st.markdown(card_header_html, unsafe_allow_html=True)
+
+            # Embedded Tracker Section inside the same physical card
+            with st.container():
+                for m in metrics_to_track:
+                    m_col1, m_col2, m_col3, m_col4 = st.columns([3, 1, 1, 1])
+                    
+                    with m_col1:
+                        st.markdown(f"<div style='font-size:1rem; font-weight:600; color:#0F172A; padding-top:4px;'>{m}</div>", unsafe_allow_html=True)
+                    
+                    with m_col2:
+                        if st.button("➖", key=f"dec_{player_name}_{m}"):
+                            if st.session_state["live_tally"][player_name][m] > 0:
+                                st.session_state["live_tally"][player_name][m] -= 1
+                                save_to_secret_sheet(player_name, m, st.session_state["live_tally"][player_name][m])
+                                st.rerun()
+                    
+                    with m_col3:
+                        val = st.session_state["live_tally"][player_name][m]
+                        st.markdown(f"<div style='text-align:center; font-size:1.3rem; font-weight:800; color:#FF8200;'>{val}</div>", unsafe_allow_html=True)
+                    
+                    with m_col4:
+                        if st.button("➕", key=f"inc_{player_name}_{m}"):
+                            st.session_state["live_tally"][player_name][m] += 1
+                            save_to_secret_sheet(player_name, m, st.session_state["live_tally"][player_name][m])
+                            st.rerun()
+
+            # Closing div for the outer Practice Score box
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        # ---------------------------------------------------------------------
+        # D. SUMMARY TABLE matching Week_Starting | Athlete | Metric | Day
         # ---------------------------------------------------------------------
         st.divider()
-        st.markdown("### Daily Session Summary")
+        st.markdown("### Tracking Summary")
 
-        summary_rows = []
-        for p_name in roster_players:
-            row_dict = {
-                "Date": str(track_date),
-                "Session": session_type,
-                "Player": p_name,
-            }
-            row_dict.update(st.session_state["live_tally"][p_name])
-            summary_rows.append(row_dict)
+        summary_data = []
+        for p in roster_players:
+            for m in metrics_to_track:
+                summary_data.append({
+                    "Week_Starting": str(week_starting),
+                    "Athlete": p,
+                    "Metric": m,
+                    "Day": day_selected,
+                    "Count": st.session_state["live_tally"][p][m],
+                })
 
-        df_live_summary = pd.DataFrame(summary_rows)
-        st.markdown(render_vball_table(df_live_summary), unsafe_allow_html=True)
-
-        if st.button("🔄 Reset Session Counters"):
-            for p in roster_players:
-                st.session_state["live_tally"][p] = {m: 0 for m in metrics_to_track}
-            st.rerun()
+        df_summary = pd.DataFrame(summary_data)
+        st.markdown(render_vball_table(df_summary), unsafe_allow_html=True)
