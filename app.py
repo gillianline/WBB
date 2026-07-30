@@ -1117,7 +1117,7 @@ with active_season:
             st.plotly_chart(fig_jump_trend, use_container_width=True)
 
  # =========================================================================
-    # TAB 6: LIVE TRACKING (SIDE-BY-SIDE CARDS + EXPLICIT COUNT COLUMN)
+    # TAB 6: LIVE TRACKING
     # =========================================================================
     elif main_tab == "Live Tracking":
         st.markdown(
@@ -1184,7 +1184,7 @@ with active_season:
         st.divider()
 
         # ---------------------------------------------------------------------
-        # 3. PLAYER CARDS (2-COLUMN SIDE-BY-SIDE GRID)
+        # 3. PLAYER CARDS (2-COLUMN GRID SIDE-BY-SIDE)
         # ---------------------------------------------------------------------
         st.markdown("### Player Trackers")
 
@@ -1221,10 +1221,10 @@ with active_season:
                             )
 
                             for m in metrics_to_track:
-                                matches = live_historical_df[
-                                    (live_historical_df["Athlete"] == p_name) &
-                                    (live_historical_df["Metric"] == m) &
-                                    (live_historical_df["Day"] == day_selected)
+                                matches = st.session_state.live_historical_df[
+                                    (st.session_state.live_historical_df["Athlete"].astype(str).str.strip() == str(p_name).strip()) &
+                                    (st.session_state.live_historical_df["Metric"].astype(str).str.strip() == str(m).strip()) &
+                                    (st.session_state.live_historical_df["Day"].astype(str).str.strip() == str(day_selected).strip())
                                 ]
                                 current_count = len(matches)
 
@@ -1236,11 +1236,11 @@ with active_season:
                                 with m_col2:
                                     if st.button("➖", key=f"dec_{p_name.replace(' ', '')}_{m}_{day_selected}"):
                                         if current_count > 0:
-                                            # Drop 1 row locally
+                                            # Drop matching row locally
                                             last_match_index = matches.index[-1]
-                                            st.session_state.live_historical_df = st.session_state.live_historical_df.drop(last_match_index)
+                                            st.session_state.live_historical_df = st.session_state.live_historical_df.drop(last_match_index).reset_index(drop=True)
 
-                                            # Send remove request to Apps Script
+                                            # Webhook URL Lookup
                                             target_url = (
                                                 st.secrets.get("MACRO_URL") 
                                                 or st.secrets.get("Live Track") 
@@ -1248,18 +1248,16 @@ with active_season:
                                             )
                                             payload = {
                                                 "Week_Starting": week_str,
-                                                "Athlete": p_name,
-                                                "Metric": m,
-                                                "Day": day_selected,
-                                                "Count": 1,
-                                                "Timestamp": "",
+                                                "Athlete": str(p_name).strip(),
+                                                "Metric": str(m).strip(),
+                                                "Day": str(day_selected).strip(),
                                                 "Action": "remove",
                                             }
                                             if target_url:
                                                 try:
                                                     requests.post(target_url, json=payload, timeout=4)
                                                 except Exception as err:
-                                                    print(f"Sync note: {err}")
+                                                    print(f"Sync error: {err}")
 
                                             st.cache_data.clear()
                                             st.rerun()
@@ -1271,12 +1269,12 @@ with active_season:
                                     if st.button("➕", key=f"inc_{p_name.replace(' ', '')}_{m}_{day_selected}"):
                                         time_str = local_now.strftime("%m/%d/%Y %H:%M:%S")
 
-                                        # Append 1 row locally
+                                        # Append row locally
                                         new_row = pd.DataFrame([{
                                             "Week_Starting": week_str,
-                                            "Athlete": p_name,
-                                            "Metric": m,
-                                            "Day": day_selected,
+                                            "Athlete": str(p_name).strip(),
+                                            "Metric": str(m).strip(),
+                                            "Day": str(day_selected).strip(),
                                             "Count": 1,
                                             "Timestamp": time_str,
                                         }])
@@ -1285,7 +1283,7 @@ with active_season:
                                             ignore_index=True,
                                         )
 
-                                        # Send add request to Apps Script
+                                        # Webhook URL Lookup
                                         target_url = (
                                             st.secrets.get("MACRO_URL") 
                                             or st.secrets.get("Live Track") 
@@ -1293,9 +1291,9 @@ with active_season:
                                         )
                                         payload = {
                                             "Week_Starting": week_str,
-                                            "Athlete": p_name,
-                                            "Metric": m,
-                                            "Day": day_selected,
+                                            "Athlete": str(p_name).strip(),
+                                            "Metric": str(m).strip(),
+                                            "Day": str(day_selected).strip(),
                                             "Count": 1,
                                             "Timestamp": time_str,
                                             "Action": "add",
@@ -1304,7 +1302,7 @@ with active_season:
                                             try:
                                                 requests.post(target_url, json=payload, timeout=4)
                                             except Exception as err:
-                                                print(f"Sync note: {err}")
+                                                print(f"Sync error: {err}")
 
                                         st.cache_data.clear()
                                         st.rerun()
@@ -1326,11 +1324,11 @@ with active_season:
             }
             for m in metrics_to_track:
                 count_val = 0
-                if not live_historical_df.empty and set(["Athlete", "Metric", "Day"]).issubset(live_historical_df.columns):
-                    match_records = live_historical_df[
-                        (live_historical_df["Athlete"] == p) &
-                        (live_historical_df["Metric"] == m) &
-                        (live_historical_df["Day"] == day_selected)
+                if not st.session_state.live_historical_df.empty and set(["Athlete", "Metric", "Day"]).issubset(st.session_state.live_historical_df.columns):
+                    match_records = st.session_state.live_historical_df[
+                        (st.session_state.live_historical_df["Athlete"].astype(str).str.strip() == str(p).strip()) &
+                        (st.session_state.live_historical_df["Metric"].astype(str).str.strip() == str(m).strip()) &
+                        (st.session_state.live_historical_df["Day"].astype(str).str.strip() == str(day_selected).strip())
                     ]
                     count_val = len(match_records)
                 row_dict[m] = count_val
