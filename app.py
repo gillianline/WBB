@@ -1141,98 +1141,83 @@ with active_season:
                 ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
             )
         with col_s3:
-            st.caption("Auto-Sync: Connected to Google Sheet")
+            st.caption("Auto-Sync: Connected (High-Speed Mode)")
 
         metrics_to_track = ["Box Out", "Turnovers", "Offensive Rebounds"]
 
         # ---------------------------------------------------------------------
-        # B. LOAD LIVE DATA FROM GOOGLE SHEETS ON EVERY REFRESH
+        # B. FAST READ & HYDRATE FROM GOOGLE SHEETS
         # ---------------------------------------------------------------------
-        @st.cache_data(ttl=3)  # Short 3-second cache for instant UI refresh
-        def fetch_live_track_logs():
+        @st.cache_data(ttl=10)
+        def load_live_tracking_sheet_logs():
             try:
-                # 1. Try fetching via gsheets connection in secrets
                 if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
                     url = st.secrets["connections"]["gsheets"]["spreadsheet"]
                     csv_url = url.replace("/edit", "/gviz/tq?tqx=out:csv&sheet=Sheet1")
                     return pd.read_csv(csv_url)
-                
-                # 2. Direct fallback URL from secrets
-                csv_url = st.secrets.get("LIVE_TRACK_CSV_URL") or st.secrets.get("sheets", {}).get("live_track_csv")
-                if csv_url:
-                    return pd.read_csv(csv_url)
             except Exception as e:
-                print(f"Fetch error: {e}")
+                print(f"Sheet load error: {e}")
             return pd.DataFrame()
 
-        # Load historical logs from Google Sheets
-        logs_df = fetch_live_track_logs()
+        logs_df = load_live_tracking_sheet_logs()
 
-        # Initialize session state for instant UI responsiveness
+        # Initialize session state container
         if "live_tally" not in st.session_state:
             st.session_state["live_tally"] = {}
 
-        live_counts = {}
+        # Hydrate counts if not already present in session_state
         for p in roster_players:
-            live_counts[p] = {}
             if p not in st.session_state["live_tally"]:
                 st.session_state["live_tally"][p] = {}
 
             for m in metrics_to_track:
-                # 1. Calculate historical sum from Google Sheet
-                sheet_total = 0
-                if not logs_df.empty:
-                    # Clean column names (strip whitespace)
-                    logs_df.columns = [str(c).strip() for c in logs_df.columns]
-                    
-                    required_cols = {"Week_Starting", "Athlete", "Metric", "Day", "Count"}
-                    if required_cols.issubset(set(logs_df.columns)):
-                        match = logs_df[
-                            (logs_df["Week_Starting"].astype(str).str.strip() == week_str) &
-                            (logs_df["Athlete"].astype(str).str.strip() == p) &
-                            (logs_df["Metric"].astype(str).str.strip() == m) &
-                            (logs_df["Day"].astype(str).str.strip() == day_selected)
-                        ]
-                        if not match.empty:
-                            sheet_total = int(pd.to_numeric(match["Count"], errors="coerce").fillna(0).sum())
-
-                # 2. Use session state override if active, else fall back to Google Sheet total
                 if m not in st.session_state["live_tally"][p]:
-                    st.session_state["live_tally"][p][m] = sheet_total
-                
-                live_counts[p][m] = st.session_state["live_tally"][p][m]
-                
+                    initial_val = 0
+                    if not logs_df.empty:
+                        logs_df.columns = [str(c).strip() for c in logs_df.columns]
+                        req_cols = {"Week_Starting", "Athlete", "Metric", "Day"}
+                        if req_cols.issubset(set(logs_df.columns)):
+                            match = logs_df[
+                                (logs_df["Week_Starting"].astype(str).str.strip() == week_str) &
+                                (logs_df["Athlete"].astype(str).str.strip() == p) &
+                                (logs_df["Metric"].astype(str).str.strip() == m) &
+                                (logs_df["Day"].astype(str).str.strip() == day_selected)
+                            ]
+                            initial_val = len(match)
+                    st.session_state["live_tally"][p][m] = initial_val
 
         st.divider()
 
         # ---------------------------------------------------------------------
-        # C. AUTO-SAVE HELPER (APPEND ONLY)
+        # C. ASYNC BACKGROUND SYNC HELPER
         # ---------------------------------------------------------------------
-        def sync_tally_to_sheet(athlete, metric, delta_val):
+        def send_async_sheet_update(athlete, metric, action_type):
             macro_url = (
                 st.secrets.get("MACRO_URL") 
                 or st.secrets.get("Live Track") 
                 or st.secrets.get("sheets", {}).get("live_track_url")
             )
-            
+            if not macro_url:
+                return
+
             payload = {
                 "Week_Starting": week_str,
                 "Athlete": athlete,
                 "Metric": metric,
                 "Day": day_selected,
-                "Count": delta_val,
+                "Action": action_type,  # "add" or "remove"
                 "Timestamp": pd.to_datetime("now").strftime("%Y-%m-%d %H:%M:%S"),
             }
-            
+
             try:
-                if macro_url:
-                    requests.post(macro_url, json=payload, timeout=4)
+                # Fast 2-second timeout to prevent UI blocking
+                requests.post(macro_url, json=payload, timeout=2)
                 st.cache_data.clear()
             except Exception as e:
-                print(f"Sync error: {e}")
+                print(f"Async sync note: {e}")
 
         # ---------------------------------------------------------------------
-        # D. UNIFIED PLAYER CARDS GRID
+        # D. UNIFIED PLAYER CARDS (FAST INCREMENT & DELETION)
         # ---------------------------------------------------------------------
         st.markdown("### Player Tracker Cards")
 
@@ -1272,8 +1257,10 @@ with active_season:
                                 with m_col2:
                                     if st.button("➖", key=f"dec_{p_name}_{m}"):
                                         if st.session_state["live_tally"][p_name][m] > 0:
+                                            # 1. Update UI count instantly
                                             st.session_state["live_tally"][p_name][m] -= 1
-                                            sync_tally_to_sheet(p_name, m, -1)
+                                            # 2. Delete row from Google Sheet in background
+                                            send_async_sheet_update(p_name, m, "remove")
                                             st.rerun()
 
                                 with m_col3:
@@ -1282,13 +1269,16 @@ with active_season:
 
                                 with m_col4:
                                     if st.button("➕", key=f"inc_{p_name}_{m}"):
+                                        # 1. Update UI count instantly
                                         st.session_state["live_tally"][p_name][m] += 1
-                                        sync_tally_to_sheet(p_name, m, 1)
+                                        # 2. Add row to Google Sheet in background
+                                        send_async_sheet_update(p_name, m, "add")
                                         st.rerun()
+
                             st.markdown("</div>", unsafe_allow_html=True)
 
         # ---------------------------------------------------------------------
-        # E. DAILY & WEEKLY SUMMARY TABLE
+        # E. DAILY SUMMARY TABLE
         # ---------------------------------------------------------------------
         st.divider()
         st.markdown("### Session Summary Table")
@@ -1301,7 +1291,7 @@ with active_season:
                 "Day": day_selected,
             }
             for m in metrics_to_track:
-                row_dict[m] = live_counts[p][m]
+                row_dict[m] = st.session_state["live_tally"][p][m]
             summary_list.append(row_dict)
 
         df_live_summary = pd.DataFrame(summary_list)
