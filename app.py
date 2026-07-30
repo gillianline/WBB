@@ -1126,11 +1126,11 @@ with active_season:
         )
 
         # ---------------------------------------------------------------------
-        # A. SESSION CONTROLS & DATE CALCULATIONS
+        # A. SESSION CONTROLS & DATE CALCULATIONS (Pandas Native)
         # ---------------------------------------------------------------------
-        # Calculate current Monday dynamically
         today_date = pd.to_datetime("today").date()
-        current_monday = today_date - datetime.timedelta(days=today_date.weekday())
+        # Uses pd.Timedelta to avoid missing datetime module imports
+        current_monday = today_date - pd.Timedelta(days=today_date.weekday())
 
         col_s1, col_s2, col_s3 = st.columns([1, 1, 1])
         with col_s1:
@@ -1143,3 +1143,129 @@ with active_season:
             )
         with col_s3:
             st.caption("Auto-Sync: Connected to Google Sheet")
+        # ---------------------------------------------------------------------
+        # B. INITIALIZE STATE & LOAD FROM HISTORICAL DATA
+        # ---------------------------------------------------------------------
+        if "live_tally" not in st.session_state:
+            st.session_state["live_tally"] = {}
+
+        # Hydrate state for all roster players
+        for p in roster_players:
+            if p not in st.session_state["live_tally"]:
+                st.session_state["live_tally"][p] = {m: 0 for m in metrics_to_track}
+
+        # Sync existing counts if historical DataFrame exists
+        if "historical_df" in st.session_state and not st.session_state.historical_df.empty:
+            hdf = st.session_state.historical_df
+            for p in roster_players:
+                for m in metrics_to_track:
+                    match = hdf[
+                        (hdf["Week_Starting"] == week_str) &
+                        (hdf["Athlete"] == p) &
+                        (hdf["Metric"] == m) &
+                        (hdf["Day"] == day_selected)
+                    ]
+                    if not match.empty and "Count" in match.columns:
+                        st.session_state["live_tally"][p][m] = int(match["Count"].values[0])
+
+        st.divider()
+
+        # ---------------------------------------------------------------------
+        # C. AUTO-SAVE HELPER (MATCHES RECOVERY WEBHOOK PATTERN)
+        # ---------------------------------------------------------------------
+        def sync_tally_to_sheet(athlete, metric, new_val):
+            # Tries MACRO_URL or "Live Track" key from secrets
+            macro_url = st.secrets.get("MACRO_URL") or st.secrets.get("Live Track") or st.secrets.get("sheets", {}).get("live_track_url")
+            
+            if macro_url:
+                payload = {
+                    "Week_Starting": week_str,
+                    "Athlete": athlete,
+                    "Metric": metric,
+                    "Day": day_selected,
+                    "Count": new_val,
+                    "Timestamp": datetime.datetime.now().strftime("%H:%M:%S"),
+                }
+                try:
+                    requests.post(macro_url, json=payload, timeout=4)
+                except Exception as e:
+                    print(f"Sync warning: {e}")
+
+        # ---------------------------------------------------------------------
+        # D. UNIFIED PLAYER CARDS GRID (RECOVERY DASHBOARD STYLE)
+        # ---------------------------------------------------------------------
+        st.markdown("### Player Tracker Cards")
+
+        # Display 2 players per row
+        for i in range(0, len(roster_players), 2):
+            c1, c2 = st.columns(2)
+            cols = [c1, c2]
+
+            for j in range(2):
+                if i + j < len(roster_players):
+                    p_name = roster_players[i + j]
+                    p_row = roster_raw[roster_raw["Name"] == p_name]
+                    p_pos = p_row["Position"].values[0] if not p_row.empty else "Guard / Forward"
+                    p_img = p_row["Picture"].values[0] if not p_row.empty else "https://cdn-icons-png.flaticon.com/512/186/186037.png"
+
+                    with cols[j]:
+                        with st.container():
+                            # Unified Card Shell
+                            st.markdown(
+                                f"""
+                                <div style="background-color: #FFFFFF; border: 2px solid #E2E8F0; border-radius: 12px; padding: 18px; margin-bottom: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.03);">
+                                    <div style="display: flex; align-items: center; gap: 15px; padding-bottom: 12px; border-bottom: 1px solid #F1F5F9; margin-bottom: 15px;">
+                                        <img src="{p_img}" class="athlete-card-img" style="width:70px !important; height:70px !important; padding:4px !important; margin:0 !important;">
+                                        <div>
+                                            <h3 style="margin:0; font-size:1.2rem; color:#0F172A; font-weight:700;">{p_name}</h3>
+                                            <span style="color:#64748B; font-size:0.85rem;">{p_pos}</span>
+                                        </div>
+                                    </div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
+
+                            # Metrics Increment/Decrement Buttons
+                            for m in metrics_to_track:
+                                m_col1, m_col2, m_col3, m_col4 = st.columns([3, 1, 1, 1])
+
+                                with m_col1:
+                                    st.markdown(f"<div style='font-weight:600; color:#334155; padding-top:6px;'>{m}</div>", unsafe_allow_html=True)
+
+                                with m_col2:
+                                    if st.button("➖", key=f"dec_{p_name}_{m}"):
+                                        if st.session_state["live_tally"][p_name][m] > 0:
+                                            st.session_state["live_tally"][p_name][m] -= 1
+                                            sync_tally_to_sheet(p_name, m, st.session_state["live_tally"][p_name][m])
+                                            st.rerun()
+
+                                with m_col3:
+                                    val = st.session_state["live_tally"][p_name][m]
+                                    st.markdown(f"<div style='text-align:center; font-size:1.2rem; font-weight:800; color:#FF8200; padding-top:4px;'>{val}</div>", unsafe_allow_html=True)
+
+                                with m_col4:
+                                    if st.button("➕", key=f"inc_{p_name}_{m}"):
+                                        st.session_state["live_tally"][p_name][m] += 1
+                                        sync_tally_to_sheet(p_name, m, st.session_state["live_tally"][p_name][m])
+                                        st.rerun()
+
+                            st.markdown("</div>", unsafe_allow_html=True)
+
+        # ---------------------------------------------------------------------
+        # E. DAILY & WEEKLY SUMMARY TABLES
+        # ---------------------------------------------------------------------
+        st.divider()
+        st.markdown("### Session Summary Table")
+
+        summary_list = []
+        for p in roster_players:
+            row_dict = {
+                "Week_Starting": week_str,
+                "Athlete": p,
+                "Day": day_selected,
+            }
+            row_dict.update(st.session_state["live_tally"][p])
+            summary_list.append(row_dict)
+
+        df_live_summary = pd.DataFrame(summary_list)
+        st.markdown(render_vball_table(df_live_summary), unsafe_allow_html=True)
