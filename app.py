@@ -1117,7 +1117,7 @@ with active_season:
             st.plotly_chart(fig_jump_trend, use_container_width=True)
 
  # =========================================================================
-    # TAB 6: LIVE TRACKING (PURE TWO-WAY GOOGLE SHEET SYNC)
+    # TAB 6: LIVE TRACKING (OPTIMISTIC LOCAL STATE + BACKGROUND SHEET SYNC)
     # =========================================================================
     elif main_tab == "Live Tracking":
         st.markdown(
@@ -1126,30 +1126,27 @@ with active_season:
         )
 
         # ---------------------------------------------------------------------
-        # 1. READ DIRECTLY FROM GOOGLE SHEET CONNECTION
+        # 1. READ FROM GOOGLE SHEET
         # ---------------------------------------------------------------------
-        @st.cache_data(ttl=1) # 1-second TTL ensures changes in Google Sheets load instantly
-        def load_live_sheet():
+        def load_sheet_data():
             try:
-                conn = st.connection("gsheets", type=GSheetsConnection)
-                df = conn.read(ttl=1)
-                df.columns = [str(c).strip() for c in df.columns]
-                return df
-            except Exception:
-                # Fallback to direct CSV read if connection object isn't configured
-                try:
+                if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
                     url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-                    csv_url = url.replace("/edit", "/gviz/tq?tqx=out:csv")
+                    cache_buster = f"&t={pd.to_datetime('now').timestamp()}"
+                    csv_url = url.replace("/edit", f"/gviz/tq?tqx=out:csv&sheet=Sheet1{cache_buster}")
                     df = pd.read_csv(csv_url)
                     df.columns = [str(c).strip() for c in df.columns]
                     return df
-                except Exception:
-                    return pd.DataFrame(columns=["Week_Starting", "Athlete", "Metric", "Day", "Count", "Timestamp"])
+            except Exception as e:
+                print(f"Sheet load error: {e}")
+            return pd.DataFrame(columns=["Week_Starting", "Athlete", "Metric", "Day", "Count", "Timestamp"])
 
-        sheet_df = load_live_sheet()
+        # Initial load into session state if missing
+        if "live_historical_df" not in st.session_state:
+            st.session_state.live_historical_df = load_sheet_data()
 
         # ---------------------------------------------------------------------
-        # 2. SESSION & DATE CONTROLS
+        # 2. SESSION CONTROLS
         # ---------------------------------------------------------------------
         local_now = pd.to_datetime("now") - pd.Timedelta(hours=4)
         today = local_now.date()
@@ -1168,7 +1165,8 @@ with active_season:
                 key="lt_day_selected"
             )
         with col_s3:
-            if st.button("🔄 Refresh Dashboard From Sheet", key="refresh_from_sheet"):
+            if st.button("🔄 Sync From Google Sheet", key="manual_sheet_sync"):
+                st.session_state.live_historical_df = load_sheet_data()
                 st.cache_data.clear()
                 st.rerun()
 
@@ -1177,7 +1175,7 @@ with active_season:
         st.divider()
 
         # ---------------------------------------------------------------------
-        # 3. PLAYER CARDS (SIDE-BY-SIDE 2-COLUMN GRID)
+        # 3. PLAYER CARDS (2-COLUMN GRID)
         # ---------------------------------------------------------------------
         st.markdown("### Player Trackers")
 
@@ -1214,13 +1212,16 @@ with active_season:
                             )
 
                             for m in metrics_to_track:
-                                # Count matches directly from the Google Sheet data
+                                # Count matches directly from in-memory session_state
+                                matches = pd.DataFrame()
                                 current_count = 0
-                                if not sheet_df.empty and set(["Athlete", "Metric", "Day"]).issubset(sheet_df.columns):
-                                    matches = sheet_df[
-                                        (sheet_df["Athlete"].astype(str).str.strip().str.lower() == str(p_name).strip().lower()) &
-                                        (sheet_df["Metric"].astype(str).str.strip().str.lower() == str(m).strip().lower()) &
-                                        (sheet_df["Day"].astype(str).str.strip().str.lower().str.startswith(str(day_selected).strip().lower()))
+                                df_curr = st.session_state.live_historical_df
+
+                                if not df_curr.empty and set(["Athlete", "Metric", "Day"]).issubset(df_curr.columns):
+                                    matches = df_curr[
+                                        (df_curr["Athlete"].astype(str).str.strip().str.lower() == str(p_name).strip().lower()) &
+                                        (df_curr["Metric"].astype(str).str.strip().str.lower() == str(m).strip().lower()) &
+                                        (df_curr["Day"].astype(str).str.strip().str.lower().str.startswith(str(day_selected).strip().lower()))
                                     ]
                                     current_count = len(matches)
 
@@ -1232,6 +1233,11 @@ with active_season:
                                 with m_col2:
                                     if st.button("➖", key=f"dec_{p_name.replace(' ', '')}_{m}_{day_selected}"):
                                         if current_count > 0:
+                                            # 1. Update local state immediately so counter drops instantly on screen
+                                            last_idx = matches.index[-1]
+                                            st.session_state.live_historical_df = st.session_state.live_historical_df.drop(last_idx).reset_index(drop=True)
+
+                                            # 2. Fire remove command to Google Sheets in background
                                             target_url = (
                                                 st.secrets.get("MACRO_URL") 
                                                 or st.secrets.get("Live Track") 
@@ -1250,7 +1256,6 @@ with active_season:
                                                 except Exception as err:
                                                     print(f"Sync error: {err}")
 
-                                            st.cache_data.clear()
                                             st.rerun()
 
                                 with m_col3:
@@ -1260,6 +1265,21 @@ with active_season:
                                     if st.button("➕", key=f"inc_{p_name.replace(' ', '')}_{m}_{day_selected}"):
                                         time_str = local_now.strftime("%m/%d/%Y %H:%M:%S")
 
+                                        # 1. Update local state immediately so counter increments instantly on screen
+                                        new_row = pd.DataFrame([{
+                                            "Week_Starting": week_str,
+                                            "Athlete": str(p_name).strip(),
+                                            "Metric": str(m).strip(),
+                                            "Day": str(day_selected).strip(),
+                                            "Count": 1,
+                                            "Timestamp": time_str,
+                                        }])
+                                        st.session_state.live_historical_df = pd.concat(
+                                            [st.session_state.live_historical_df, new_row],
+                                            ignore_index=True,
+                                        )
+
+                                        # 2. Fire add command to Google Sheets in background
                                         target_url = (
                                             st.secrets.get("MACRO_URL") 
                                             or st.secrets.get("Live Track") 
@@ -1280,7 +1300,6 @@ with active_season:
                                             except Exception as err:
                                                 print(f"Sync error: {err}")
 
-                                        st.cache_data.clear()
                                         st.rerun()
 
                             st.markdown("</div>", unsafe_allow_html=True)
@@ -1292,6 +1311,8 @@ with active_season:
         st.markdown("### Session Summary Table")
 
         summary_list = []
+        df_sum = st.session_state.live_historical_df
+
         for p in [r.get("Athlete") or r.get("Name") for r in roster_list]:
             row_dict = {
                 "Week_Starting": week_str,
@@ -1300,11 +1321,11 @@ with active_season:
             }
             for m in metrics_to_track:
                 count_val = 0
-                if not sheet_df.empty and set(["Athlete", "Metric", "Day"]).issubset(sheet_df.columns):
-                    match_records = sheet_df[
-                        (sheet_df["Athlete"].astype(str).str.strip().str.lower() == str(p).strip().lower()) &
-                        (sheet_df["Metric"].astype(str).str.strip().str.lower() == str(m).strip().lower()) &
-                        (sheet_df["Day"].astype(str).str.strip().str.lower().str.startswith(str(day_selected).strip().lower()))
+                if not df_sum.empty and set(["Athlete", "Metric", "Day"]).issubset(df_sum.columns):
+                    match_records = df_sum[
+                        (df_sum["Athlete"].astype(str).str.strip().str.lower() == str(p).strip().lower()) &
+                        (df_sum["Metric"].astype(str).str.strip().str.lower() == str(m).strip().lower()) &
+                        (df_sum["Day"].astype(str).str.strip().str.lower().str.startswith(str(day_selected).strip().lower()))
                     ]
                     count_val = len(match_records)
                 row_dict[m] = count_val
