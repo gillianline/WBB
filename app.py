@@ -1133,9 +1133,14 @@ with active_season:
             try:
                 if hasattr(st, "connection"):
                     conn = st.connection("gsheets", type=GSheetsConnection)
-                    df = conn.read(ttl=0)
+                    df = conn.read(ttl=0, usecols=None)
                     df.columns = [str(c).strip() for c in df.columns]
+
+                    if "Timestamp" not in df.columns:
+                        df["Timestamp"] = ""
+
                     return df
+                    
             except Exception:
                 pass
 
@@ -1247,22 +1252,35 @@ with active_season:
                                 with m_col1:
                                     st.markdown(f"<div style='font-size:0.9rem; font-weight:600; color:#0F172A; padding-top:4px;'>{m}</div>", unsafe_allow_html=True)
 
-                                with m_col2:
+                               with m_col2:
                                     if st.button("➖", key=f"dec_{p_name.replace(' ', '')}_{m}_{day_selected}"):
-                                        if current_count > 0:
-                                            # 1. Update session state locally immediately
-                                            last_idx = matches.index[-1]
-                                            st.session_state.live_historical_df = st.session_state.live_historical_df.drop(last_idx).reset_index(drop=True)
 
-                                            # 2. Fire clean remove payload
+                                        if current_count > 0:
+
+                                            # Get the exact last matching record
+                                            remove_row = matches.iloc[-1]
+
+                                            # Remove locally immediately
+                                            remove_index = matches.index[-1]
+
+                                            st.session_state.live_historical_df = (
+                                                st.session_state.live_historical_df
+                                                .drop(remove_index)
+                                                .reset_index(drop=True)
+                                            )
+
+                                            # Send exact row information to Google Sheet
                                             payload = {
                                                 "Action": "remove",
-                                                "Week_Starting": str(week_str).strip(),
-                                                "Athlete": str(p_name).strip(),
-                                                "Metric": str(m).strip(),
-                                                "Day": str(day_selected).strip(),
+                                                "Week_Starting": str(remove_row.get("Week_Starting", week_str)).strip(),
+                                                "Athlete": str(remove_row["Athlete"]).strip(),
+                                                "Metric": str(remove_row["Metric"]).strip(),
+                                                "Day": str(remove_row["Day"]).strip(),
+                                                "Timestamp": str(remove_row.get("Timestamp", "")).strip(),
                                             }
+
                                             execute_sheet_mutation(payload)
+
                                             st.cache_data.clear()
                                             st.rerun()
 
