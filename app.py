@@ -7,7 +7,6 @@ import plotly.graph_objects as go
 import streamlit as st
 import requests
 from streamlit_gsheets import GSheetsConnection
-import json
 
 def save_to_secret_sheet(athlete, metric, count_val):
     sheet_url = st.secrets.get("Live Track") or st.secrets.get("sheets", {}).get("live_track_url")
@@ -1134,12 +1133,8 @@ with active_season:
             try:
                 if hasattr(st, "connection"):
                     conn = st.connection("gsheets", type=GSheetsConnection)
-                    df = conn.read(ttl=0, usecols=None)
+                    df = conn.read(ttl=0)
                     df.columns = [str(c).strip() for c in df.columns]
-
-                    if "Timestamp" not in df.columns:
-                        df["Timestamp"] = ""
-
                     return df
             except Exception:
                 pass
@@ -1160,44 +1155,19 @@ with active_season:
         if "live_historical_df" not in st.session_state:
             st.session_state.live_historical_df = fetch_live_gsheet()
 
-        # ---------------------------------------------------------------------
-        # FIXED HELPER FUNCTION WITH ON-SCREEN URL VERIFICATION
-        # ---------------------------------------------------------------------
         def execute_sheet_mutation(payload):
-            # Check every possible secret location
             target_url = (
                 st.secrets.get("MACRO_URL") 
                 or st.secrets.get("Live Track") 
-                or st.secrets.get("live_track_url")
-                or (st.secrets.get("sheets", {}).get("live_track_url") if isinstance(st.secrets.get("sheets"), dict) else None)
-                or (st.secrets.get("sheets", {}).get("live_tracking_url") if isinstance(st.secrets.get("sheets"), dict) else None)
+                or st.secrets.get("sheets", {}).get("live_track_url")
             )
-
-            # Hard fallback: check top-level connection spreadsheet URL
-            if not target_url and "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
-                target_url = st.secrets["connections"]["gsheets"].get("spreadsheet")
-
-            if not target_url:
-                st.error("❌ Sync Error: Could not find any Webhook URL in st.secrets! Check your secret keys.")
-                return False
-
-            try:
-                # Fire POST request and follow Google redirects
-                res = requests.post(
-                    target_url,
-                    json=payload,
-                    headers={"Content-Type": "application/json"},
-                    timeout=10
-                )
-                if res.status_code == 200:
-                    st.toast("✅ Google Sheet updated!", icon="📊")
-                    return True
-                else:
-                    st.error(f"❌ Google Sheets returned HTTP status {res.status_code}: {res.text}")
-                    return False
-            except Exception as err:
-                st.error(f"❌ Webhook Sync Exception: {err}")
-                return False
+            if target_url:
+                try:
+                    res = requests.post(target_url, json=payload, timeout=6)
+                    return res.status_code == 200
+                except Exception as err:
+                    print(f"Mutation sync note: {err}")
+            return False
 
         # ---------------------------------------------------------------------
         # 2. SESSION CONTROLS
@@ -1280,25 +1250,18 @@ with active_season:
                                 with m_col2:
                                     if st.button("➖", key=f"dec_{p_name.replace(' ', '')}_{m}_{day_selected}"):
                                         if current_count > 0:
-                                            remove_row = matches.iloc[-1]
-                                            remove_index = matches.index[-1]
+                                            # 1. Update session state locally immediately
+                                            last_idx = matches.index[-1]
+                                            st.session_state.live_historical_df = st.session_state.live_historical_df.drop(last_idx).reset_index(drop=True)
 
-                                            # Drop from local memory state immediately
-                                            st.session_state.live_historical_df = (
-                                                st.session_state.live_historical_df
-                                                .drop(remove_index)
-                                                .reset_index(drop=True)
-                                            )
-
+                                            # 2. Fire clean remove payload
                                             payload = {
                                                 "Action": "remove",
-                                                "Week_Starting": str(remove_row.get("Week_Starting", week_str)).strip(),
-                                                "Athlete": str(remove_row["Athlete"]).strip(),
-                                                "Metric": str(remove_row["Metric"]).strip(),
-                                                "Day": str(remove_row["Day"]).strip(),
-                                                "Timestamp": str(remove_row.get("Timestamp", "")).strip(),
+                                                "Week_Starting": str(week_str).strip(),
+                                                "Athlete": str(p_name).strip(),
+                                                "Metric": str(m).strip(),
+                                                "Day": str(day_selected).strip(),
                                             }
-
                                             execute_sheet_mutation(payload)
                                             st.cache_data.clear()
                                             st.rerun()
@@ -1308,8 +1271,10 @@ with active_season:
 
                                 with m_col4:
                                     if st.button("➕", key=f"inc_{p_name.replace(' ', '')}_{m}_{day_selected}"):
+                                        # Correct Month/Day/Year timestamp formatting
                                         time_str = local_now.strftime("%m/%d/%Y %H:%M:%S")
 
+                                        # Append row in local state immediately
                                         new_row = pd.DataFrame([{
                                             "Week_Starting": week_str,
                                             "Athlete": str(p_name).strip(),
@@ -1318,23 +1283,21 @@ with active_season:
                                             "Count": 1,
                                             "Timestamp": time_str,
                                         }])
-
-                                        # Append to local memory state immediately
                                         st.session_state.live_historical_df = pd.concat(
                                             [st.session_state.live_historical_df, new_row],
                                             ignore_index=True,
                                         )
 
+                                        # Send add request to Apps Script
                                         payload = {
-                                            "Action": "add",
                                             "Week_Starting": week_str,
                                             "Athlete": str(p_name).strip(),
                                             "Metric": str(m).strip(),
                                             "Day": str(day_selected).strip(),
                                             "Count": 1,
                                             "Timestamp": time_str,
+                                            "Action": "add",
                                         }
-
                                         execute_sheet_mutation(payload)
                                         st.cache_data.clear()
                                         st.rerun()
