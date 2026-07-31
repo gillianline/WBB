@@ -1252,7 +1252,7 @@ with active_season:
                                 with m_col1:
                                     st.markdown(f"<div style='font-size:0.9rem; font-weight:600; color:#0F172A; padding-top:4px;'>{m}</div>", unsafe_allow_html=True)
 
-                               with m_col2:
+                                with m_col2:
                                     if st.button("➖", key=f"dec_{p_name.replace(' ', '')}_{m}_{day_selected}"):
 
                                         if current_count > 0:
