@@ -1166,12 +1166,23 @@ with active_season:
                 or st.secrets.get("Live Track") 
                 or st.secrets.get("sheets", {}).get("live_track_url")
             )
+
             if target_url:
                 try:
-                    res = requests.post(target_url, json=payload, timeout=6)
+                    res = requests.post(
+                        target_url,
+                        json=payload,
+                        timeout=10
+                    )
+
+                    print("STATUS:", res.status_code)
+                    print("RESPONSE:", res.text)
+
                     return res.status_code == 200
+
                 except Exception as err:
-                    print(f"Mutation sync note: {err}")
+                    print("POST ERROR:", err)
+
             return False
 
         # ---------------------------------------------------------------------
