@@ -1160,34 +1160,42 @@ with active_season:
             st.session_state.live_historical_df = fetch_live_gsheet()
 
         # ---------------------------------------------------------------------
-        # FIXED HELPER FUNCTION WITH VISIBLE DASHBOARD ERROR REPORTING
+        # FIXED HELPER FUNCTION WITH ON-SCREEN URL VERIFICATION
         # ---------------------------------------------------------------------
         def execute_sheet_mutation(payload):
+            # Check every possible secret location
             target_url = (
                 st.secrets.get("MACRO_URL") 
                 or st.secrets.get("Live Track") 
-                or st.secrets.get("sheets", {}).get("live_track_url")
-                or st.secrets.get("sheets", {}).get("live_tracking_url")
+                or st.secrets.get("live_track_url")
+                or (st.secrets.get("sheets", {}).get("live_track_url") if isinstance(st.secrets.get("sheets"), dict) else None)
+                or (st.secrets.get("sheets", {}).get("live_tracking_url") if isinstance(st.secrets.get("sheets"), dict) else None)
             )
 
+            # Hard fallback: check top-level connection spreadsheet URL
+            if not target_url and "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
+                target_url = st.secrets["connections"]["gsheets"].get("spreadsheet")
+
             if not target_url:
-                st.error("❌ Sync Error: No valid Webhook URL found in st.secrets!")
+                st.error("❌ Sync Error: Could not find any Webhook URL in st.secrets! Check your secret keys.")
                 return False
 
             try:
+                # Fire POST request and follow Google redirects
                 res = requests.post(
                     target_url,
                     json=payload,
                     headers={"Content-Type": "application/json"},
-                    timeout=8
+                    timeout=10
                 )
                 if res.status_code == 200:
+                    st.toast("✅ Google Sheet updated!", icon="📊")
                     return True
                 else:
-                    st.error(f"❌ Google Sheets Sync Error (Status {res.status_code}): {res.text}")
+                    st.error(f"❌ Google Sheets returned HTTP status {res.status_code}: {res.text}")
                     return False
             except Exception as err:
-                st.error(f"❌ Webhook Sync Error: {err}")
+                st.error(f"❌ Webhook Sync Exception: {err}")
                 return False
 
         # ---------------------------------------------------------------------
