@@ -347,8 +347,7 @@ main_tab = st.sidebar.radio(
         "Practice Score",
         "Compliance",
         "Weekly Data",
-        "Testing",
-        "Live Tracking"
+        "Testing"
     ],
     index=0,
 )
