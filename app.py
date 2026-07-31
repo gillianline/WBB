@@ -231,70 +231,38 @@ def init_live_track_state(roster_players, selected_week, selected_day):
                 st.session_state["live_counts"][player][m] = 0
 
 
-# -----------------------------------------------------------------------------
-# LIVE TRACKING HELPERS & STATE SYNC
-# -----------------------------------------------------------------------------
-def load_live_logs():
-    """Loads existing log counts from the Google Sheet via CSV secret link."""
-    try:
-        url = st.secrets["sheets"]["logs_url"] # Ensure logs_url points to published CSV of Logs sheet
-        req = urllib.request.Request(
-            url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-        )
-        with urllib.request.urlopen(req) as response:
-            content = response.read().decode("utf-8")
-            df = pd.read_csv(io.StringIO(content), on_bad_lines="skip", engine="python")
-            return df
-    except Exception:
-        return pd.DataFrame(columns=["Week_Starting", "Athlete", "Metric", "Day", "Count", "DateTime"])
-
-
-def init_live_track_state(roster_players, selected_week, selected_day):
-    """Initializes and calculates persistent counts from Google Sheet logs."""
-    metrics = ["Box Out", "Turnovers", "Offensive Rebounds"]
-    
-    # Initialize dictionary structure in session state if missing
-    if "live_counts" not in st.session_state:
-        st.session_state["live_counts"] = {}
-
-    logs_df = load_live_logs()
-    
-    for player in roster_players:
-        if player not in st.session_state["live_counts"]:
-            st.session_state["live_counts"][player] = {}
-            
-        for m in metrics:
-            # Query sum from Google Sheet logs for player, metric, week, and day
-            if not logs_df.empty and {"Athlete", "Metric", "Week_Starting", "Day", "Count"}.issubset(logs_df.columns):
-                filtered = logs_df[
-                    (logs_df["Athlete"] == player) &
-                    (logs_df["Metric"] == m) &
-                    (logs_df["Week_Starting"].astype(str) == str(selected_week)) &
-                    (logs_df["Day"].astype(str) == str(selected_day))
-                ]
-                st.session_state["live_counts"][player][m] = int(filtered["Count"].sum()) if not filtered.empty else 0
-            else:
-                st.session_state["live_counts"][player][m] = 0
-
-
 def update_live_tally(athlete, metric, delta, week_val, day_val):
-    """Updates internal state and posts row delta (+1 or -1) to Apps Script."""
+    """Updates active UI tally in session state and sends delta row to Google Sheets via Apps Script."""
+    # 1. Immediately update UI state
     st.session_state["live_counts"][athlete][metric] += delta
     
-    sheet_url = st.secrets.get("Live Track") or st.secrets.get("sheets", {}).get("live_track_url")
-    if sheet_url:
-        payload = {
-            "Week_Starting": str(week_val),
-            "Athlete": athlete,
-            "Metric": metric,
-            "Day": str(day_val),
-            "Count": int(delta)
-        }
-        try:
-            requests.post(sheet_url, json=payload, timeout=5)
-            st.cache_data.clear() # Invalidate cache so UI pulls latest log state
-        except Exception as e:
-            print(f"Sync error: {e}")         
+    # 2. Get Web App URL from secrets
+    sheet_url = st.secrets.get("MACRO_URL") or st.secrets.get("sheets", {}).get("live_track_url")
+    
+    if not sheet_url:
+        st.error("Error: Could not find MACRO_URL in st.secrets.")
+        return
+
+    payload = {
+        "Week_Starting": str(week_val),
+        "Athlete": athlete,
+        "Metric": metric,
+        "Day": str(day_val),
+        "Count": int(delta)
+    }
+
+    try:
+        # Use simple POST with JSON payload. Python's requests library follows 302 redirects automatically.
+        headers = {"Content-Type": "application/json"}
+        response = requests.post(sheet_url, json=payload, headers=headers, timeout=5)
+        
+        # Debug alert if Apps Script returns an error
+        if response.status_code not in [200, 302]:
+            st.warning(f"Sheet sync warning (Status {response.status_code}): {response.text}")
+            
+    except Exception as e:
+        print(f"Sync exception: {e}")
+        
 # -----------------------------------------------------------------------------
 # 4. HELPER FUNCTIONS
 # -----------------------------------------------------------------------------
@@ -1263,14 +1231,14 @@ with active_season:
 
                                 with c_m_label:
                                     st.markdown(f"<p style='margin:6px 0; font-weight:600; font-size:0.88rem; color:#334155;'>{metric}</p>", unsafe_allow_html=True)
-                                
+
                                 with c_btn_minus:
                                     if st.button("➖", key=f"dec_{player_name}_{metric}"):
                                         update_live_tally(player_name, metric, -1, week_starting, day_selected)
                                         st.rerun()
 
                                 with c_val:
-                                    st.markdown(f"<div style='text-align:center; font-weight:800; font-size:1.1rem; color:#FF8200; margin-top:3px;'>{current_val}</div>", unsafe_allow_html=True)
+                                st.markdown(f"<div style='text-align:center; font-weight:800; font-size:1.1rem; color:#FF8200; margin-top:3px;'>{current_val}</div>", unsafe_allow_html=True)
 
                                 with c_btn_plus:
                                     if st.button("➕", key=f"inc_{player_name}_{metric}"):
