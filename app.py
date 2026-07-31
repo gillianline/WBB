@@ -1140,7 +1140,6 @@ with active_season:
                         df["Timestamp"] = ""
 
                     return df
-                    
             except Exception:
                 pass
 
@@ -1160,11 +1159,10 @@ with active_season:
         if "live_historical_df" not in st.session_state:
             st.session_state.live_historical_df = fetch_live_gsheet()
 
-        # -----------------------------------------------------------------------------
-# FIXED HELPER FUNCTIONS FOR GSHEETS MUTATION
-# -----------------------------------------------------------------------------
+        # ---------------------------------------------------------------------
+        # FIXED HELPER FUNCTION WITH VISIBLE DASHBOARD ERROR REPORTING
+        # ---------------------------------------------------------------------
         def execute_sheet_mutation(payload):
-            # Lookup URL across all possible secret key formats
             target_url = (
                 st.secrets.get("MACRO_URL") 
                 or st.secrets.get("Live Track") 
@@ -1173,7 +1171,7 @@ with active_season:
             )
 
             if not target_url:
-                st.error("❌ Sync Error: No valid Google Apps Script Webhook URL found in st.secrets!")
+                st.error("❌ Sync Error: No valid Webhook URL found in st.secrets!")
                 return False
 
             try:
@@ -1181,15 +1179,15 @@ with active_season:
                     target_url,
                     json=payload,
                     headers={"Content-Type": "application/json"},
-                    timeout=10
+                    timeout=8
                 )
                 if res.status_code == 200:
                     return True
                 else:
-                    st.error(f"❌ Google Sheets returned status code {res.status_code}")
+                    st.error(f"❌ Google Sheets Sync Error (Status {res.status_code}): {res.text}")
                     return False
             except Exception as err:
-                st.error(f"❌ Webhook sync error: {err}")
+                st.error(f"❌ Webhook Sync Error: {err}")
                 return False
 
         # ---------------------------------------------------------------------
@@ -1272,22 +1270,17 @@ with active_season:
 
                                 with m_col2:
                                     if st.button("➖", key=f"dec_{p_name.replace(' ', '')}_{m}_{day_selected}"):
-
                                         if current_count > 0:
-
-                                            # Get the exact last matching record
                                             remove_row = matches.iloc[-1]
-
-                                            # Remove locally immediately
                                             remove_index = matches.index[-1]
 
+                                            # Drop from local memory state immediately
                                             st.session_state.live_historical_df = (
                                                 st.session_state.live_historical_df
                                                 .drop(remove_index)
                                                 .reset_index(drop=True)
                                             )
 
-                                            # Send exact row information to Google Sheet
                                             payload = {
                                                 "Action": "remove",
                                                 "Week_Starting": str(remove_row.get("Week_Starting", week_str)).strip(),
@@ -1298,7 +1291,6 @@ with active_season:
                                             }
 
                                             execute_sheet_mutation(payload)
-
                                             st.cache_data.clear()
                                             st.rerun()
 
@@ -1307,10 +1299,8 @@ with active_season:
 
                                 with m_col4:
                                     if st.button("➕", key=f"inc_{p_name.replace(' ', '')}_{m}_{day_selected}"):
-                                        # Correct Month/Day/Year timestamp formatting
                                         time_str = local_now.strftime("%m/%d/%Y %H:%M:%S")
 
-                                        # Append row in local state immediately
                                         new_row = pd.DataFrame([{
                                             "Week_Starting": week_str,
                                             "Athlete": str(p_name).strip(),
@@ -1319,21 +1309,23 @@ with active_season:
                                             "Count": 1,
                                             "Timestamp": time_str,
                                         }])
+
+                                        # Append to local memory state immediately
                                         st.session_state.live_historical_df = pd.concat(
                                             [st.session_state.live_historical_df, new_row],
                                             ignore_index=True,
                                         )
 
-                                        # Send add request to Apps Script
                                         payload = {
+                                            "Action": "add",
                                             "Week_Starting": week_str,
                                             "Athlete": str(p_name).strip(),
                                             "Metric": str(m).strip(),
                                             "Day": str(day_selected).strip(),
                                             "Count": 1,
                                             "Timestamp": time_str,
-                                            "Action": "add",
                                         }
+
                                         execute_sheet_mutation(payload)
                                         st.cache_data.clear()
                                         st.rerun()
