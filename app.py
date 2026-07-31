@@ -1160,30 +1160,37 @@ with active_season:
         if "live_historical_df" not in st.session_state:
             st.session_state.live_historical_df = fetch_live_gsheet()
 
+        # -----------------------------------------------------------------------------
+# FIXED HELPER FUNCTIONS FOR GSHEETS MUTATION
+# -----------------------------------------------------------------------------
         def execute_sheet_mutation(payload):
+            # Lookup URL across all possible secret key formats
             target_url = (
                 st.secrets.get("MACRO_URL") 
                 or st.secrets.get("Live Track") 
                 or st.secrets.get("sheets", {}).get("live_track_url")
+                or st.secrets.get("sheets", {}).get("live_tracking_url")
             )
 
-            if target_url:
-                try:
-                    res = requests.post(
-                        target_url,
-                        json=payload,
-                        timeout=10
-                    )
+            if not target_url:
+                st.error("❌ Sync Error: No valid Google Apps Script Webhook URL found in st.secrets!")
+                return False
 
-                    print("STATUS:", res.status_code)
-                    print("RESPONSE:", res.text)
-
-                    return res.status_code == 200
-
-                except Exception as err:
-                    print("POST ERROR:", err)
-
-            return False
+            try:
+                res = requests.post(
+                    target_url,
+                    json=payload,
+                    headers={"Content-Type": "application/json"},
+                    timeout=10
+                )
+                if res.status_code == 200:
+                    return True
+                else:
+                    st.error(f"❌ Google Sheets returned status code {res.status_code}")
+                    return False
+            except Exception as err:
+                st.error(f"❌ Webhook sync error: {err}")
+                return False
 
         # ---------------------------------------------------------------------
         # 2. SESSION CONTROLS
