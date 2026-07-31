@@ -1245,4 +1245,4 @@ with active_season:
                                         update_live_tally(player_name, metric, 1, week_starting, day_selected)
                                         st.rerun()
 
-                                st.markdown('</div>', unsafe_allow_html=True)
+                                    st.markdown('</div>', unsafe_allow_html=True)
