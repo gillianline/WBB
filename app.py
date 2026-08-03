@@ -99,17 +99,21 @@ st.markdown(
         .vball-table tr:last-child td { border-bottom: none; }
         .grade-badge { font-weight: 700; padding: 2px 8px; border-radius: 4px; display: inline-block; }
 
-        .compliance-card {
-            background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 10px;
-            padding: 16px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+        .compliance-wrapper {
+            background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px;
+            padding: 20px; margin-bottom: 25px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+        }
+        .compliance-subcard {
+            background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 10px;
+            padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); height: 100%;
         }
         .compliance-metric-card {
             background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px;
-            padding: 10px 8px; text-align: center;
+            padding: 8px 6px; text-align: center;
         }
-        .compliance-metric-label { font-size: 0.7rem; font-weight: 700; color: #64748B; text-transform: uppercase; margin-bottom: 2px; }
-        .compliance-metric-value { font-size: 1.1rem; font-weight: 800; color: #0F172A; }
-        .compliance-metric-sub { font-size: 0.7rem; color: #94A3B8; margin-top: 2px; }
+        .compliance-metric-label { font-size: 0.68rem; font-weight: 700; color: #64748B; text-transform: uppercase; margin-bottom: 2px; }
+        .compliance-metric-value { font-size: 1.05rem; font-weight: 800; color: #0F172A; }
+        .compliance-metric-sub { font-size: 0.68rem; color: #94A3B8; margin-top: 2px; }
     </style>
 """,
     unsafe_allow_html=True,
@@ -370,8 +374,8 @@ def create_team_bar_athlete_line_chart(
     return fig
 
 
-def render_full_compliance_card(player_name, p_pos, p_img, p_comp, col_name, title_name, unit):
-    """Renders the full original compliance card layout with player header, recency badge, and 2x2 grid."""
+def render_metric_subcard_html(p_comp, col_name, title_name, unit):
+    """Renders a clean individual metric card with recency badge without player pictures."""
     if p_comp.empty or col_name not in p_comp.columns:
         return ""
 
@@ -403,22 +407,16 @@ def render_full_compliance_card(player_name, p_pos, p_img, p_comp, col_name, tit
     max_str = f"{all_time_max:.1f} {unit}" if isinstance(all_time_max, (int, float)) else str(all_time_max)
 
     return f"""
-    <div class="compliance-card">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-            <div style="display: flex; align-items: center; gap: 12px;">
-                <img src="{p_img}" class="athlete-avatar" style="width:45px; height:45px;">
-                <div>
-                    <h4 style="margin:0; font-size:1.05rem; color:#0F172A;">{player_name}</h4>
-                    <span style="color:#64748B; font-size:0.75rem;">{title_name} ({unit})</span>
-                </div>
-            </div>
-            <div style="background-color:{badge_bg}; color:{badge_fg}; font-weight:700; padding:4px 10px; border-radius:12px; font-size:0.75rem;">
+    <div class="compliance-subcard">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+            <h5 style="margin:0; font-size:0.95rem; color:#0F172A; font-weight:700;">{title_name}</h5>
+            <div style="background-color:{badge_bg}; color:{badge_fg}; font-weight:700; padding:2px 8px; border-radius:10px; font-size:0.7rem;">
                 {days_since} Days
             </div>
         </div>
-        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
             <div class="compliance-metric-card">
-                <div class="compliance-metric-label">Recent {title_name}</div>
+                <div class="compliance-metric-label">Recent</div>
                 <div class="compliance-metric-value">{val_str}</div>
                 <div class="compliance-metric-sub">{recent_date}</div>
             </div>
@@ -428,9 +426,9 @@ def render_full_compliance_card(player_name, p_pos, p_img, p_comp, col_name, tit
                 <div class="compliance-metric-sub">{max_date}</div>
             </div>
             <div class="compliance-metric-card">
-                <div class="compliance-metric-label">% of All-Time Max</div>
+                <div class="compliance-metric-label">% Peak Output</div>
                 <div class="compliance-metric-value" style="color:#FF8200;">{pct_max}</div>
-                <div class="compliance-metric-sub">Recent vs. Peak Output</div>
+                <div class="compliance-metric-sub">Recent vs. Peak</div>
             </div>
             <div class="compliance-metric-card">
                 <div class="compliance-metric-label">Recency Status</div>
@@ -542,7 +540,7 @@ with active_season:
         )
 
         # ---------------------------------------------------------------------
-        # 1. INDIVIDUAL COMPLIANCE CARDS (2 CARDS PER ROW WITH RECENCY DAYS BADGE)
+        # 1. ENCOMPASSING WORKLOAD COMPLIANCE BOARD
         # ---------------------------------------------------------------------
         st.markdown(
             '<div class="vball-section-title">1. Workload Exposure & Compliance Grid</div>',
@@ -558,9 +556,9 @@ with active_season:
                 metric_idx = row_idx + j
                 if metric_idx < len(compliance_metrics):
                     col_name, display_title, unit = compliance_metrics[metric_idx]
-                    card_html = render_full_compliance_card(selected_player, p_pos, p_img, p_comp, col_name, display_title, unit)
+                    subcard_html = render_metric_subcard_html(p_comp, col_name, display_title, unit)
                     with cols[j]:
-                        st.markdown(card_html, unsafe_allow_html=True)
+                        st.markdown(subcard_html, unsafe_allow_html=True)
 
         st.divider()
 
@@ -958,9 +956,9 @@ with active_season:
                 metric_idx = row_idx + j
                 if metric_idx < len(compliance_metrics):
                     col_name, display_title, unit = compliance_metrics[metric_idx]
-                    card_html = render_full_compliance_card(selected_player_comp, p_pos, p_img, p_comp, col_name, display_title, unit)
+                    subcard_html = render_metric_subcard_html(p_comp, col_name, display_title, unit)
                     with cols[j]:
-                        st.markdown(card_html, unsafe_allow_html=True)
+                        st.markdown(subcard_html, unsafe_allow_html=True)
 
     # =========================================================================
     # TAB 4: WEEKLY DATA
