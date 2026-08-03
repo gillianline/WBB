@@ -374,7 +374,6 @@ def create_team_bar_athlete_line_chart(
 # 5. SIDEBAR NAVIGATION
 # -----------------------------------------------------------------------------
 st.sidebar.markdown("### LADY VOLS BASKETBALL")
-st.sidebar.caption("Performance Analytics Console")
 
 main_tab = st.sidebar.radio(
     "Console View:",
