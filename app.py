@@ -391,7 +391,7 @@ main_tab = st.sidebar.radio(
 st.sidebar.divider()
 st.sidebar.markdown("### DATA MANAGEMENT")
 
-if st.sidebar.button("🔄 Refresh Google Sheets Data"):
+if st.sidebar.button("Refresh Google Sheets Data"):
     st.cache_data.clear()
     st.sidebar.success("Data reloaded!")
     st.rerun()
