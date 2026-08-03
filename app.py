@@ -24,7 +24,6 @@ def save_to_secret_sheet(athlete, metric, count_val):
     }
 
     try:
-        # requests.post automatically follows Google's 302 redirects while preserving payload data
         response = requests.post(sheet_url, json=payload, timeout=5)
         print(f"Sync Response: {response.status_code}")
     except Exception as e:
@@ -169,13 +168,11 @@ def load_sheet_data():
         cmj_df = fetch_csv("cmj_url")
         roster_df = fetch_csv("roster_url")
 
-        # Clean date columns across all dataframes
-        # Clean date columns across all dataframes
         for df in [vol_df, int_df, comp_df, weekly_df, cmj_df]:
             date_col = [c for c in df.columns if "date" in c.lower()]
             if date_col:
                 df["Date"] = pd.to_datetime(df[date_col[0]], errors="coerce")
-                df["Date_Str"] = df["Date"].dt.strftime("%Y-%m-%d")  # Ensures clean YYYY-MM-DD
+                df["Date_Str"] = df["Date"].dt.strftime("%Y-%m-%d")
 
         return vol_df, int_df, comp_df, weekly_df, cmj_df, roster_df
     except Exception as e:
@@ -334,6 +331,45 @@ def get_clean_jump_col(df):
     return None
 
 
+def create_team_bar_athlete_line_chart(
+    weeks, team_avg_vals, athlete_vals, title_text, athlete_name, bar_color="#38BDF8"
+):
+    fig = go.Figure()
+    fig.add_trace(
+        go.Bar(
+            x=weeks, y=team_avg_vals, name="Team Average", marker_color=bar_color
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=weeks,
+            y=athlete_vals,
+            name=f"{athlete_name} Output",
+            mode="markers",
+            marker=dict(
+                symbol="line-ew", size=24, line=dict(width=3, color="black")
+            ),
+        )
+    )
+    fig.update_layout(
+        title=title_text,
+        title_font=dict(size=14, color="#0F172A"),
+        height=250,
+        margin=dict(l=0, r=0, t=35, b=0),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1,
+        ),
+    )
+    return fig
+
+
 # -----------------------------------------------------------------------------
 # 5. SIDEBAR NAVIGATION
 # -----------------------------------------------------------------------------
@@ -390,7 +426,7 @@ with active_season:
     )
 
     # =========================================================================
-    # TAB 1: INDIVIDUAL PROFILE
+    # TAB 1: INDIVIDUAL PROFILE (ALL-IN-ONE ATHLETE HUB)
     # =========================================================================
     if main_tab == "Individual Profile":
         c_sel, _ = st.columns([1, 2])
@@ -422,13 +458,149 @@ with active_season:
             unsafe_allow_html=True,
         )
 
+        # ---------------------------------------------------------------------
+        # 1. COMPLIANCE SNAPSHOT (SPEED & CMJ)
+        # ---------------------------------------------------------------------
+        st.markdown(
+            '<div class="vball-section-title">1. Speed & CMJ Compliance Overview</div>',
+            unsafe_allow_html=True,
+        )
+        col_comp1, col_comp2 = st.columns(2)
+
+        # Speed Compliance
+        p_comp = comp_raw[comp_raw["Player"] == selected_player].sort_values("Date")
+        with col_comp1:
+            if not p_comp.empty:
+                all_time_max = p_comp["Speed (MPH)"].max()
+                max_row = p_comp[p_comp["Speed (MPH)"] == all_time_max].iloc[-1]
+                max_date = max_row["Date_Str"]
+
+                recent_row = p_comp.iloc[-1]
+                recent_speed = recent_row["Speed (MPH)"]
+                recent_date = recent_row["Date_Str"]
+
+                pct_max = (
+                    f"{(recent_speed / all_time_max * 100):.1f}%"
+                    if all_time_max > 0
+                    else "-- %"
+                )
+                days_since = (
+                    pd.to_datetime("today") - pd.to_datetime(max_date)
+                ).days
+
+                badge_bg = "#BBF7D0" if days_since <= 7 else "#FFD6D6"
+                badge_fg = "#166534" if days_since <= 7 else "#991B1B"
+
+                st.markdown(
+                    f"""
+                    <div class="compliance-card">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                            <h4 style="margin:0; font-size:1.05rem; color:#0F172A; font-weight:700;">Max Speed Exposure</h4>
+                            <div style="background-color:{badge_bg}; color:{badge_fg}; font-weight:700; padding:4px 10px; border-radius:12px; font-size:0.75rem;">
+                                {days_since} Days Since Peak
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+                            <div class="compliance-metric-card">
+                                <div class="compliance-metric-label">Recent Speed</div>
+                                <div class="compliance-metric-value">{recent_speed:.1f} mph</div>
+                                <div class="compliance-metric-sub">{recent_date}</div>
+                            </div>
+                            <div class="compliance-metric-card">
+                                <div class="compliance-metric-label">All-Time Max</div>
+                                <div class="compliance-metric-value">{all_time_max:.1f} mph</div>
+                                <div class="compliance-metric-sub">{max_date}</div>
+                            </div>
+                            <div class="compliance-metric-card">
+                                <div class="compliance-metric-label">% Peak Output</div>
+                                <div class="compliance-metric-value" style="color:#FF8200;">{pct_max}</div>
+                                <div class="compliance-metric-sub">Recent vs. Peak</div>
+                            </div>
+                            <div class="compliance-metric-card">
+                                <div class="compliance-metric-label">Recency Status</div>
+                                <div class="compliance-metric-value">{days_since} Days</div>
+                                <div class="compliance-metric-sub">Elapsed Threshold</div>
+                            </div>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+        # CMJ Compliance
+        p_cmj_comp = cmj_raw[cmj_raw["Name"] == selected_player].sort_values("Date")
+        j_col_comp = get_clean_jump_col(p_cmj_comp)
+        with col_comp2:
+            if not p_cmj_comp.empty and j_col_comp:
+                all_time_max_cmj = p_cmj_comp[j_col_comp].max()
+                max_row_cmj = p_cmj_comp[p_cmj_comp[j_col_comp] == all_time_max_cmj].iloc[-1]
+                max_date_cmj = max_row_cmj["Date_Str"]
+
+                recent_row_cmj = p_cmj_comp.iloc[-1]
+                recent_cmj = recent_row_cmj[j_col_comp]
+                recent_date_cmj = recent_row_cmj["Date_Str"]
+
+                pct_max_cmj = (
+                    f"{(recent_cmj / all_time_max_cmj * 100):.1f}%"
+                    if all_time_max_cmj > 0
+                    else "-- %"
+                )
+                days_since_cmj = (
+                    pd.to_datetime("today") - pd.to_datetime(max_date_cmj)
+                ).days
+
+                badge_bg_cmj = "#BBF7D0" if days_since_cmj <= 7 else "#FFD6D6"
+                badge_fg_cmj = "#166534" if days_since_cmj <= 7 else "#991B1B"
+
+                st.markdown(
+                    f"""
+                    <div class="compliance-card">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                            <h4 style="margin:0; font-size:1.05rem; color:#0F172A; font-weight:700;">CMJ Jump Height Exposure</h4>
+                            <div style="background-color:{badge_bg_cmj}; color:{badge_fg_cmj}; font-weight:700; padding:4px 10px; border-radius:12px; font-size:0.75rem;">
+                                {days_since_cmj} Days Since Peak
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+                            <div class="compliance-metric-card">
+                                <div class="compliance-metric-label">Recent Jump</div>
+                                <div class="compliance-metric-value">{recent_cmj:.1f} cm</div>
+                                <div class="compliance-metric-sub">{recent_date_cmj}</div>
+                            </div>
+                            <div class="compliance-metric-card">
+                                <div class="compliance-metric-label">All-Time Max</div>
+                                <div class="compliance-metric-value">{all_time_max_cmj:.1f} cm</div>
+                                <div class="compliance-metric-sub">{max_date_cmj}</div>
+                            </div>
+                            <div class="compliance-metric-card">
+                                <div class="compliance-metric-label">% Peak Output</div>
+                                <div class="compliance-metric-value" style="color:#FF8200;">{pct_max_cmj}</div>
+                                <div class="compliance-metric-sub">Recent vs. Peak</div>
+                            </div>
+                            <div class="compliance-metric-card">
+                                <div class="compliance-metric-label">Recency Status</div>
+                                <div class="compliance-metric-value">{days_since_cmj} Days</div>
+                                <div class="compliance-metric-sub">Elapsed Threshold</div>
+                            </div>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+        st.divider()
+
+        # ---------------------------------------------------------------------
+        # 2. PRACTICE SCORES & RECENT BREAKDOWN
+        # ---------------------------------------------------------------------
+        st.markdown(
+            '<div class="vball-section-title">2. Practice Performance & Score Trends</div>',
+            unsafe_allow_html=True,
+        )
         col_g1, col_g2 = st.columns(2)
 
         with col_g1:
-            st.markdown(
-                '<div class="vball-section-title">Practice Scores History</div>',
-                unsafe_allow_html=True,
-            )
+            st.markdown("#### Practice Score History")
             v_p = vol_raw[vol_raw["Player"] == selected_player].sort_values("Date")
 
             if not v_p.empty:
@@ -466,31 +638,6 @@ with active_season:
                 )
                 st.plotly_chart(fig1, use_container_width=True)
 
-        with col_g2:
-            st.markdown(
-                '<div class="vball-section-title">CMJ History</div>',
-                unsafe_allow_html=True,
-            )
-            cmj_p = cmj_raw[cmj_raw["Name"] == selected_player].sort_values("Date")
-            j_col = get_clean_jump_col(cmj_p)
-
-            if not cmj_p.empty and j_col:
-                fig2 = px.bar(
-                    cmj_p, x="Date_Str", y=j_col, color_discrete_sequence=["#94A3B8"]
-                )
-                fig2.update_layout(
-                    margin=dict(l=0, r=0, t=10, b=0),
-                    height=230,
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    xaxis_title=None,
-                    yaxis_title="Jump Height",
-                )
-                st.plotly_chart(fig2, use_container_width=True)
-
-        st.divider()
-
-        st.markdown("### Most Recent Practice Score Breakdown")
         latest_date_str = vol_raw[vol_raw["Player"] == selected_player][
             "Date_Str"
         ].max()
@@ -503,55 +650,229 @@ with active_season:
             wk_str = str(wk).replace("Week ", "")
             dy_str = str(dy).replace("Day ", "")
 
-            st.markdown(
-                f"""
-                    <div style="margin-bottom: 12px; display: flex; gap: 10px;">
-                        <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Minutes: {mins}</span>
-                        <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Week {wk_str}</span>
-                        <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Day {dy_str}</span>
-                    </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            col_v, col_i = st.columns(2)
-
-            with col_v:
+            with col_g2:
+                st.markdown(f"#### Latest Practice Metrics ({latest_date_str})")
                 st.markdown(
-                    '<div class="vball-section-title">Volume Score Metrics</div>',
+                    f"""
+                        <div style="margin-bottom: 12px; display: flex; gap: 10px;">
+                            <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Minutes: {mins}</span>
+                            <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Week {wk_str}</span>
+                            <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Day {dy_str}</span>
+                        </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                col_v_sc, col_i_sc = st.columns(2)
+                v_bg, v_fg = get_vball_color(vol_score)
+                i_bg, i_fg = get_vball_color(int_score)
+
+                with col_v_sc:
+                    st.markdown(
+                        f"""
+                            <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:10px; text-align:center;">
+                                <div style="font-weight: 700; color: #64748B; font-size: 0.85rem;">VOLUME SCORE</div>
+                                <div style="font-size: 1.8rem; font-weight: 800; padding: 4px 0; border-radius: 6px; background-color: {v_bg}; color: {v_fg}; margin-top: 4px;">{vol_score}</div>
+                            </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                with col_i_sc:
+                    st.markdown(
+                        f"""
+                            <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:10px; text-align:center;">
+                                <div style="font-weight: 700; color: #64748B; font-size: 0.85rem;">INTENSITY SCORE</div>
+                                <div style="font-size: 1.8rem; font-weight: 800; padding: 4px 0; border-radius: 6px; background-color: {i_bg}; color: {i_fg}; margin-top: 4px;">{int_score}</div>
+                            </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+            col_v_tbl, col_i_tbl = st.columns(2)
+            with col_v_tbl:
+                st.markdown(
+                    '<div style="font-weight:700; font-size:0.9rem; margin: 10px 0 5px 0;">Volume Breakdown</div>',
                     unsafe_allow_html=True,
                 )
                 st.markdown(render_vball_table(vol_df), unsafe_allow_html=True)
-                v_bg, v_fg = get_vball_color(vol_score)
+            with col_i_tbl:
                 st.markdown(
-                    f"""
-                        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:10px; text-align:center; margin-top:10px;">
-                            <div style="font-weight: 700; color: #64748B; font-size: 0.9rem;">VOLUME SCORE</div>
-                            <div style="font-size: 2rem; font-weight: 800; padding: 6px 0; border-radius: 6px; background-color: {v_bg}; color: {v_fg}; margin-top: 4px;">{vol_score}</div>
-                        </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-            with col_i:
-                st.markdown(
-                    '<div class="vball-section-title">Intensity Score Metrics</div>',
+                    '<div style="font-weight:700; font-size:0.9rem; margin: 10px 0 5px 0;">Intensity Breakdown</div>',
                     unsafe_allow_html=True,
                 )
                 st.markdown(render_vball_table(int_df), unsafe_allow_html=True)
-                i_bg, i_fg = get_vball_color(int_score)
-                st.markdown(
-                    f"""
-                        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:10px; text-align:center; margin-top:10px;">
-                            <div style="font-weight: 700; color: #64748B; font-size: 0.9rem;">INTENSITY SCORE</div>
-                            <div style="font-size: 2rem; font-weight: 800; padding: 6px 0; border-radius: 6px; background-color: {i_bg}; color: {i_fg}; margin-top: 4px;">{int_score}</div>
-                        </div>
-                    """,
-                    unsafe_allow_html=True,
+
+        st.divider()
+
+        # ---------------------------------------------------------------------
+        # 3. JUMP TESTING HISTORY & DUAL-AXIS TREND
+        # ---------------------------------------------------------------------
+        st.markdown(
+            '<div class="vball-section-title">3. Jump Performance & RSI Tracking</div>',
+            unsafe_allow_html=True,
+        )
+
+        p_cmj_ind = cmj_raw[cmj_raw["Name"] == selected_player].sort_values("Date").copy()
+        jump_cols_ind = [c for c in p_cmj_ind.columns if "jump" in c.lower() or "height" in c.lower()]
+        j_col_ind = jump_cols_ind[0] if jump_cols_ind else None
+        rsi_cols_ind = [c for c in p_cmj_ind.columns if "rsi" in c.lower()]
+        rsi_col_ind = rsi_cols_ind[0] if rsi_cols_ind else None
+
+        if not p_cmj_ind.empty and j_col_ind:
+            p_cmj_ind["Jump_Height_Clean"] = pd.to_numeric(
+                p_cmj_ind[j_col_ind].astype(str).str.replace(r"[^0-9.]", "", regex=True),
+                errors="coerce",
+            )
+
+            fig_jump_trend = go.Figure()
+            fig_jump_trend.add_trace(
+                go.Scatter(
+                    x=p_cmj_ind["Date"],
+                    y=p_cmj_ind["Jump_Height_Clean"],
+                    name="Jump Height",
+                    mode="lines+markers",
+                    connectgaps=True,
+                    yaxis="y",
+                    line=dict(color="#FF8200", width=4),
+                    marker=dict(size=8, color="#FF8200"),
+                )
+            )
+
+            if rsi_col_ind:
+                p_cmj_ind["RSI_Clean"] = pd.to_numeric(
+                    p_cmj_ind[rsi_col_ind].astype(str).str.replace(r"[^0-9.]", "", regex=True),
+                    errors="coerce",
+                )
+                fig_jump_trend.add_trace(
+                    go.Scatter(
+                        x=p_cmj_ind["Date"],
+                        y=p_cmj_ind["RSI_Clean"],
+                        name="RSI Modified",
+                        mode="lines+markers",
+                        connectgaps=True,
+                        yaxis="y2",
+                        line=dict(color="#38BDF8", width=3, dash="dot"),
+                        marker=dict(size=8, color="#38BDF8"),
+                    )
                 )
 
+            fig_jump_trend.update_layout(
+                height=300,
+                margin=dict(l=40, r=40, t=40, b=40),
+                plot_bgcolor="rgba(0,0,0,0)",
+                paper_bgcolor="rgba(0,0,0,0)",
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.08,
+                    xanchor="left",
+                    x=0.01,
+                    font=dict(size=13, color="#0F172A"),
+                ),
+                xaxis=dict(
+                    title=None,
+                    type="date",
+                    tickformat="%b %d\n%Y",
+                    showgrid=False,
+                    showline=True,
+                    linewidth=1.5,
+                    linecolor="#0F172A",
+                    tickfont=dict(color="#64748B", size=12),
+                ),
+                yaxis=dict(
+                    showgrid=False,
+                    showline=True,
+                    linewidth=1.5,
+                    linecolor="#0F172A",
+                    tickfont=dict(color="#64748B", size=12),
+                    side="left",
+                ),
+                yaxis2=dict(
+                    showgrid=False,
+                    showline=True,
+                    linewidth=1.5,
+                    linecolor="#0F172A",
+                    tickfont=dict(color="#64748B", size=12),
+                    overlaying="y",
+                    side="right",
+                    anchor="x",
+                ),
+            )
+            st.plotly_chart(fig_jump_trend, use_container_width=True)
+
+            with st.expander(f"View Raw CMJ Data Log for {selected_player}"):
+                display_cols_ind = [c for c in p_cmj_ind.columns if c not in ["Name", "Date_Str", "Jump_Height_Clean", "RSI_Clean"]]
+                st.markdown(render_vball_table(p_cmj_ind[display_cols_ind]), unsafe_allow_html=True)
+
+        st.divider()
+
+        # ---------------------------------------------------------------------
+        # 4. WEEKLY WORKLOAD VS. TEAM AVERAGE
+        # ---------------------------------------------------------------------
+        st.markdown(
+            '<div class="vball-section-title">4. Weekly Output vs. Team Averages</div>',
+            unsafe_allow_html=True,
+        )
+
+        p_weekly = weekly_raw[weekly_raw["Player"] == selected_player]
+        t_weekly_avg = (
+            weekly_raw.groupby("Week")
+            .agg({
+                "Distance (mi)": "mean",
+                "Distance (speed | High Speed) (mi)": "mean",
+                "Accumulated Acceleration Load": "mean",
+                "Decels Load": "mean",
+            })
+            .reset_index()
+        )
+
+        all_weeks = t_weekly_avg["Week"].tolist()
+
+        col_p1, col_p2 = st.columns(2)
+        with col_p1:
+            fig_ind_td = create_team_bar_athlete_line_chart(
+                all_weeks,
+                t_weekly_avg["Distance (mi)"],
+                p_weekly["Distance (mi)"],
+                f"Total Distance (mi)",
+                selected_player,
+                "#FF8200",
+            )
+            st.plotly_chart(fig_ind_td, use_container_width=True)
+
+            fig_ind_aal = create_team_bar_athlete_line_chart(
+                all_weeks,
+                t_weekly_avg["Accumulated Acceleration Load"],
+                p_weekly["Accumulated Acceleration Load"],
+                f"Accumulated Acceleration Load (AAL)",
+                selected_player,
+                "#38BDF8",
+            )
+            st.plotly_chart(fig_ind_aal, use_container_width=True)
+
+        with col_p2:
+            fig_ind_hsd = create_team_bar_athlete_line_chart(
+                all_weeks,
+                t_weekly_avg["Distance (speed | High Speed) (mi)"],
+                p_weekly["Distance (speed | High Speed) (mi)"],
+                f"High Speed Distance (mi)",
+                selected_player,
+                "#FF8200",
+            )
+            st.plotly_chart(fig_ind_hsd, use_container_width=True)
+
+            fig_ind_dl = create_team_bar_athlete_line_chart(
+                all_weeks,
+                t_weekly_avg["Decels Load"],
+                p_weekly["Decels Load"],
+                f"Deceleration Load",
+                selected_player,
+                "#38BDF8",
+            )
+            st.plotly_chart(fig_ind_dl, use_container_width=True)
+
     # =========================================================================
-    # TAB 2: PRACTICE SCORE
+    # TAB 2: PRACTICE SCORE (TEAM/SESSION VIEW)
     # =========================================================================
     elif main_tab == "Practice Score":
         c_d, _ = st.columns([1, 3])
@@ -627,7 +948,7 @@ with active_season:
             st.markdown(single_box_card_html, unsafe_allow_html=True)
 
     # =========================================================================
-    # TAB 3: COMPLIANCE
+    # TAB 3: COMPLIANCE (TEAM GRID VIEW)
     # =========================================================================
     elif main_tab == "Compliance":
         comp_sub_tab1, comp_sub_tab2 = st.tabs(
@@ -820,7 +1141,7 @@ with active_season:
                                 )
 
     # =========================================================================
-    # TAB 4: WEEKLY DATA
+    # TAB 4: WEEKLY DATA (TEAM OVERVIEW & INDIVIDUAL COMPARISON)
     # =========================================================================
     elif main_tab == "Weekly Data":
         st.markdown(
@@ -892,44 +1213,6 @@ with active_season:
 
         all_weeks = t_weekly_avg["Week"].tolist()
 
-        def create_team_bar_athlete_line_chart(
-            weeks, team_avg_vals, athlete_vals, title_text, bar_color="#38BDF8"
-        ):
-            fig = go.Figure()
-            fig.add_trace(
-                go.Bar(
-                    x=weeks, y=team_avg_vals, name="Team Average", marker_color=bar_color
-                )
-            )
-            fig.add_trace(
-                go.Scatter(
-                    x=weeks,
-                    y=athlete_vals,
-                    name=f"{selected_player_w} Output",
-                    mode="markers",
-                    marker=dict(
-                        symbol="line-ew", size=24, line=dict(width=3, color="black")
-                    ),
-                )
-            )
-            fig.update_layout(
-                title=title_text,
-                title_font=dict(size=14, color="#0F172A"),
-                height=250,
-                margin=dict(l=0, r=0, t=35, b=0),
-                plot_bgcolor="rgba(0,0,0,0)",
-                paper_bgcolor="rgba(0,0,0,0)",
-                showlegend=True,
-                legend=dict(
-                    orientation="h",
-                    yanchor="bottom",
-                    y=1.02,
-                    xanchor="right",
-                    x=1,
-                ),
-            )
-            return fig
-
         col_p1, col_p2 = st.columns(2)
         with col_p1:
             fig_ind_td = create_team_bar_athlete_line_chart(
@@ -937,6 +1220,7 @@ with active_season:
                 t_weekly_avg["Distance (mi)"],
                 p_weekly["Distance (mi)"],
                 f"Total Distance (mi) — {selected_player_w}",
+                selected_player_w,
                 "#FF8200",
             )
             st.plotly_chart(fig_ind_td, use_container_width=True)
@@ -946,6 +1230,7 @@ with active_season:
                 t_weekly_avg["Accumulated Acceleration Load"],
                 p_weekly["Accumulated Acceleration Load"],
                 f"AAL — {selected_player_w}",
+                selected_player_w,
                 "#38BDF8",
             )
             st.plotly_chart(fig_ind_aal, use_container_width=True)
@@ -956,6 +1241,7 @@ with active_season:
                 t_weekly_avg["Distance (speed | High Speed) (mi)"],
                 p_weekly["Distance (speed | High Speed) (mi)"],
                 f"High Speed Distance (mi) — {selected_player_w}",
+                selected_player_w,
                 "#FF8200",
             )
             st.plotly_chart(fig_ind_hsd, use_container_width=True)
@@ -965,12 +1251,13 @@ with active_season:
                 t_weekly_avg["Decels Load"],
                 p_weekly["Decels Load"],
                 f"Deceleration Load — {selected_player_w}",
+                selected_player_w,
                 "#38BDF8",
             )
             st.plotly_chart(fig_ind_dl, use_container_width=True)
 
     # =========================================================================
-    # TAB 5: TESTING
+    # TAB 5: TESTING (TEAM CMJ LOOKUP)
     # =========================================================================
     elif main_tab == "Testing":
         st.markdown(
@@ -984,7 +1271,6 @@ with active_season:
 
         p_cmj = cmj_raw[cmj_raw["Name"] == selected_player_t].sort_values("Date").copy()
 
-        # Robust column detection
         jump_cols = [c for c in p_cmj.columns if "jump" in c.lower() or "height" in c.lower()]
         j_col = jump_cols[0] if jump_cols else None
 
@@ -998,7 +1284,6 @@ with active_season:
         st.markdown("<br>", unsafe_allow_html=True)
 
         if not p_cmj.empty and j_col:
-            # Clean numeric values directly
             p_cmj["Jump_Height_Clean"] = pd.to_numeric(
                 p_cmj[j_col].astype(str).str.replace(r"[^0-9.]", "", regex=True),
                 errors="coerce",
@@ -1006,10 +1291,9 @@ with active_season:
 
             fig_jump_trend = go.Figure()
 
-            # 1. ORANGE SOLID LINE: JUMP HEIGHT (Left Axis)
             fig_jump_trend.add_trace(
                 go.Scatter(
-                    x=p_cmj["Date"],  # Pass raw datetime series
+                    x=p_cmj["Date"],
                     y=p_cmj["Jump_Height_Clean"],
                     name="Jump Height",
                     mode="lines+markers",
@@ -1020,7 +1304,6 @@ with active_season:
                 )
             )
 
-            # 2. BLUE DOTTED LINE: RSI MODIFIED (Right Axis)
             if rsi_col:
                 p_cmj["RSI_Clean"] = pd.to_numeric(
                     p_cmj[rsi_col].astype(str).str.replace(r"[^0-9.]", "", regex=True),
@@ -1039,14 +1322,11 @@ with active_season:
                     )
                 )
 
-            # 3. DUAL Y-AXES LAYOUT
             fig_jump_trend.update_layout(
                 height=320,
                 margin=dict(l=40, r=40, t=50, b=40),
                 plot_bgcolor="rgba(0,0,0,0)",
                 paper_bgcolor="rgba(0,0,0,0)",
-                
-                # Top-Left Horizontal Legend
                 legend=dict(
                     orientation="h",
                     yanchor="bottom",
@@ -1055,20 +1335,16 @@ with active_season:
                     x=0.01,
                     font=dict(size=13, color="#0F172A"),
                 ),
-                
-                # Bottom X-Axis (Explicit Plotly Date Formatter)
                 xaxis=dict(
                     title=None,
                     type="date",
-                    tickformat="%b %d\n%Y",  # Overrides default 00:00:00 time format
+                    tickformat="%b %d\n%Y",
                     showgrid=False,
                     showline=True,
                     linewidth=1.5,
                     linecolor="#0F172A",
                     tickfont=dict(color="#64748B", size=12),
                 ),
-                
-                # Left Y-Axis (Jump Height)
                 yaxis=dict(
                     showgrid=False,
                     showline=True,
@@ -1077,8 +1353,6 @@ with active_season:
                     tickfont=dict(color="#64748B", size=12),
                     side="left",
                 ),
-                
-                # Right Y-Axis (RSI Modified)
                 yaxis2=dict(
                     showgrid=False,
                     showline=True,
