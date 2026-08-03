@@ -105,11 +105,11 @@ st.markdown(
         }
         .compliance-metric-card {
             background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px;
-            padding: 10px 8px; text-align: center;
+            padding: 12px; text-align: center; height: 100%;
         }
-        .compliance-metric-label { font-size: 0.7rem; font-weight: 700; color: #64748B; text-transform: uppercase; margin-bottom: 2px; }
-        .compliance-metric-value { font-size: 1.1rem; font-weight: 800; color: #0F172A; }
-        .compliance-metric-sub { font-size: 0.7rem; color: #94A3B8; margin-top: 2px; }
+        .compliance-metric-label { font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase; margin-bottom: 4px; }
+        .compliance-metric-value { font-size: 1.25rem; font-weight: 800; color: #0F172A; }
+        .compliance-metric-sub { font-size: 0.72rem; color: #94A3B8; margin-top: 3px; }
     </style>
 """,
     unsafe_allow_html=True,
@@ -370,49 +370,69 @@ def create_team_bar_athlete_line_chart(
     return fig
 
 
-def render_compliance_metrics_grid(df_player):
-    """Renders the standard compliance card metrics including speed and all 7 extended metrics."""
-    if df_player.empty:
-        return ""
+def render_standalone_compliance_card(df_player, metric_col, title_name, unit):
+    """Renders a dedicated standalone compliance card for a single metric."""
+    if df_player.empty or metric_col not in df_player.columns:
+        return f"""
+        <div class="compliance-metric-card">
+            <div class="compliance-metric-label">{title_name}</div>
+            <div class="compliance-metric-value">--</div>
+            <div class="compliance-metric-sub">No Data Available</div>
+        </div>
+        """
 
-    # Defined compliance metrics with short labels
-    metrics_to_track = [
-        ("Speed (MPH)", "Max Speed", "mph"),
-        ("Distance (mi)", "Distance", "mi"),
-        ("High Metabolic Power Distance (m)", "High Met Power", "m"),
-        ("Accumulated Acceleration Load", "AAL", "load"),
-        ("Decels Load", "Decels Load", "load"),
-        ("Sprints", "Sprints", "cnt"),
-        ("MCTs", "MCTs", "cnt"),
-        ("FCTs", "FCTs", "cnt"),
-    ]
+    valid_df = df_player.dropna(subset=[metric_col])
+    if valid_df.empty:
+        return f"""
+        <div class="compliance-metric-card">
+            <div class="compliance-metric-label">{title_name}</div>
+            <div class="compliance-metric-value">--</div>
+            <div class="compliance-metric-sub">No Data Available</div>
+        </div>
+        """
 
-    cards_html = ""
-    for col_name, label, unit in metrics_to_track:
-        if col_name in df_player.columns:
-            recent_val = df_player[col_name].dropna().iloc[-1] if not df_player[col_name].dropna().empty else 0.0
-            max_val = df_player[col_name].max() if not df_player[col_name].dropna().empty else 0.0
-            pct = f"{(recent_val / max_val * 100):.1f}%" if max_val > 0 else "-- %"
-            
-            val_str = f"{recent_val:.1f} {unit}" if isinstance(recent_val, (int, float)) else str(recent_val)
-            max_str = f"{max_val:.1f} {unit}" if isinstance(max_val, (int, float)) else str(max_val)
+    recent_row = valid_df.iloc[-1]
+    recent_val = recent_row[metric_col]
+    recent_date = recent_row.get("Date_Str", "--")
 
-            cards_html += f"""
+    max_val = valid_df[metric_col].max()
+    max_row = valid_df[valid_df[metric_col] == max_val].iloc[-1]
+    max_date = max_row.get("Date_Str", "--")
+
+    pct = f"{(recent_val / max_val * 100):.1f}%" if max_val > 0 else "-- %"
+
+    val_str = f"{recent_val:.1f} {unit}" if isinstance(recent_val, (int, float)) else str(recent_val)
+    max_str = f"{max_val:.1f} {unit}" if isinstance(max_val, (int, float)) else str(max_val)
+
+    return f"""
+    <div class="compliance-card" style="margin-bottom: 0px;">
+        <div style="font-weight:700; color:#0F172A; font-size:0.95rem; margin-bottom:8px; border-bottom:1px solid #E2E8F0; padding-bottom:4px; text-transform:uppercase;">
+            {title_name}
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
             <div class="compliance-metric-card">
-                <div class="compliance-metric-label">{label}</div>
+                <div class="compliance-metric-label">Recent Output</div>
                 <div class="compliance-metric-value">{val_str}</div>
-                <div class="compliance-metric-sub">Max: {max_str} ({pct})</div>
+                <div class="compliance-metric-sub">{recent_date}</div>
             </div>
-            """
-
-    return f'<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">{cards_html}</div>'
+            <div class="compliance-metric-card">
+                <div class="compliance-metric-label">All-Time Peak</div>
+                <div class="compliance-metric-value">{max_str}</div>
+                <div class="compliance-metric-sub">{max_date}</div>
+            </div>
+        </div>
+        <div style="margin-top:8px; background:#F1F5F9; border-radius:6px; padding:6px; text-align:center;">
+            <span style="font-size:0.75rem; font-weight:700; color:#64748B;">% OF PEAK: </span>
+            <span style="font-size:0.95rem; font-weight:800; color:#FF8200;">{pct}</span>
+        </div>
+    </div>
+    """
 
 
 # -----------------------------------------------------------------------------
 # 5. SIDEBAR NAVIGATION
 # -----------------------------------------------------------------------------
 st.sidebar.markdown("### LADY VOLS BASKETBALL")
-st.sidebar.caption("Performance Analytics Console")
 
 main_tab = st.sidebar.radio(
     "Console View:",
@@ -429,7 +449,7 @@ main_tab = st.sidebar.radio(
 st.sidebar.divider()
 st.sidebar.markdown("### DATA MANAGEMENT")
 
-if st.sidebar.button("🔄 Refresh Google Sheets Data"):
+if st.sidebar.button("Refresh Google Sheets Data"):
     st.cache_data.clear()
     st.sidebar.success("Data reloaded!")
     st.rerun()
@@ -462,6 +482,18 @@ with active_season:
         if not roster_raw.empty
         else vol_raw["Player"].unique().tolist()
     )
+
+    # Defined list of individual compliance metrics
+    compliance_metrics = [
+        ("Speed (MPH)", "Max Speed", "mph"),
+        ("Distance (mi)", "Distance", "mi"),
+        ("High Metabolic Power Distance (m)", "High Metabolic Power Distance", "m"),
+        ("Accumulated Acceleration Load", "Accumulated Acceleration Load", "load"),
+        ("Decels Load", "Decels Load", "load"),
+        ("Sprints", "Sprints", "cnt"),
+        ("MCTs", "MCTs", "cnt"),
+        ("FCTs", "FCTs", "cnt"),
+    ]
 
     # =========================================================================
     # TAB 1: INDIVIDUAL PROFILE
@@ -497,103 +529,25 @@ with active_season:
         )
 
         # ---------------------------------------------------------------------
-        # 1. COMPLIANCE SNAPSHOT (SPEED + 7 EXTENDED METRICS & CMJ)
+        # 1. INDIVIDUAL COMPLIANCE CARDS
         # ---------------------------------------------------------------------
         st.markdown(
-            '<div class="vball-section-title">1. Compliance & Exposure Tracking</div>',
+            '<div class="vball-section-title">1. Compliance & Workload Tracking Cards</div>',
             unsafe_allow_html=True,
         )
-        col_comp1, col_comp2 = st.columns([3, 2])
-
+        
         p_comp = comp_raw[comp_raw["Player"] == selected_player].sort_values("Date")
-        with col_comp1:
-            if not p_comp.empty:
-                all_time_max = p_comp["Speed (MPH)"].max() if "Speed (MPH)" in p_comp else 0
-                max_date = p_comp[p_comp["Speed (MPH)"] == all_time_max].iloc[-1]["Date_Str"] if all_time_max > 0 else "--"
 
-                days_since = (
-                    pd.to_datetime("today") - pd.to_datetime(max_date)
-                ).days if max_date != "--" else 0
-
-                badge_bg = "#BBF7D0" if days_since <= 7 else "#FFD6D6"
-                badge_fg = "#166534" if days_since <= 7 else "#991B1B"
-
-                metrics_grid_html = render_compliance_metrics_grid(p_comp)
-
-                st.markdown(
-                    f"""
-                    <div class="compliance-card">
-                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-                            <h4 style="margin:0; font-size:1.05rem; color:#0F172A; font-weight:700;">Speed & Workload Compliance Metrics</h4>
-                            <div style="background-color:{badge_bg}; color:{badge_fg}; font-weight:700; padding:4px 10px; border-radius:12px; font-size:0.75rem;">
-                                {days_since} Days Since Max Speed
-                            </div>
-                        </div>
-                        {metrics_grid_html}
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-        p_cmj_comp = cmj_raw[cmj_raw["Name"] == selected_player].sort_values("Date")
-        j_col_comp = get_clean_jump_col(p_cmj_comp)
-        with col_comp2:
-            if not p_cmj_comp.empty and j_col_comp:
-                all_time_max_cmj = p_cmj_comp[j_col_comp].max()
-                max_row_cmj = p_cmj_comp[p_cmj_comp[j_col_comp] == all_time_max_cmj].iloc[-1]
-                max_date_cmj = max_row_cmj["Date_Str"]
-
-                recent_row_cmj = p_cmj_comp.iloc[-1]
-                recent_cmj = recent_row_cmj[j_col_comp]
-                recent_date_cmj = recent_row_cmj["Date_Str"]
-
-                pct_max_cmj = (
-                    f"{(recent_cmj / all_time_max_cmj * 100):.1f}%"
-                    if all_time_max_cmj > 0
-                    else "-- %"
-                )
-                days_since_cmj = (
-                    pd.to_datetime("today") - pd.to_datetime(max_date_cmj)
-                ).days
-
-                badge_bg_cmj = "#BBF7D0" if days_since_cmj <= 7 else "#FFD6D6"
-                badge_fg_cmj = "#166534" if days_since_cmj <= 7 else "#991B1B"
-
-                st.markdown(
-                    f"""
-                    <div class="compliance-card">
-                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-                            <h4 style="margin:0; font-size:1.05rem; color:#0F172A; font-weight:700;">CMJ Jump Compliance</h4>
-                            <div style="background-color:{badge_bg_cmj}; color:{badge_fg_cmj}; font-weight:700; padding:4px 10px; border-radius:12px; font-size:0.75rem;">
-                                {days_since_cmj} Days Since Peak
-                            </div>
-                        </div>
-                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
-                            <div class="compliance-metric-card">
-                                <div class="compliance-metric-label">Recent Jump</div>
-                                <div class="compliance-metric-value">{recent_cmj:.1f} cm</div>
-                                <div class="compliance-metric-sub">{recent_date_cmj}</div>
-                            </div>
-                            <div class="compliance-metric-card">
-                                <div class="compliance-metric-label">All-Time Max</div>
-                                <div class="compliance-metric-value">{all_time_max_cmj:.1f} cm</div>
-                                <div class="compliance-metric-sub">{max_date_cmj}</div>
-                            </div>
-                            <div class="compliance-metric-card">
-                                <div class="compliance-metric-label">% Peak Output</div>
-                                <div class="compliance-metric-value" style="color:#FF8200;">{pct_max_cmj}</div>
-                                <div class="compliance-metric-sub">Recent vs. Peak</div>
-                            </div>
-                            <div class="compliance-metric-card">
-                                <div class="compliance-metric-label">Recency Status</div>
-                                <div class="compliance-metric-value">{days_since_cmj} Days</div>
-                                <div class="compliance-metric-sub">Elapsed Threshold</div>
-                            </div>
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+        # Display 8 metrics in a 4x2 grid
+        for row_idx in range(0, len(compliance_metrics), 4):
+            cols = st.columns(4)
+            for col_idx in range(4):
+                metric_idx = row_idx + col_idx
+                if metric_idx < len(compliance_metrics):
+                    col_name, display_title, unit = compliance_metrics[metric_idx]
+                    card_html = render_standalone_compliance_card(p_comp, col_name, display_title, unit)
+                    with cols[col_idx]:
+                        st.markdown(card_html, unsafe_allow_html=True)
 
         st.divider()
 
@@ -958,165 +912,42 @@ with active_season:
     # TAB 3: COMPLIANCE (TEAM GRID VIEW)
     # =========================================================================
     elif main_tab == "Compliance":
-        comp_sub_tab1, comp_sub_tab2 = st.tabs(
-            ["Workload & Exposure Compliance", "CMJ Compliance"]
+        st.markdown(
+            '<div class="vball-section-title">Team Performance Compliance Matrix</div>',
+            unsafe_allow_html=True,
         )
 
-        with comp_sub_tab1:
-            st.markdown(
-                '<div class="vball-section-title">Speed & Workload Exposure Compliance Grid</div>',
-                unsafe_allow_html=True,
-            )
+        selected_player_comp = st.selectbox("Select Athlete Compliance Overview:", roster_players)
 
-            for i in range(0, len(roster_players), 2):
-                col1, col2 = st.columns(2)
-                cols = [col1, col2]
+        p_row = roster_raw[roster_raw["Name"] == selected_player_comp]
+        p_pos = p_row["Position"].values[0] if not p_row.empty else "Guard / Forward | #00"
+        p_img = p_row["Picture"].values[0] if not p_row.empty else "https://via.placeholder.com/60"
 
-                for j in range(2):
-                    if i + j < len(roster_players):
-                        player_name = roster_players[i + j]
-                        p_row = roster_raw[roster_raw["Name"] == player_name]
-                        p_pos = (
-                            p_row["Position"].values[0]
-                            if not p_row.empty
-                            else "Guard / Forward | #00"
-                        )
-                        p_img = (
-                            p_row["Picture"].values[0]
-                            if not p_row.empty
-                            else "https://via.placeholder.com/60"
-                        )
+        p_comp = comp_raw[comp_raw["Player"] == selected_player_comp].sort_values("Date")
 
-                        p_comp = comp_raw[comp_raw["Player"] == player_name].sort_values(
-                            "Date"
-                        )
+        st.markdown(
+            f"""
+            <div style="display: flex; align-items: center; gap: 15px; background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 10px; padding: 12px 16px; margin-bottom: 20px;">
+                <img src="{p_img}" class="athlete-avatar" style="width:50px; height:50px;">
+                <div>
+                    <h3 style="margin:0; font-size:1.2rem; color:#0F172A; font-weight:700;">{selected_player_comp}</h3>
+                    <span style="color:#64748B; font-size:0.85rem;">{p_pos}</span>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-                        if not p_comp.empty:
-                            all_time_max = p_comp["Speed (MPH)"].max() if "Speed (MPH)" in p_comp else 0
-                            max_date = p_comp[p_comp["Speed (MPH)"] == all_time_max].iloc[-1]["Date_Str"] if all_time_max > 0 else "--"
-
-                            days_since = (
-                                pd.to_datetime("today") - pd.to_datetime(max_date)
-                            ).days if max_date != "--" else 0
-
-                            badge_bg = "#BBF7D0" if days_since <= 7 else "#FFD6D6"
-                            badge_fg = "#166534" if days_since <= 7 else "#991B1B"
-
-                            metrics_grid_html = render_compliance_metrics_grid(p_comp)
-
-                            with cols[j]:
-                                st.markdown(
-                                    f"""
-                                    <div class="compliance-card">
-                                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-                                            <div style="display: flex; align-items: center; gap: 12px;">
-                                                <img src="{p_img}" class="athlete-avatar" style="width:50px; height:50px;">
-                                                <div>
-                                                    <h4 style="margin:0; font-size:1.1rem; color:#0F172A;">{player_name}</h4>
-                                                    <span style="color:#64748B; font-size:0.8rem;">{p_pos}</span>
-                                                </div>
-                                            </div>
-                                            <div style="background-color:{badge_bg}; color:{badge_fg}; font-weight:700; padding:4px 10px; border-radius:12px; font-size:0.75rem;">
-                                                {days_since} Days Since Speed Max
-                                            </div>
-                                        </div>
-                                        {metrics_grid_html}
-                                    </div>
-                                    """,
-                                    unsafe_allow_html=True,
-                                )
-
-        with comp_sub_tab2:
-            st.markdown(
-                '<div class="vball-section-title">CMJ Jump Height Exposure & Compliance Grid</div>',
-                unsafe_allow_html=True,
-            )
-
-            for i in range(0, len(roster_players), 2):
-                col1, col2 = st.columns(2)
-                cols = [col1, col2]
-
-                for j in range(2):
-                    if i + j < len(roster_players):
-                        player_name = roster_players[i + j]
-                        p_row = roster_raw[roster_raw["Name"] == player_name]
-                        p_pos = (
-                            p_row["Position"].values[0]
-                            if not p_row.empty
-                            else "Guard / Forward | #00"
-                        )
-                        p_img = (
-                            p_row["Picture"].values[0]
-                            if not p_row.empty
-                            else "https://via.placeholder.com/60"
-                        )
-
-                        p_cmj = cmj_raw[cmj_raw["Name"] == player_name].sort_values("Date")
-                        j_col = get_clean_jump_col(p_cmj)
-
-                        if not p_cmj.empty and j_col:
-                            all_time_max_cmj = p_cmj[j_col].max()
-                            max_row_cmj = p_cmj[p_cmj[j_col] == all_time_max_cmj].iloc[-1]
-                            max_date_cmj = max_row_cmj["Date_Str"]
-
-                            recent_row_cmj = p_cmj.iloc[-1]
-                            recent_cmj = recent_row_cmj[j_col]
-                            recent_date_cmj = recent_row_cmj["Date_Str"]
-
-                            pct_max_cmj = (
-                                f"{(recent_cmj / all_time_max_cmj * 100):.1f}%"
-                                if all_time_max_cmj > 0
-                                else "-- %"
-                            )
-                            days_since_cmj = (
-                                pd.to_datetime("today") - pd.to_datetime(max_date_cmj)
-                            ).days
-
-                            badge_bg_cmj = "#BBF7D0" if days_since_cmj <= 7 else "#FFD6D6"
-                            badge_fg_cmj = "#166534" if days_since_cmj <= 7 else "#991B1B"
-
-                            with cols[j]:
-                                st.markdown(
-                                    f"""
-                                    <div class="compliance-card">
-                                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-                                            <div style="display: flex; align-items: center; gap: 12px;">
-                                                <img src="{p_img}" class="athlete-avatar" style="width:50px; height:50px;">
-                                                <div>
-                                                    <h4 style="margin:0; font-size:1.1rem; color:#0F172A;">{player_name}</h4>
-                                                    <span style="color:#64748B; font-size:0.8rem;">{p_pos}</span>
-                                                </div>
-                                            </div>
-                                            <div style="background-color:{badge_bg_cmj}; color:{badge_fg_cmj}; font-weight:700; padding:4px 10px; border-radius:12px; font-size:0.75rem;">
-                                                {days_since_cmj} Days
-                                            </div>
-                                        </div>
-                                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
-                                            <div class="compliance-metric-card">
-                                                <div class="compliance-metric-label">Recent Jump Height</div>
-                                                <div class="compliance-metric-value">{recent_cmj:.1f} cm</div>
-                                                <div class="compliance-metric-sub">{recent_date_cmj}</div>
-                                            </div>
-                                            <div class="compliance-metric-card">
-                                                <div class="compliance-metric-label">All-Time Max Jump</div>
-                                                <div class="compliance-metric-value">{all_time_max_cmj:.1f} cm</div>
-                                                <div class="compliance-metric-sub">{max_date_cmj}</div>
-                                            </div>
-                                            <div class="compliance-metric-card">
-                                                <div class="compliance-metric-label">% of All-Time Max</div>
-                                                <div class="compliance-metric-value" style="color:#FF8200;">{pct_max_cmj}</div>
-                                                <div class="compliance-metric-sub">Recent vs. Peak Output</div>
-                                            </div>
-                                            <div class="compliance-metric-card">
-                                                <div class="compliance-metric-label">Recency Status</div>
-                                                <div class="compliance-metric-value">{days_since_cmj} Days</div>
-                                                <div class="compliance-metric-sub">Elapsed Threshold</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    """,
-                                    unsafe_allow_html=True,
-                                )
+        # Display 8 standalone compliance cards in a 4x2 grid
+        for row_idx in range(0, len(compliance_metrics), 4):
+            cols = st.columns(4)
+            for col_idx in range(4):
+                metric_idx = row_idx + col_idx
+                if metric_idx < len(compliance_metrics):
+                    col_name, display_title, unit = compliance_metrics[metric_idx]
+                    card_html = render_standalone_compliance_card(p_comp, col_name, display_title, unit)
+                    with cols[col_idx]:
+                        st.markdown(card_html, unsafe_allow_html=True)
 
     # =========================================================================
     # TAB 4: WEEKLY DATA
