@@ -161,7 +161,7 @@ def load_sheet_data():
         req = urllib.request.Request(
             url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
         )
-        with urllib.request.urlopen(req) as response:
+        with urllib.request.urlopen(req, timeout=10) as response:
             content = response.read().decode("utf-8")
             return pd.read_csv(
                 io.StringIO(content), on_bad_lines="skip", engine="python"
@@ -265,7 +265,6 @@ def compute_practice_tables(player_name, session_date_str):
         & (int_raw["Date_Str"] == str(session_date_str))
     ]
 
-    # Establish baseline filtering by first 2 weeks of available tracking data
     v_all = vol_raw[vol_raw["Player"] == player_name].sort_values("Date")
     i_all = int_raw[int_raw["Player"] == player_name].sort_values("Date")
     
@@ -808,7 +807,7 @@ with active_season:
                 all_weeks,
                 t_weekly_avg["Distance (mi)"],
                 p_weekly["Distance (mi)"],
-                f"Total Distance (mi)",
+                f"Total Distance (mi) — {selected_player}",
                 selected_player,
                 "#FF8200",
             )
@@ -818,7 +817,7 @@ with active_season:
                 all_weeks,
                 t_weekly_avg["Accumulated Acceleration Load"],
                 p_weekly["Accumulated Acceleration Load"],
-                f"Accumulated Acceleration Load (AAL)",
+                f"AAL — {selected_player}",
                 selected_player,
                 "#38BDF8",
             )
@@ -829,7 +828,7 @@ with active_season:
                 all_weeks,
                 t_weekly_avg["Distance (speed | High Speed) (mi)"],
                 p_weekly["Distance (speed | High Speed) (mi)"],
-                f"High Speed Distance (mi)",
+                f"High Speed Distance (mi) — {selected_player}",
                 selected_player,
                 "#FF8200",
             )
@@ -839,7 +838,7 @@ with active_season:
                 all_weeks,
                 t_weekly_avg["Decels Load"],
                 p_weekly["Decels Load"],
-                f"Deceleration Load",
+                f"Deceleration Load — {selected_player}",
                 selected_player,
                 "#38BDF8",
             )
@@ -1200,12 +1199,12 @@ with active_season:
             with c_int_ath:
                 selected_intake_athlete = st.selectbox("Select Athlete for Intake Assessment", roster_players, key="intake_ath_select")
 
-            nordic_ath = nordic_raw[nordic_raw['Name'] == selected_intake_athlete].sort_values('Date') if not nordic_raw.empty else pd.DataFrame()
-            ankle_ath = ankle_raw[ankle_raw['Name'] == selected_intake_athlete].sort_values('Date') if not ankle_raw.empty else pd.DataFrame()
-            knee_ath = knee_raw[knee_raw['Name'] == selected_intake_athlete].sort_values('Date') if not knee_raw.empty else pd.DataFrame()
+            calf_ath = ankle_raw[ankle_raw['Name'] == selected_intake_athlete].sort_values('Date') if not ankle_raw.empty else pd.DataFrame()
             hip_ath = hip_raw[hip_raw['Name'] == selected_intake_athlete].sort_values('Date') if not hip_raw.empty else pd.DataFrame()
+            sh_ath = knee_raw[knee_raw['Name'] == selected_intake_athlete].sort_values('Date') if not knee_raw.empty else pd.DataFrame()
+            isoy_ath = nordic_raw[nordic_raw['Name'] == selected_intake_athlete].sort_values('Date') if not nordic_raw.empty else pd.DataFrame()
 
-            has_data = not (nordic_ath.empty and ankle_ath.empty and knee_ath.empty and hip_ath.empty)
+            has_data = not (calf_ath.empty and hip_ath.empty and sh_ath.empty and isoy_ath.empty)
 
             if has_data:
                 def render_val_with_arrow(current, initial, fmt="{:.1f}", unit=""):
@@ -1248,13 +1247,13 @@ with active_season:
                                     <ellipse cx="70.5" cy="17" rx="1" ry="1" fill="#1D1D1F" />
                                     <path d="M 68 18 L 67 20 L 69 20" fill="none" stroke-width="0.8" />
                                     <path d="M 66 23 C 67 24, 69 24, 70 23" fill="none" stroke-width="1" />
-                                    
+
                                     <line x1="65" y1="25" x2="63" y2="33" stroke-width="1.5" />
                                     <line x1="71" y1="25" x2="73" y2="33" stroke-width="1.5" />
 
                                     <path d="M 42 40 C 37 43, 35 52, 33 64 C 31 74, 29 82, 27 92 C 25 96, 23 100, 22 104 C 21 106, 23 107, 25 106 C 27 104, 28 98, 30 92 C 33 82, 36 74, 38 64 C 40 54, 42 48, 43 56 Z" fill="#FFE0D0" />
                                     <path d="M 22 104 C 20 106, 18 108, 17 110 M 23 105 C 21 108, 20 110, 19 112 M 24 105 C 23 108, 22 110, 21 112 M 25 104 C 25 107, 24 109, 23 111" fill="none" stroke-width="1" />
-                                    
+
                                     <path d="M 94 40 C 99 43, 101 52, 103 64 C 105 74, 107 82, 109 92 C 111 96, 113 100, 114 104 C 115 106, 113 107, 111 106 C 109 104, 108 98, 106 92 C 103 82, 100 74, 98 64 C 96 54, 94 48, 93 56 Z" fill="#FFE0D0" />
                                     <path d="M 114 104 C 116 106, 118 108, 119 110 M 113 105 C 115 108, 116 110, 117 112 M 112 105 C 113 108, 114 110, 115 112 M 111 104 C 111 107, 112 109, 113 111" fill="none" stroke-width="1" />
 
@@ -1293,23 +1292,23 @@ with active_season:
                                 </g>
 
                                 <!-- NODES & CALLOUT LINES / BADGES -->
-                                <!-- Node 1: Knee Extension / Flexion (Orange) -->
-                                <circle cx="49" cy="148" r="3.5" fill="#FF8200" stroke="#FFFFFF" stroke-width="1" />
-                                <line x1="49" y1="148" x2="22" y2="148" stroke="#FF8200" stroke-width="1.8" stroke-dasharray="2,2" />
-                                <rect x="14" y="141" width="14" height="14" rx="3" fill="#FF8200" />
-                                <text x="21" y="152" font-size="9" font-weight="900" fill="#FFFFFF" text-anchor="middle">1</text>
+                                <!-- Node 1: Left Shoulder IR/ER (Orange) -->
+                                <circle cx="91" cy="46" r="3.5" fill="#FF8200" stroke="#FFFFFF" stroke-width="1" />
+                                <line x1="91" y1="46" x2="118" y2="46" stroke="#FF8200" stroke-width="1.8" stroke-dasharray="2,2" />
+                                <rect x="112" y="39" width="14" height="14" rx="3" fill="#FF8200" />
+                                <text x="119" y="50" font-size="9" font-weight="900" fill="#FFFFFF" text-anchor="middle">1</text>
 
-                                <!-- Node 2: Nordic Hamstring (Orange) -->
-                                <circle cx="71" cy="135" r="3.5" fill="#FF8200" stroke="#FFFFFF" stroke-width="1" />
-                                <line x1="71" y1="135" x2="118" y2="135" stroke="#FF8200" stroke-width="1.8" stroke-dasharray="2,2" />
-                                <rect x="112" y="128" width="14" height="14" rx="3" fill="#FF8200" />
-                                <text x="119" y="139" font-size="9" font-weight="900" fill="#FFFFFF" text-anchor="middle">2</text>
+                                <!-- Node 2: ISO-Y Spine/Thoracic (Orange) -->
+                                <circle cx="68" cy="54" r="3.5" fill="#FF8200" stroke="#FFFFFF" stroke-width="1" />
+                                <line x1="68" y1="54" x2="118" y2="68" stroke="#FF8200" stroke-width="1.8" stroke-dasharray="2,2" />
+                                <rect x="112" y="61" width="14" height="14" rx="3" fill="#FF8200" />
+                                <text x="119" y="72" font-size="9" font-weight="900" fill="#FFFFFF" text-anchor="middle">2</text>
 
                                 <!-- Node 3: Hip Adduction (Blue) -->
                                 <circle cx="74" cy="122" r="3.5" fill="#4895DB" stroke="#FFFFFF" stroke-width="1" />
-                                <line x1="74" y1="122" x2="118" y2="100" stroke="#4895DB" stroke-width="1.8" stroke-dasharray="2,2" />
-                                <rect x="112" y="93" width="14" height="14" rx="3" fill="#4895DB" />
-                                <text x="119" y="104" font-size="9" font-weight="900" fill="#FFFFFF" text-anchor="middle">3</text>
+                                <line x1="74" y1="122" x2="118" y2="122" stroke="#4895DB" stroke-width="1.8" stroke-dasharray="2,2" />
+                                <rect x="112" y="115" width="14" height="14" rx="3" fill="#4895DB" />
+                                <text x="119" y="126" font-size="9" font-weight="900" fill="#FFFFFF" text-anchor="middle">3</text>
 
                                 <!-- Node 4: Hip Abduction (Blue) -->
                                 <circle cx="53" cy="116" r="3.5" fill="#4895DB" stroke="#FFFFFF" stroke-width="1" />
@@ -1317,7 +1316,7 @@ with active_season:
                                 <rect x="14" y="109" width="14" height="14" rx="3" fill="#4895DB" />
                                 <text x="21" y="120" font-size="9" font-weight="900" fill="#FFFFFF" text-anchor="middle">4</text>
 
-                                <!-- Node 5: Ankle Plantar Flexion (Blue) -->
+                                <!-- Node 5: Single Leg Calf Raise (Blue) -->
                                 <circle cx="77" cy="172" r="3.5" fill="#4895DB" stroke="#FFFFFF" stroke-width="1" />
                                 <line x1="77" y1="172" x2="118" y2="172" stroke="#4895DB" stroke-width="1.8" stroke-dasharray="2,2" />
                                 <rect x="112" y="165" width="14" height="14" rx="3" fill="#4895DB" />
@@ -1326,11 +1325,12 @@ with active_season:
                         </div>
                     </div>
                     """
-                    st.markdown(hud_svg_html, unsafe_allow_html=True)
+                    components.html(hud_svg_html, height=450)
 
                 # --- RIGHT PANEL: LIGHT DETAILS CARDS ---
                 with hud_col2:
-                    st.markdown("""
+                    st.markdown(
+                        """
                         <style>
                         .hud-details-card {
                             background: #FFFFFF;
@@ -1400,73 +1400,79 @@ with active_season:
                         </style>
                         <div class="hud-details-card">
                             <div class="hud-header-title-light">Anatomy Location Assessment Details</div>
-                    """, unsafe_allow_html=True)
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
-                    # NODE 1: KNEE EXTENSION & FLEXION
-                    if not knee_ath.empty:
-                        knee_ext = knee_ath[knee_ath['TestDirection'].str.contains('Extension', case=False, na=False)] if 'TestDirection' in knee_ath.columns else knee_ath
-                        knee_flx = knee_ath[knee_ath['TestDirection'].str.contains('Flexion', case=False, na=False)] if 'TestDirection' in knee_ath.columns else knee_ath
+                    # NODE 1: SHOULDER IR/ER
+                    if not sh_ath.empty:
+                        sh_ir = sh_ath[sh_ath['Direction'].str.contains('Internal|IR', case=False, na=False)] if 'Direction' in sh_ath.columns else sh_ath
+                        sh_er = sh_ath[sh_ath['Direction'].str.contains('External|ER', case=False, na=False)] if 'Direction' in sh_ath.columns else sh_ath
+                        
+                        ir_base = sh_ir.iloc[0] if not sh_ir.empty else pd.Series()
+                        ir_latest = sh_ir.iloc[-1] if not sh_ir.empty else pd.Series()
+                        er_base = sh_er.iloc[0] if not sh_er.empty else pd.Series()
+                        er_latest = sh_er.iloc[-1] if not sh_er.empty else pd.Series()
 
-                        ke_b = knee_ext.iloc[0] if not knee_ext.empty else pd.Series()
-                        ke_l = knee_ext.iloc[-1] if not knee_ext.empty else pd.Series()
-                        kf_b = knee_flx.iloc[0] if not knee_flx.empty else pd.Series()
-                        kf_l = knee_flx.iloc[-1] if not knee_flx.empty else pd.Series()
+                        ir_bL, ir_bR = ir_base.get('L Max Force (N)', 0.0), ir_base.get('R Max Force (N)', 0.0)
+                        ir_lL, ir_lR = ir_latest.get('L Max Force (N)', 0.0), ir_latest.get('R Max Force (N)', 0.0)
+                        er_bL, er_bR = er_base.get('L Max Force (N)', 0.0), er_base.get('R Max Force (N)', 0.0)
+                        er_lL, er_lR = er_latest.get('L Max Force (N)', 0.0), er_latest.get('R Max Force (N)', 0.0)
 
-                        ke_bL, ke_bR = ke_b.get('L Max Force (N)', 0.0), ke_b.get('R Max Force (N)', 0.0)
-                        ke_lL, ke_lR = ke_l.get('L Max Force (N)', 0.0), ke_l.get('R Max Force (N)', 0.0)
-                        kf_bL, kf_bR = kf_b.get('L Max Force (N)', 0.0), kf_b.get('R Max Force (N)', 0.0)
-                        kf_lL, kf_lR = kf_l.get('L Max Force (N)', 0.0), kf_l.get('R Max Force (N)', 0.0)
-
-                        latest_date_str = ke_l.get('Date', pd.Timestamp.now()).strftime('%m/%d/%Y') if pd.notna(ke_l.get('Date')) else "N/A"
+                        latest_date_val = ir_latest.get('Date', pd.Timestamp.now())
+                        latest_date_str = latest_date_val.strftime('%m/%d/%Y') if pd.notna(latest_date_val) else "N/A"
 
                         st.markdown(f"""
                             <div class="hud-metric-row-light">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-orange">1</span>KNEE EXTENSION & FLEXION</span>
+                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-orange">1</span>SHOULDER IR / ER</span>
                                     <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {latest_date_str}</span>
                                 </div>
                                 <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
-                                    <b>Extension:</b> Initial L {ke_bL:.1f}N | R {ke_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(ke_lL, ke_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(ke_lR, ke_bR, '{:.1f}', 'N')}<br>
-                                    <b>Flexion:</b> Initial L {kf_bL:.1f}N | R {kf_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(kf_lL, kf_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(kf_lR, kf_bR, '{:.1f}', 'N')}
+                                    <b>Internal (IR):</b> Initial L {ir_bL:.1f}N | R {ir_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(ir_lL, ir_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(ir_lR, ir_bR, '{:.1f}', 'N')}<br>
+                                    <b>External (ER):</b> Initial L {er_bL:.1f}N | R {er_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(er_lL, er_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(er_lR, er_bR, '{:.1f}', 'N')}
                                 </div>
                             </div>
                         """, unsafe_allow_html=True)
 
-                    # NODE 2: NORDIC HAMSTRING
-                    if not nordic_ath.empty:
-                        b_n, l_n = nordic_ath.iloc[0], nordic_ath.iloc[-1]
-                        bnL, bnR = b_n.get('L Max Force (N)', 0.0), b_n.get('R Max Force (N)', 0.0)
-                        lnL, lnR = l_n.get('L Max Force (N)', 0.0), l_n.get('R Max Force (N)', 0.0)
-                        date_str = l_n['Date'].strftime('%m/%d/%Y') if pd.notna(l_n.get('Date')) else "N/A"
+                    # NODE 2: ISO-Y STRENGTH
+                    if not isoy_ath.empty:
+                        b_y, l_y = isoy_ath.iloc[0], isoy_ath.iloc[-1]
+                        byL, byR = b_y.get('L Max Force (N)', 0.0), b_y.get('R Max Force (N)', 0.0)
+                        lyL, lyR = l_y.get('L Max Force (N)', 0.0), l_y.get('R Max Force (N)', 0.0)
+                        
+                        latest_date_val = l_y.get('Date', pd.Timestamp.now())
+                        latest_date_str = latest_date_val.strftime('%m/%d/%Y') if pd.notna(latest_date_val) else "N/A"
 
                         st.markdown(f"""
                             <div class="hud-metric-row-light">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-orange">2</span>NORDIC HAMSTRING STRENGTH</span>
-                                    <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
+                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-orange">2</span>ISO-Y STRENGTH</span>
+                                    <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {latest_date_str}</span>
                                 </div>
                                 <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
-                                    <b>Initial Force:</b> L {bnL:.1f}N | R {bnR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(lnL, bnL, '{:.1f}', 'N')} | R {render_val_with_arrow(lnR, bnR, '{:.1f}', 'N')}
+                                    <b>Initial Force:</b> L {byL:.0f}N | R {byR:.0f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(lyL, byL, '{:.0f}', 'N')} | R {render_val_with_arrow(lyR, byR, '{:.0f}', 'N')}
                                 </div>
                             </div>
                         """, unsafe_allow_html=True)
 
                     # NODE 3 & 4: HIP AD/AB
                     if not hip_ath.empty:
-                        hip_ad = hip_ath[hip_ath['TestDirection'].str.contains('AD|Adduction', case=False, na=False)] if 'TestDirection' in hip_ath.columns else hip_ath
-                        hip_ab = hip_ath[hip_ath['TestDirection'].str.contains('AB|Abduction', case=False, na=False)] if 'TestDirection' in hip_ath.columns else hip_ath
+                        hip_ad = hip_ath[hip_ath['Direction'].str.contains('AD|Adduction', case=False, na=False)] if 'Direction' in hip_ath.columns else hip_ath
+                        hip_ab = hip_ath[hip_ath['Direction'].str.contains('AB|Abduction', case=False, na=False)] if 'Direction' in hip_ath.columns else hip_ath
 
                         if not hip_ad.empty:
                             ad_b, ad_l = hip_ad.iloc[0], hip_ad.iloc[-1]
                             ad_bL, ad_bR = ad_b.get('L Max Force (N)', 0.0), ad_b.get('R Max Force (N)', 0.0)
                             ad_lL, ad_lR = ad_l.get('L Max Force (N)', 0.0), ad_l.get('R Max Force (N)', 0.0)
-                            date_str = ad_l['Date'].strftime('%m/%d/%Y') if pd.notna(ad_l.get('Date')) else "N/A"
+                            latest_date_val = ad_l.get('Date', pd.Timestamp.now())
+                            latest_date_str = latest_date_val.strftime('%m/%d/%Y') if pd.notna(latest_date_val) else "N/A"
 
                             st.markdown(f"""
                                 <div class="hud-metric-row-light-blue">
                                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                                         <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">3</span>HIP ADDUCTION (AD)</span>
-                                        <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
+                                        <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {latest_date_str}</span>
                                     </div>
                                     <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
                                         <b>Initial Force:</b> L {ad_bL:.1f}N | R {ad_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(ad_lL, ad_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(ad_lR, ad_bR, '{:.1f}', 'N')}
@@ -1478,13 +1484,14 @@ with active_season:
                             ab_b, ab_l = hip_ab.iloc[0], hip_ab.iloc[-1]
                             ab_bL, ab_bR = ab_b.get('L Max Force (N)', 0.0), ab_b.get('R Max Force (N)', 0.0)
                             ab_lL, ab_lR = ab_l.get('L Max Force (N)', 0.0), ab_l.get('R Max Force (N)', 0.0)
-                            date_str = ab_l['Date'].strftime('%m/%d/%Y') if pd.notna(ab_l.get('Date')) else "N/A"
+                            latest_date_val = ab_l.get('Date', pd.Timestamp.now())
+                            latest_date_str = latest_date_val.strftime('%m/%d/%Y') if pd.notna(latest_date_val) else "N/A"
 
                             st.markdown(f"""
                                 <div class="hud-metric-row-light-blue">
                                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                                         <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">4</span>HIP ABDUCTION (AB)</span>
-                                        <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
+                                        <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {latest_date_str}</span>
                                     </div>
                                     <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
                                         <b>Initial Force:</b> L {ab_bL:.1f}N | R {ab_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(ab_lL, ab_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(ab_lR, ab_bR, '{:.1f}', 'N')}
@@ -1492,21 +1499,22 @@ with active_season:
                                 </div>
                             """, unsafe_allow_html=True)
 
-                    # NODE 5: ANKLE PLANTAR FLEXION
-                    if not ankle_ath.empty:
-                        b_a, l_a = ankle_ath.iloc[0], ankle_ath.iloc[-1]
-                        baL, baR = b_a.get('L Max Force (N)', 0.0), b_a.get('R Max Force (N)', 0.0)
-                        laL, laR = l_a.get('L Max Force (N)', 0.0), l_a.get('R Max Force (N)', 0.0)
-                        date_str = l_a['Date'].strftime('%m/%d/%Y') if pd.notna(l_a.get('Date')) else "N/A"
+                    # NODE 5: SINGLE LEG CALF RAISE
+                    if not calf_ath.empty:
+                        b_c, l_c = calf_ath.iloc[0], calf_ath.iloc[-1]
+                        bcL, bcR = b_c.get('L Max Force (N)', 0.0), b_c.get('R Max Force (N)', 0.0)
+                        lcL, lcR = l_c.get('L Max Force (N)', 0.0), l_c.get('R Max Force (N)', 0.0)
+                        latest_date_val = l_c.get('Date', pd.Timestamp.now())
+                        latest_date_str = latest_date_val.strftime('%m/%d/%Y') if pd.notna(latest_date_val) else "N/A"
 
                         st.markdown(f"""
                             <div class="hud-metric-row-light-blue">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">5</span>ANKLE PLANTAR FLEXION</span>
-                                    <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
+                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">5</span>SINGLE LEG CALF RAISE</span>
+                                    <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {latest_date_str}</span>
                                 </div>
                                 <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
-                                    <b>Initial Force:</b> L {baL:.1f}N | R {baR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(laL, baL, '{:.1f}', 'N')} | R {render_val_with_arrow(laR, baR, '{:.1f}', 'N')}
+                                    <b>Initial Force:</b> L {bcL:.0f}N | R {bcR:.0f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(lcL, bcL, '{:.0f}', 'N')} | R {render_val_with_arrow(lcR, bcR, '{:.0f}', 'N')}
                                 </div>
                             </div>
                         """, unsafe_allow_html=True)
