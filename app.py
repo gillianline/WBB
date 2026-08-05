@@ -154,6 +154,8 @@ if not check_password():
 @st.cache_data(ttl=300)
 def load_sheet_data():
     def fetch_csv(secret_key):
+        if "sheets" not in st.secrets or secret_key not in st.secrets["sheets"]:
+            return pd.DataFrame()
         url = st.secrets["sheets"][secret_key]
         req = urllib.request.Request(
             url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
@@ -171,20 +173,33 @@ def load_sheet_data():
         weekly_df = fetch_csv("weekly_url")
         cmj_df = fetch_csv("cmj_url")
         roster_df = fetch_csv("roster_url")
+        
+        nordic_df = fetch_csv("nordic_url")
+        ankle_df = fetch_csv("ankle_url")
+        knee_df = fetch_csv("knee_url")
+        hip_df = fetch_csv("hip_url")
 
-        for df in [vol_df, int_df, comp_df, weekly_df, cmj_df]:
+        for df in [vol_df, int_df, comp_df, weekly_df, cmj_df, nordic_df, ankle_df, knee_df, hip_df]:
+            if df.empty:
+                continue
             date_col = [c for c in df.columns if "date" in c.lower()]
             if date_col:
                 df["Date"] = pd.to_datetime(df[date_col[0]], errors="coerce")
                 df["Date_Str"] = df["Date"].dt.strftime("%Y-%m-%d")
 
-        return vol_df, int_df, comp_df, weekly_df, cmj_df, roster_df
+        return (
+            vol_df, int_df, comp_df, weekly_df, cmj_df, roster_df,
+            nordic_df, ankle_df, knee_df, hip_df
+        )
     except Exception as e:
         st.error(f"Error loading data from Google Sheets secrets: {e}")
         st.stop()
 
 
-vol_raw, int_raw, comp_raw, weekly_raw, cmj_raw, roster_raw = load_sheet_data()
+(
+    vol_raw, int_raw, comp_raw, weekly_raw, cmj_raw, roster_raw,
+    nordic_raw, ankle_raw, knee_raw, hip_raw
+) = load_sheet_data()
 
         
 # -----------------------------------------------------------------------------
@@ -202,6 +217,8 @@ def get_vball_color(score):
 
 
 def render_vball_table(df):
+    if df.empty:
+        return "<p style='color:#64748B; font-style:italic;'>No data available.</p>"
     html = '<table class="vball-table"><thead><tr>'
     for col in df.columns:
         html += f"<th>{col}</th>"
@@ -324,17 +341,6 @@ def compute_practice_tables(player_name, session_date_str):
     )
 
 
-def get_clean_jump_col(df):
-    for col in df.columns:
-        if "jump height" in col.lower():
-            df[col] = pd.to_numeric(
-                df[col].astype(str).str.replace(r"[^0-9.]", "", regex=True),
-                errors="coerce",
-            )
-            return col
-    return None
-
-
 def create_team_bar_athlete_line_chart(
     weeks, team_avg_vals, athlete_vals, title_text, athlete_name, bar_color="#38BDF8"
 ):
@@ -375,7 +381,6 @@ def create_team_bar_athlete_line_chart(
 
 
 def render_metric_subcard_html(p_comp, col_name, title_name, unit):
-    """Renders a clean individual metric card with recency badge without player pictures."""
     if p_comp.empty or col_name not in p_comp.columns:
         return ""
 
@@ -494,7 +499,6 @@ with active_season:
         else vol_raw["Player"].unique().tolist()
     )
 
-    # All 8 tracked compliance metrics
     compliance_metrics = [
         ("Speed (MPH)", "Max Speed", "mph"),
         ("Distance (mi)", "Distance", "mi"),
@@ -539,9 +543,6 @@ with active_season:
             unsafe_allow_html=True,
         )
 
-        # ---------------------------------------------------------------------
-        # 1. ENCOMPASSING WORKLOAD COMPLIANCE BOARD
-        # ---------------------------------------------------------------------
         st.markdown(
             '<div class="vball-section-title">1. Workload Exposure & Compliance Grid</div>',
             unsafe_allow_html=True,
@@ -562,9 +563,6 @@ with active_season:
 
         st.divider()
 
-        # ---------------------------------------------------------------------
-        # 2. PRACTICE SCORES & RECENT BREAKDOWN
-        # ---------------------------------------------------------------------
         st.markdown(
             '<div class="vball-section-title">2. Practice Performance & Score Trends</div>',
             unsafe_allow_html=True,
@@ -676,9 +674,6 @@ with active_season:
 
         st.divider()
 
-        # ---------------------------------------------------------------------
-        # 3. JUMP TESTING HISTORY & DUAL-AXIS TREND
-        # ---------------------------------------------------------------------
         st.markdown(
             '<div class="vball-section-title">3. Jump Performance & RSI Tracking</div>',
             unsafe_allow_html=True,
@@ -778,9 +773,6 @@ with active_season:
 
         st.divider()
 
-        # ---------------------------------------------------------------------
-        # 4. WEEKLY WORKLOAD VS. TEAM AVERAGE
-        # ---------------------------------------------------------------------
         st.markdown(
             '<div class="vball-section-title">4. Weekly Output vs. Team Averages</div>',
             unsafe_allow_html=True,
@@ -1077,112 +1069,161 @@ with active_season:
             st.plotly_chart(fig_ind_dl, use_container_width=True)
 
     # =========================================================================
-    # TAB 5: TESTING
+    # TAB 5: TESTING (SUB-TABS FOR CMJ HISTORY & INTAKE TESTING)
     # =========================================================================
     elif main_tab == "Testing":
-        st.markdown(
-            '<div class="vball-section-title">CMJ History</div>',
-            unsafe_allow_html=True,
-        )
+        testing_tab_cmj, testing_tab_intake = st.tabs(["CMJ History", "Intake Testing"])
 
-        c_filter, _ = st.columns([1, 2])
-        with c_filter:
-            selected_player_t = st.selectbox("Select Athlete:", roster_players)
-
-        p_cmj = cmj_raw[cmj_raw["Name"] == selected_player_t].sort_values("Date").copy()
-
-        jump_cols = [c for c in p_cmj.columns if "jump" in c.lower() or "height" in c.lower()]
-        j_col = jump_cols[0] if jump_cols else None
-
-        rsi_cols = [c for c in p_cmj.columns if "rsi" in c.lower()]
-        rsi_col = rsi_cols[0] if rsi_cols else None
-
-        display_cols = [c for c in p_cmj.columns if c not in ["Name", "Date_Str"]]
-        st.markdown(f"### Jump History for {selected_player_t}")
-        st.markdown(render_vball_table(p_cmj[display_cols]), unsafe_allow_html=True)
-
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        if not p_cmj.empty and j_col:
-            p_cmj["Jump_Height_Clean"] = pd.to_numeric(
-                p_cmj[j_col].astype(str).str.replace(r"[^0-9.]", "", regex=True),
-                errors="coerce",
+        # SUB-TAB 1: CMJ HISTORY
+        with testing_tab_cmj:
+            st.markdown(
+                '<div class="vball-section-title">CMJ History</div>',
+                unsafe_allow_html=True,
             )
 
-            fig_jump_trend = go.Figure()
+            c_filter, _ = st.columns([1, 2])
+            with c_filter:
+                selected_player_t = st.selectbox("Select Athlete:", roster_players, key="cmj_player_select")
 
-            fig_jump_trend.add_trace(
-                go.Scatter(
-                    x=p_cmj["Date"],
-                    y=p_cmj["Jump_Height_Clean"],
-                    name="Jump Height",
-                    mode="lines+markers",
-                    connectgaps=True,
-                    yaxis="y",
-                    line=dict(color="#FF8200", width=4),
-                    marker=dict(size=8, color="#FF8200"),
-                )
-            )
+            p_cmj = cmj_raw[cmj_raw["Name"] == selected_player_t].sort_values("Date").copy()
 
-            if rsi_col:
-                p_cmj["RSI_Clean"] = pd.to_numeric(
-                    p_cmj[rsi_col].astype(str).str.replace(r"[^0-9.]", "", regex=True),
+            jump_cols = [c for c in p_cmj.columns if "jump" in c.lower() or "height" in c.lower()]
+            j_col = jump_cols[0] if jump_cols else None
+
+            rsi_cols = [c for c in p_cmj.columns if "rsi" in c.lower()]
+            rsi_col = rsi_cols[0] if rsi_cols else None
+
+            display_cols = [c for c in p_cmj.columns if c not in ["Name", "Date_Str"]]
+            st.markdown(f"### Jump History for {selected_player_t}")
+            st.markdown(render_vball_table(p_cmj[display_cols]), unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            if not p_cmj.empty and j_col:
+                p_cmj["Jump_Height_Clean"] = pd.to_numeric(
+                    p_cmj[j_col].astype(str).str.replace(r"[^0-9.]", "", regex=True),
                     errors="coerce",
                 )
+
+                fig_jump_trend = go.Figure()
+
                 fig_jump_trend.add_trace(
                     go.Scatter(
                         x=p_cmj["Date"],
-                        y=p_cmj["RSI_Clean"],
-                        name="RSI Modified",
+                        y=p_cmj["Jump_Height_Clean"],
+                        name="Jump Height",
                         mode="lines+markers",
                         connectgaps=True,
-                        yaxis="y2",
-                        line=dict(color="#38BDF8", width=3, dash="dot"),
-                        marker=dict(size=8, color="#38BDF8"),
+                        yaxis="y",
+                        line=dict(color="#FF8200", width=4),
+                        marker=dict(size=8, color="#FF8200"),
                     )
                 )
 
-            fig_jump_trend.update_layout(
-                height=320,
-                margin=dict(l=40, r=40, t=50, b=40),
-                plot_bgcolor="rgba(0,0,0,0)",
-                paper_bgcolor="rgba(0,0,0,0)",
-                legend=dict(
-                    orientation="h",
-                    yanchor="bottom",
-                    y=1.08,
-                    xanchor="left",
-                    x=0.01,
-                    font=dict(size=13, color="#0F172A"),
-                ),
-                xaxis=dict(
-                    title=None,
-                    type="date",
-                    tickformat="%b %d\n%Y",
-                    showgrid=False,
-                    showline=True,
-                    linewidth=1.5,
-                    linecolor="#0F172A",
-                    tickfont=dict(color="#64748B", size=12),
-                ),
-                yaxis=dict(
-                    showgrid=False,
-                    showline=True,
-                    linewidth=1.5,
-                    linecolor="#0F172A",
-                    tickfont=dict(color="#64748B", size=12),
-                    side="left",
-                ),
-                yaxis2=dict(
-                    showgrid=False,
-                    showline=True,
-                    linewidth=1.5,
-                    linecolor="#0F172A",
-                    tickfont=dict(color="#64748B", size=12),
-                    overlaying="y",
-                    side="right",
-                    anchor="x",
-                ),
+                if rsi_col:
+                    p_cmj["RSI_Clean"] = pd.to_numeric(
+                        p_cmj[rsi_col].astype(str).str.replace(r"[^0-9.]", "", regex=True),
+                        errors="coerce",
+                    )
+                    fig_jump_trend.add_trace(
+                        go.Scatter(
+                            x=p_cmj["Date"],
+                            y=p_cmj["RSI_Clean"],
+                            name="RSI Modified",
+                            mode="lines+markers",
+                            connectgaps=True,
+                            yaxis="y2",
+                            line=dict(color="#38BDF8", width=3, dash="dot"),
+                            marker=dict(size=8, color="#38BDF8"),
+                        )
+                    )
+
+                fig_jump_trend.update_layout(
+                    height=320,
+                    margin=dict(l=40, r=40, t=50, b=40),
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    legend=dict(
+                        orientation="h",
+                        yanchor="bottom",
+                        y=1.08,
+                        xanchor="left",
+                        x=0.01,
+                        font=dict(size=13, color="#0F172A"),
+                    ),
+                    xaxis=dict(
+                        title=None,
+                        type="date",
+                        tickformat="%b %d\n%Y",
+                        showgrid=False,
+                        showline=True,
+                        linewidth=1.5,
+                        linecolor="#0F172A",
+                        tickfont=dict(color="#64748B", size=12),
+                    ),
+                    yaxis=dict(
+                        showgrid=False,
+                        showline=True,
+                        linewidth=1.5,
+                        linecolor="#0F172A",
+                        tickfont=dict(color="#64748B", size=12),
+                        side="left",
+                    ),
+                    yaxis2=dict(
+                        showgrid=False,
+                        showline=True,
+                        linewidth=1.5,
+                        linecolor="#0F172A",
+                        tickfont=dict(color="#64748B", size=12),
+                        overlaying="y",
+                        side="right",
+                        anchor="x",
+                    ),
+                )
+
+                st.plotly_chart(fig_jump_trend, use_container_width=True)
+
+        # SUB-TAB 2: INTAKE TESTING
+        with testing_tab_intake:
+            st.markdown(
+                '<div class="vball-section-title">Intake Assessment & Joint Dynamics</div>',
+                unsafe_allow_html=True,
             )
 
-            st.plotly_chart(fig_jump_trend, use_container_width=True)
+            c_filter_intake, _ = st.columns([1, 2])
+            with c_filter_intake:
+                selected_player_it = st.selectbox("Select Athlete Profile:", roster_players, key="intake_player_select")
+
+            def filter_athlete_data(df, player_name):
+                if df.empty:
+                    return pd.DataFrame()
+                name_col = [c for c in df.columns if "name" in c.lower() or "player" in c.lower()]
+                if not name_col:
+                    return pd.DataFrame()
+                filtered = df[df[name_col[0]] == player_name].copy()
+                cols_to_drop = [c for c in ["Date_Str"] if c in filtered.columns]
+                return filtered.drop(columns=cols_to_drop)
+
+            col_left, col_right = st.columns(2)
+
+            with col_left:
+                st.markdown("#### Nordic Hamstring Strength")
+                p_nordic = filter_athlete_data(nordic_raw, selected_player_it)
+                st.markdown(render_vball_table(p_nordic), unsafe_allow_html=True)
+
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                st.markdown("#### Ankle Plantar Flexion")
+                p_ankle = filter_athlete_data(ankle_raw, selected_player_it)
+                st.markdown(render_vball_table(p_ankle), unsafe_allow_html=True)
+
+            with col_right:
+                st.markdown("#### Knee Extension & Flexion")
+                p_knee = filter_athlete_data(knee_raw, selected_player_it)
+                st.markdown(render_vball_table(p_knee), unsafe_allow_html=True)
+
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                st.markdown("#### Hip Adduction / Abduction")
+                p_hip = filter_athlete_data(hip_raw, selected_player_it)
+                st.markdown(render_vball_table(p_hip), unsafe_allow_html=True)
