@@ -5,6 +5,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+import streamlit.components.v1 as components
 import requests 
 from streamlit_gsheets import GSheetsConnection
 
@@ -174,6 +175,7 @@ def load_sheet_data():
         cmj_df = fetch_csv("cmj_url")
         roster_df = fetch_csv("roster_url")
         
+        # New Intake Testing Datasets
         nordic_df = fetch_csv("nordic_url")
         ankle_df = fetch_csv("ankle_url")
         knee_df = fetch_csv("knee_url")
@@ -188,7 +190,7 @@ def load_sheet_data():
                 df["Date_Str"] = df["Date"].dt.strftime("%Y-%m-%d")
 
         return (
-            vol_df, int_df, comp_df, weekly_df, cmj_df, roster_df,
+            vol_df, int_df, comp_raw_df, weekly_df, cmj_df, roster_df,
             nordic_df, ankle_df, knee_df, hip_df
         )
     except Exception as e:
@@ -1072,7 +1074,7 @@ with active_season:
     # TAB 5: TESTING (SUB-TABS FOR CMJ HISTORY & INTAKE TESTING)
     # =========================================================================
     elif main_tab == "Testing":
-        testing_tab_cmj, testing_tab_intake = st.tabs(["CMJ History", "Intake Testing"])
+        testing_tab_cmj, testing_tab_intake = st.tabs(["CMJ History", "Intake Assessment"])
 
         # SUB-TAB 1: CMJ HISTORY
         with testing_tab_cmj:
@@ -1183,47 +1185,329 @@ with active_season:
 
                 st.plotly_chart(fig_jump_trend, use_container_width=True)
 
-        # SUB-TAB 2: INTAKE TESTING
+        # SUB-TAB 2: INTAKE ASSESSMENT (ANATOMY MAP + ASSESSMENT DETAILS)
         with testing_tab_intake:
-            st.markdown(
-                '<div class="vball-section-title">Intake Assessment & Joint Dynamics</div>',
-                unsafe_allow_html=True,
-            )
+            st.markdown("<h3 style='color:#1D1D1F; font-weight:900; text-transform:uppercase;'>Athlete Intake Assessment</h3>", unsafe_allow_html=True)
+            c_int_ath, _ = st.columns([2, 2])
+            with c_int_ath:
+                selected_intake_athlete = st.selectbox("Select Athlete for Intake Assessment", roster_players, key="intake_ath_select")
 
-            c_filter_intake, _ = st.columns([1, 2])
-            with c_filter_intake:
-                selected_player_it = st.selectbox("Select Athlete Profile:", roster_players, key="intake_player_select")
+            nordic_ath = nordic_raw[nordic_raw['Name'] == selected_intake_athlete].sort_values('Date') if not nordic_raw.empty else pd.DataFrame()
+            ankle_ath = ankle_raw[ankle_raw['Name'] == selected_intake_athlete].sort_values('Date') if not ankle_raw.empty else pd.DataFrame()
+            knee_ath = knee_raw[knee_raw['Name'] == selected_intake_athlete].sort_values('Date') if not knee_raw.empty else pd.DataFrame()
+            hip_ath = hip_raw[hip_raw['Name'] == selected_intake_athlete].sort_values('Date') if not hip_raw.empty else pd.DataFrame()
 
-            def filter_athlete_data(df, player_name):
-                if df.empty:
-                    return pd.DataFrame()
-                name_col = [c for c in df.columns if "name" in c.lower() or "player" in c.lower()]
-                if not name_col:
-                    return pd.DataFrame()
-                filtered = df[df[name_col[0]] == player_name].copy()
-                cols_to_drop = [c for c in ["Date_Str"] if c in filtered.columns]
-                return filtered.drop(columns=cols_to_drop)
+            has_data = not (nordic_ath.empty and ankle_ath.empty and knee_ath.empty and hip_ath.empty)
 
-            col_left, col_right = st.columns(2)
+            if has_data:
+                def render_val_with_arrow(current, initial, fmt="{:.1f}", unit=""):
+                    if initial == 0:
+                        return f"{fmt.format(current)}{unit}"
+                    diff = current - initial
+                    pct = (diff / initial) * 100
+                    arrow = "↑" if diff >= 0 else "↓"
+                    color = "#28a745" if diff >= 0 else "#dc3545"
+                    return f"{fmt.format(current)}{unit} <span style='color:{color}; font-size:11px; font-weight:bold;'>({arrow}{abs(pct):.1f}%)</span>"
 
-            with col_left:
-                st.markdown("#### Nordic Hamstring Strength")
-                p_nordic = filter_athlete_data(nordic_raw, selected_player_it)
-                st.markdown(render_vball_table(p_nordic), unsafe_allow_html=True)
+                hud_col1, hud_col2 = st.columns([1.2, 1.8])
 
-                st.markdown("<br>", unsafe_allow_html=True)
+                # --- LEFT PANEL: LIGHT ANATOMY MAP COMPONENT ---
+                with hud_col1:
+                    hud_html = """
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                    <style>
+                        body {
+                            margin: 0;
+                            padding: 0;
+                            background-color: transparent;
+                            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                        }
+                        .hud-dashboard-card {
+                            background: #FFFFFF;
+                            border-radius: 16px;
+                            padding: 16px;
+                            border: 1px solid #E5E5E7;
+                            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+                        }
+                        .hud-header-title {
+                            color: #1D1D1F;
+                            font-weight: 800;
+                            font-size: 13px;
+                            letter-spacing: 1px;
+                            text-transform: uppercase;
+                            border-bottom: 2px solid #FF8200;
+                            padding-bottom: 6px;
+                            margin-bottom: 12px;
+                        }
+                        .hud-body-viewport {
+                            position: relative;
+                            width: 100%;
+                            height: 380px;
+                            background: #F8F9FA;
+                            border-radius: 12px;
+                            border: 1px solid #E5E5E7;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            overflow: hidden;
+                        }
+                        svg {
+                            width: 100%;
+                            height: 100%;
+                        }
+                    </style>
+                    </head>
+                    <body>
+                        <div class="hud-dashboard-card">
+                            <div class="hud-header-title">Anatomy Location Map</div>
+                            <div class="hud-body-viewport">
+                                <svg viewBox="0 0 120 220" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+                                    <g stroke="#1D1D1F" stroke-width="1" opacity="0.9">
+                                        <g fill="#FF8200" fill-opacity="0.15">
+                                            <circle cx="60" cy="20" r="9" />
+                                            <path d="M 56 29 L 64 29 L 63 34 L 57 34 Z" />
+                                            <path d="M 32 36 L 88 36 L 82 60 L 38 60 Z" />
+                                            <rect x="23" y="37" width="8" height="36" rx="4" />
+                                            <rect x="89" y="37" width="8" height="36" rx="4" />
+                                            <path d="M 38 61 L 82 61 L 76 88 L 44 88 Z" />
+                                        </g>
+                                        <g fill="#38BDF8" fill-opacity="0.15">
+                                            <path d="M 43 90 L 77 90 L 74 112 L 46 112 Z" />
+                                            <rect x="41" y="114" width="16" height="42" rx="4" />
+                                            <rect x="43" y="158" width="12" height="38" rx="3" />
+                                            <rect x="63" y="114" width="16" height="42" rx="4" />
+                                            <rect x="65" y="158" width="12" height="38" rx="3" />
+                                        </g>
+                                    </g>
 
-                st.markdown("#### Ankle Plantar Flexion")
-                p_ankle = filter_athlete_data(ankle_raw, selected_player_it)
-                st.markdown(render_vball_table(p_ankle), unsafe_allow_html=True)
+                                    <!-- Node 1: Hip AD/AB -->
+                                    <circle cx="38" cy="100" r="3" fill="#FF8200" />
+                                    <line x1="38" y1="100" x2="12" y2="100" stroke="#FF8200" stroke-width="1.5" stroke-dasharray="2,2" />
+                                    <rect x="6" y="94" width="12" height="12" rx="2" fill="#FF8200" />
+                                    <text x="12" y="103" font-size="8" font-weight="900" fill="#FFFFFF" text-anchor="middle">1</text>
 
-            with col_right:
-                st.markdown("#### Knee Extension & Flexion")
-                p_knee = filter_athlete_data(knee_raw, selected_player_it)
-                st.markdown(render_vball_table(p_knee), unsafe_allow_html=True)
+                                    <!-- Node 2: Knee Extension/Flexion -->
+                                    <circle cx="49" cy="148" r="3" fill="#FF8200" />
+                                    <line x1="49" y1="148" x2="12" y2="148" stroke="#FF8200" stroke-width="1.5" stroke-dasharray="2,2" />
+                                    <rect x="6" y="142" width="12" height="12" rx="2" fill="#FF8200" />
+                                    <text x="12" y="151" font-size="8" font-weight="900" fill="#FFFFFF" text-anchor="middle">2</text>
 
-                st.markdown("<br>", unsafe_allow_html=True)
+                                    <!-- Node 3: Nordic Hamstring -->
+                                    <circle cx="71" cy="135" r="3" fill="#38BDF8" />
+                                    <line x1="71" y1="135" x2="108" y2="135" stroke="#38BDF8" stroke-width="1.5" stroke-dasharray="2,2" />
+                                    <rect x="100" y="129" width="12" height="12" rx="2" fill="#38BDF8" />
+                                    <text x="106" y="138" font-size="8" font-weight="900" fill="#FFFFFF" text-anchor="middle">3</text>
 
-                st.markdown("#### Hip Adduction / Abduction")
-                p_hip = filter_athlete_data(hip_raw, selected_player_it)
-                st.markdown(render_vball_table(p_hip), unsafe_allow_html=True)
+                                    <!-- Node 4: Ankle Plantar Flexion -->
+                                    <circle cx="71" cy="180" r="3" fill="#38BDF8" />
+                                    <line x1="71" y1="180" x2="108" y2="180" stroke="#38BDF8" stroke-width="1.5" stroke-dasharray="2,2" />
+                                    <rect x="100" y="174" width="12" height="12" rx="2" fill="#38BDF8" />
+                                    <text x="106" y="183" font-size="8" font-weight="900" fill="#FFFFFF" text-anchor="middle">4</text>
+                                </svg>
+                            </div>
+                        </div>
+                    </body>
+                    </html>
+                    """
+                    components.html(hud_html, height=450)
+
+                # --- RIGHT PANEL: LIGHT DETAILS CARDS ---
+                with hud_col2:
+                    st.markdown("""
+                        <style>
+                        .hud-details-card {
+                            background: #FFFFFF;
+                            border-radius: 16px;
+                            padding: 20px;
+                            border: 1px solid #E5E5E7;
+                            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+                        }
+                        .hud-header-title-light {
+                            color: #1D1D1F;
+                            font-weight: 800;
+                            font-size: 13px;
+                            letter-spacing: 1px;
+                            text-transform: uppercase;
+                            border-bottom: 2px solid #FF8200;
+                            padding-bottom: 6px;
+                            margin-bottom: 16px;
+                        }
+                        .hud-metric-row-light {
+                            background: #F8F9FA;
+                            border-left: 4px solid #FF8200;
+                            border-radius: 8px;
+                            padding: 10px 14px;
+                            margin-bottom: 10px;
+                            color: #1D1D1F;
+                            border-top: 1px solid #E5E5E7;
+                            border-right: 1px solid #E5E5E7;
+                            border-bottom: 1px solid #E5E5E7;
+                        }
+                        .hud-metric-row-light-blue {
+                            background: #F8F9FA;
+                            border-left: 4px solid #38BDF8;
+                            border-radius: 8px;
+                            padding: 10px 14px;
+                            margin-bottom: 10px;
+                            color: #1D1D1F;
+                            border-top: 1px solid #E5E5E7;
+                            border-right: 1px solid #E5E5E7;
+                            border-bottom: 1px solid #E5E5E7;
+                        }
+                        .node-badge-orange {
+                            display: inline-block;
+                            width: 20px;
+                            height: 20px;
+                            background: #FF8200;
+                            color: #FFFFFF;
+                            font-weight: 900;
+                            font-size: 11px;
+                            border-radius: 4px;
+                            text-align: center;
+                            line-height: 20px;
+                            margin-right: 8px;
+                        }
+                        .node-badge-blue {
+                            display: inline-block;
+                            width: 20px;
+                            height: 20px;
+                            background: #38BDF8;
+                            color: #FFFFFF;
+                            font-weight: 900;
+                            font-size: 11px;
+                            border-radius: 4px;
+                            text-align: center;
+                            line-height: 20px;
+                            margin-right: 8px;
+                        }
+                        </style>
+                        <div class="hud-details-card">
+                            <div class="hud-header-title-light">Anatomy Location Assessment Details</div>
+                    """, unsafe_allow_html=True)
+
+                    # NODE 1: HIP AD / AB
+                    if not hip_ath.empty:
+                        hip_ad = hip_ath[hip_ath['TestDirection'].str.contains('AD|Adduction', case=False, na=False)] if 'TestDirection' in hip_ath.columns else hip_ath
+                        hip_ab = hip_ath[hip_ath['TestDirection'].str.contains('AB|Abduction', case=False, na=False)] if 'TestDirection' in hip_ath.columns else hip_ath
+
+                        if not hip_ad.empty:
+                            ad_b, ad_l = hip_ad.iloc[0], hip_ad.iloc[-1]
+                            ad_bL, ad_bR = ad_b.get('L Max Force (N)', 0.0), ad_b.get('R Max Force (N)', 0.0)
+                            ad_lL, ad_lR = ad_l.get('L Max Force (N)', 0.0), ad_l.get('R Max Force (N)', 0.0)
+                            date_str = ad_l['Date'].strftime('%m/%d/%Y') if pd.notna(ad_l.get('Date')) else "N/A"
+
+                            st.markdown(f"""
+                                <div class="hud-metric-row-light">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                        <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-orange">1</span>HIP ADDUCTION (AD) FORCE</span>
+                                        <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
+                                    </div>
+                                    <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
+                                        <b>Initial Force:</b> L {ad_bL:.1f}N | R {ad_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(ad_lL, ad_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(ad_lR, ad_bR, '{:.1f}', 'N')}
+                                    </div>
+                                </div>
+                            """, unsafe_allow_html=True)
+
+                        if not hip_ab.empty:
+                            ab_b, ab_l = hip_ab.iloc[0], hip_ab.iloc[-1]
+                            ab_bL, ab_bR = ab_b.get('L Max Force (N)', 0.0), ab_b.get('R Max Force (N)', 0.0)
+                            ab_lL, ab_lR = ab_l.get('L Max Force (N)', 0.0), ab_l.get('R Max Force (N)', 0.0)
+                            date_str = ab_l['Date'].strftime('%m/%d/%Y') if pd.notna(ab_l.get('Date')) else "N/A"
+
+                            st.markdown(f"""
+                                <div class="hud-metric-row-light">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                        <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-orange">1</span>HIP ABDUCTION (AB) FORCE</span>
+                                        <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
+                                    </div>
+                                    <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
+                                        <b>Initial Force:</b> L {ab_bL:.1f}N | R {ab_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(ab_lL, ab_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(ab_lR, ab_bR, '{:.1f}', 'N')}
+                                    </div>
+                                </div>
+                            """, unsafe_allow_html=True)
+
+                    # NODE 2: KNEE EXTENSION & FLEXION
+                    if not knee_ath.empty:
+                        knee_ext = knee_ath[knee_ath['TestDirection'].str.contains('Extension', case=False, na=False)] if 'TestDirection' in knee_ath.columns else knee_ath
+                        knee_flx = knee_ath[knee_ath['TestDirection'].str.contains('Flexion', case=False, na=False)] if 'TestDirection' in knee_ath.columns else knee_ath
+
+                        if not knee_ext.empty:
+                            ke_b, ke_l = knee_ext.iloc[0], knee_ext.iloc[-1]
+                            ke_bL, ke_bR = ke_b.get('L Max Force (N)', 0.0), ke_b.get('R Max Force (N)', 0.0)
+                            ke_lL, ke_lR = ke_l.get('L Max Force (N)', 0.0), ke_l.get('R Max Force (N)', 0.0)
+                            date_str = ke_l['Date'].strftime('%m/%d/%Y') if pd.notna(ke_l.get('Date')) else "N/A"
+
+                            st.markdown(f"""
+                                <div class="hud-metric-row-light">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                        <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-orange">2</span>KNEE EXTENSION FORCE</span>
+                                        <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
+                                    </div>
+                                    <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
+                                        <b>Initial Force:</b> L {ke_bL:.1f}N | R {ke_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(ke_lL, ke_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(ke_lR, ke_bR, '{:.1f}', 'N')}
+                                    </div>
+                                </div>
+                            """, unsafe_allow_html=True)
+
+                        if not knee_flx.empty:
+                            kf_b, kf_l = knee_flx.iloc[0], knee_flx.iloc[-1]
+                            kf_bL, kf_bR = kf_b.get('L Max Force (N)', 0.0), kf_b.get('R Max Force (N)', 0.0)
+                            kf_lL, kf_lR = kf_l.get('L Max Force (N)', 0.0), kf_l.get('R Max Force (N)', 0.0)
+                            date_str = kf_l['Date'].strftime('%m/%d/%Y') if pd.notna(kf_l.get('Date')) else "N/A"
+
+                            st.markdown(f"""
+                                <div class="hud-metric-row-light">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                        <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-orange">2</span>KNEE FLEXION FORCE</span>
+                                        <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
+                                    </div>
+                                    <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
+                                        <b>Initial Force:</b> L {kf_bL:.1f}N | R {kf_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(kf_lL, kf_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(kf_lR, kf_bR, '{:.1f}', 'N')}
+                                    </div>
+                                </div>
+                            """, unsafe_allow_html=True)
+
+                    # NODE 3: NORDIC HAMSTRING
+                    if not nordic_ath.empty:
+                        b_n, l_n = nordic_ath.iloc[0], nordic_ath.iloc[-1]
+                        bnL, bnR = b_n.get('L Max Force (N)', 0.0), b_n.get('R Max Force (N)', 0.0)
+                        lnL, lnR = l_n.get('L Max Force (N)', 0.0), l_n.get('R Max Force (N)', 0.0)
+                        date_str = l_n['Date'].strftime('%m/%d/%Y') if pd.notna(l_n.get('Date')) else "N/A"
+
+                        st.markdown(f"""
+                            <div class="hud-metric-row-light-blue">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">3</span>NORDIC HAMSTRING STRENGTH</span>
+                                    <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
+                                </div>
+                                <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
+                                    <b>Initial Force:</b> L {bnL:.1f}N | R {bnR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(lnL, bnL, '{:.1f}', 'N')} | R {render_val_with_arrow(lnR, bnR, '{:.1f}', 'N')}
+                                </div>
+                            </div>
+                        """, unsafe_allow_html=True)
+
+                    # NODE 4: ANKLE PLANTAR FLEXION
+                    if not ankle_ath.empty:
+                        b_a, l_a = ankle_ath.iloc[0], ankle_ath.iloc[-1]
+                        baL, baR = b_a.get('L Max Force (N)', 0.0), b_a.get('R Max Force (N)', 0.0)
+                        laL, laR = l_a.get('L Max Force (N)', 0.0), l_a.get('R Max Force (N)', 0.0)
+                        date_str = l_a['Date'].strftime('%m/%d/%Y') if pd.notna(l_a.get('Date')) else "N/A"
+
+                        st.markdown(f"""
+                            <div class="hud-metric-row-light-blue">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">4</span>ANKLE PLANTAR FLEXION</span>
+                                    <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
+                                </div>
+                                <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
+                                    <b>Initial Force:</b> L {baL:.1f}N | R {baR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(laL, baL, '{:.1f}', 'N')} | R {render_val_with_arrow(laR, baR, '{:.1f}', 'N')}
+                                </div>
+                            </div>
+                        """, unsafe_allow_html=True)
+
+                    st.markdown('</div>', unsafe_allow_html=True)
+
+            else:
+                st.info(f"No Intake Assessment records found for {selected_intake_athlete}.")
