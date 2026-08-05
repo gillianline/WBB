@@ -1219,9 +1219,9 @@ with active_season:
 
                 hud_col1, hud_col2 = st.columns([1.2, 1.8])
 
-                # --- LEFT PANEL: REFINED PROPORTIONAL ANATOMY MAP (LIGHTWEIGHT SVG) ---
+                # --- LEFT PANEL: REFINED BODY FRAME WITH ISOLATED MUSCLE BLOCKS ---
                 with hud_col1:
-                    svg_code = """
+                    hud_svg_html = """
                     <div style="background:#FFFFFF; border-radius:16px; padding:16px; border:1px solid #E5E5E7; box-shadow:0 4px 12px rgba(0,0,0,0.03);">
                         <div style="color:#1D1D1F; font-weight:800; font-size:13px; letter-spacing:1px; text-transform:uppercase; border-bottom:2px solid #FF8200; padding-bottom:6px; margin-bottom:12px;">Anatomy Location Map</div>
                         <div style="position:relative; width:100%; height:380px; background:#FAFDFD; border-radius:12px; border:1px solid #D5E5E8; display:flex; align-items:center; justify-content:center; overflow:hidden;">
@@ -1235,7 +1235,11 @@ with active_season:
                                         <stop offset="100%" stop-color="#9AA0A6" />
                                     </linearGradient>
                                 </defs>
+
+                                <!-- DROP SHADOW AT BASE -->
                                 <ellipse cx="68" cy="214" rx="20" ry="3.5" fill="#000000" opacity="0.12" />
+
+                                <!-- BASE PROPORTIONAL HUMAN FRAME -->
                                 <g stroke="#1D1D1F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                                     <ellipse cx="68" cy="17" rx="7" ry="9" fill="#FFE0D0" />
                                     <path d="M 64 17 C 62 17, 62 21, 64 22" fill="#FFE0D0" />
@@ -1244,22 +1248,32 @@ with active_season:
                                     <ellipse cx="70.5" cy="17" rx="1" ry="1" fill="#1D1D1F" />
                                     <path d="M 68 18 L 67 20 L 69 20" fill="none" stroke-width="0.8" />
                                     <path d="M 66 23 C 67 24, 69 24, 70 23" fill="none" stroke-width="1" />
+                                    
                                     <line x1="65" y1="25" x2="63" y2="33" stroke-width="1.5" />
                                     <line x1="71" y1="25" x2="73" y2="33" stroke-width="1.5" />
+
                                     <path d="M 42 40 C 37 43, 35 52, 33 64 C 31 74, 29 82, 27 92 C 25 96, 23 100, 22 104 C 21 106, 23 107, 25 106 C 27 104, 28 98, 30 92 C 33 82, 36 74, 38 64 C 40 54, 42 48, 43 56 Z" fill="#FFE0D0" />
                                     <path d="M 22 104 C 20 106, 18 108, 17 110 M 23 105 C 21 108, 20 110, 19 112 M 24 105 C 23 108, 22 110, 21 112 M 25 104 C 25 107, 24 109, 23 111" fill="none" stroke-width="1" />
+                                    
                                     <path d="M 94 40 C 99 43, 101 52, 103 64 C 105 74, 107 82, 109 92 C 111 96, 113 100, 114 104 C 115 106, 113 107, 111 106 C 109 104, 108 98, 106 92 C 103 82, 100 74, 98 64 C 96 54, 94 48, 93 56 Z" fill="#FFE0D0" />
                                     <path d="M 114 104 C 116 106, 118 108, 119 110 M 113 105 C 115 108, 116 110, 117 112 M 112 105 C 113 108, 114 110, 115 112 M 111 104 C 111 107, 112 109, 113 111" fill="none" stroke-width="1" />
+
                                     <polygon points="48,202 44,210 56,210 56,202" fill="#FFE0D0" />
                                     <polygon points="88,202 92,210 80,210 80,202" fill="#FFE0D0" />
+
                                     <line x1="68" y1="8" x2="68" y2="210" stroke="#FF8200" stroke-width="1.3" />
+
                                     <line x1="51" y1="116" x2="85" y2="116" stroke="#D32F2F" stroke-width="1.2" />
                                     <line x1="55" y1="168" x2="81" y2="168" stroke="#D32F2F" stroke-width="1.2" />
-                                    <path d="M 45 38 C 50 36, 55 41, 52 48 C 47 47, 43 42, 45 38 Z" fill="#FF8200" stroke="#1D1D1F" stroke-width="1.8" />
-                                    <path d="M 91 38 C 86 36, 81 41, 84 48 C 89 47, 93 42, 91 38 Z" fill="#FF8200" stroke="#1D1D1F" stroke-width="1.8" />
-                                    <path d="M 53 43 C 61 42, 67 46, 67 52 C 59 54, 52 50, 53 43 Z" fill="#FF8200" stroke="#1D1D1F" stroke-width="1.8" />
-                                    <path d="M 83 43 C 75 42, 69 46, 69 52 C 77 54, 84 50, 83 43 Z" fill="#FF8200" stroke="#1D1D1F" stroke-width="1.8" />
-                                    <g fill="#FF8200" stroke="#1D1D1F" stroke-width="1.8">
+
+                                    <!-- ISOLATED MUSCLE BLOCKS -->
+                                    <path d="M 45 38 C 50 36, 55 41, 52 48 C 47 47, 43 42, 45 38 Z" fill="#EFA066" stroke="#1D1D1F" stroke-width="1.8" />
+                                    <path d="M 91 38 C 86 36, 81 41, 84 48 C 89 47, 93 42, 91 38 Z" fill="#EFA066" stroke="#1D1D1F" stroke-width="1.8" />
+
+                                    <path d="M 53 43 C 61 42, 67 46, 67 52 C 59 54, 52 50, 53 43 Z" fill="#EFA066" stroke="#1D1D1F" stroke-width="1.8" />
+                                    <path d="M 83 43 C 75 42, 69 46, 69 52 C 77 54, 84 50, 83 43 Z" fill="#EFA066" stroke="#1D1D1F" stroke-width="1.8" />
+
+                                    <g fill="#EFA066" stroke="#1D1D1F" stroke-width="1.8">
                                         <rect x="59" y="55" width="7" height="7" rx="1.5" />
                                         <rect x="70" y="55" width="7" height="7" rx="1.5" />
                                         <rect x="59" y="64" width="7" height="7" rx="1.5" />
@@ -1267,34 +1281,52 @@ with active_season:
                                         <rect x="60" y="73" width="6" height="7" rx="1.5" />
                                         <rect x="70" y="73" width="6" height="7" rx="1.5" />
                                     </g>
-                                    <path d="M 52 94 C 47 94, 46 122, 53 134 C 57 125, 56 101, 52 94 Z" fill="#38BDF8" stroke="#1D1D1F" stroke-width="1.8" />
-                                    <path d="M 84 94 C 89 94, 90 122, 83 134 C 79 125, 80 101, 84 94 Z" fill="#38BDF8" stroke="#1D1D1F" stroke-width="1.8" />
-                                    <path d="M 60 97 C 57 103, 56 120, 62 134 C 65 124, 64 104, 60 97 Z" fill="#38BDF8" stroke="#1D1D1F" stroke-width="1.8" />
-                                    <path d="M 76 97 C 79 103, 80 120, 74 134 C 71 124, 72 104, 76 97 Z" fill="#38BDF8" stroke="#1D1D1F" stroke-width="1.8" />
-                                    <path d="M 54 148 C 50 156, 51 176, 56 192 C 58 178, 58 160, 56 148 Z" fill="#38BDF8" stroke="#1D1D1F" stroke-width="1.8" />
-                                    <path d="M 82 148 C 86 156, 85 176, 80 192 C 78 178, 78 160, 80 148 Z" fill="#38BDF8" stroke="#1D1D1F" stroke-width="1.8" />
+
+                                    <path d="M 52 94 C 47 94, 46 122, 53 134 C 57 125, 56 101, 52 94 Z" fill="#A4CEF4" stroke="#1D1D1F" stroke-width="1.8" />
+                                    <path d="M 84 94 C 89 94, 90 122, 83 134 C 79 125, 80 101, 84 94 Z" fill="#A4CEF4" stroke="#1D1D1F" stroke-width="1.8" />
+
+                                    <path d="M 60 97 C 57 103, 56 120, 62 134 C 65 124, 64 104, 60 97 Z" fill="#A4CEF4" stroke="#1D1D1F" stroke-width="1.8" />
+                                    <path d="M 76 97 C 79 103, 80 120, 74 134 C 71 124, 72 104, 76 97 Z" fill="#A4CEF4" stroke="#1D1D1F" stroke-width="1.8" />
+
+                                    <path d="M 54 148 C 50 156, 51 176, 56 192 C 58 178, 58 160, 56 148 Z" fill="#A4CEF4" stroke="#1D1D1F" stroke-width="1.8" />
+                                    <path d="M 82 148 C 86 156, 85 176, 80 192 C 78 178, 78 160, 80 148 Z" fill="#A4CEF4" stroke="#1D1D1F" stroke-width="1.8" />
                                 </g>
-                                <circle cx="38" cy="100" r="3.5" fill="#FF8200" stroke="#FFFFFF" stroke-width="1" />
-                                <line x1="38" y1="100" x2="12" y2="100" stroke="#FF8200" stroke-width="1.5" stroke-dasharray="2,2" />
-                                <rect x="6" y="94" width="12" height="12" rx="2" fill="#FF8200" />
-                                <text x="12" y="103" font-size="8" font-weight="900" fill="#FFFFFF" text-anchor="middle">1</text>
+
+                                <!-- NODES & CALLOUT LINES / BADGES -->
+                                <!-- Node 1: Knee Extension / Flexion (Orange) -->
                                 <circle cx="49" cy="148" r="3.5" fill="#FF8200" stroke="#FFFFFF" stroke-width="1" />
-                                <line x1="49" y1="148" x2="12" y2="148" stroke="#FF8200" stroke-width="1.5" stroke-dasharray="2,2" />
-                                <rect x="6" y="142" width="12" height="12" rx="2" fill="#FF8200" />
-                                <text x="12" y="151" font-size="8" font-weight="900" fill="#FFFFFF" text-anchor="middle">2</text>
-                                <circle cx="71" cy="135" r="3.5" fill="#38BDF8" stroke="#FFFFFF" stroke-width="1" />
-                                <line x1="71" y1="135" x2="108" y2="135" stroke="#38BDF8" stroke-width="1.5" stroke-dasharray="2,2" />
-                                <rect x="100" y="129" width="12" height="12" rx="2" fill="#38BDF8" />
-                                <text x="106" y="138" font-size="8" font-weight="900" fill="#FFFFFF" text-anchor="middle">3</text>
-                                <circle cx="71" cy="180" r="3.5" fill="#38BDF8" stroke="#FFFFFF" stroke-width="1" />
-                                <line x1="71" y1="180" x2="108" y2="180" stroke="#38BDF8" stroke-width="1.5" stroke-dasharray="2,2" />
-                                <rect x="100" y="174" width="12" height="12" rx="2" fill="#38BDF8" />
-                                <text x="106" y="183" font-size="8" font-weight="900" fill="#FFFFFF" text-anchor="middle">4</text>
+                                <line x1="49" y1="148" x2="22" y2="148" stroke="#FF8200" stroke-width="1.8" stroke-dasharray="2,2" />
+                                <rect x="14" y="141" width="14" height="14" rx="3" fill="#FF8200" />
+                                <text x="21" y="152" font-size="9" font-weight="900" fill="#FFFFFF" text-anchor="middle">1</text>
+
+                                <!-- Node 2: Nordic Hamstring (Orange) -->
+                                <circle cx="71" cy="135" r="3.5" fill="#FF8200" stroke="#FFFFFF" stroke-width="1" />
+                                <line x1="71" y1="135" x2="118" y2="135" stroke="#FF8200" stroke-width="1.8" stroke-dasharray="2,2" />
+                                <rect x="112" y="128" width="14" height="14" rx="3" fill="#FF8200" />
+                                <text x="119" y="139" font-size="9" font-weight="900" fill="#FFFFFF" text-anchor="middle">2</text>
+
+                                <!-- Node 3: Hip Adduction (Blue) -->
+                                <circle cx="74" cy="122" r="3.5" fill="#4895DB" stroke="#FFFFFF" stroke-width="1" />
+                                <line x1="74" y1="122" x2="118" y2="100" stroke="#4895DB" stroke-width="1.8" stroke-dasharray="2,2" />
+                                <rect x="112" y="93" width="14" height="14" rx="3" fill="#4895DB" />
+                                <text x="119" y="104" font-size="9" font-weight="900" fill="#FFFFFF" text-anchor="middle">3</text>
+
+                                <!-- Node 4: Hip Abduction (Blue) -->
+                                <circle cx="53" cy="116" r="3.5" fill="#4895DB" stroke="#FFFFFF" stroke-width="1" />
+                                <line x1="53" y1="116" x2="22" y2="116" stroke="#4895DB" stroke-width="1.8" stroke-dasharray="2,2" />
+                                <rect x="14" y="109" width="14" height="14" rx="3" fill="#4895DB" />
+                                <text x="21" y="120" font-size="9" font-weight="900" fill="#FFFFFF" text-anchor="middle">4</text>
+
+                                <!-- Node 5: Ankle Plantar Flexion (Blue) -->
+                                <circle cx="77" cy="172" r="3.5" fill="#4895DB" stroke="#FFFFFF" stroke-width="1" />
+                                <line x1="77" y1="172" x2="118" y2="172" stroke="#4895DB" stroke-width="1.8" stroke-dasharray="2,2" />
+                                <rect x="112" y="165" width="14" height="14" rx="3" fill="#4895DB" />
+                                <text x="119" y="176" font-size="9" font-weight="900" fill="#FFFFFF" text-anchor="middle">5</text>
                             </svg>
                         </div>
                     </div>
                     """
-                    st.markdown(svg_code, unsafe_allow_html=True)
+                    st.markdown(hud_svg_html, unsafe_allow_html=True)
 
                 # --- RIGHT PANEL: LIGHT DETAILS CARDS ---
                 with hud_col2:
@@ -1330,7 +1362,7 @@ with active_season:
                         }
                         .hud-metric-row-light-blue {
                             background: #F8F9FA;
-                            border-left: 4px solid #38BDF8;
+                            border-left: 4px solid #4895DB;
                             border-radius: 8px;
                             padding: 10px 14px;
                             margin-bottom: 10px;
@@ -1356,7 +1388,7 @@ with active_season:
                             display: inline-block;
                             width: 20px;
                             height: 20px;
-                            background: #38BDF8;
+                            background: #4895DB;
                             color: #FFFFFF;
                             font-weight: 900;
                             font-size: 11px;
@@ -1370,7 +1402,56 @@ with active_season:
                             <div class="hud-header-title-light">Anatomy Location Assessment Details</div>
                     """, unsafe_allow_html=True)
 
-                    # NODE 1: HIP AD / AB
+                    # NODE 1: KNEE EXTENSION & FLEXION
+                    if not knee_ath.empty:
+                        knee_ext = knee_ath[knee_ath['TestDirection'].str.contains('Extension', case=False, na=False)] if 'TestDirection' in knee_ath.columns else knee_ath
+                        knee_flx = knee_ath[knee_ath['TestDirection'].str.contains('Flexion', case=False, na=False)] if 'TestDirection' in knee_ath.columns else knee_ath
+
+                        ke_b = knee_ext.iloc[0] if not knee_ext.empty else pd.Series()
+                        ke_l = knee_ext.iloc[-1] if not knee_ext.empty else pd.Series()
+                        kf_b = knee_flx.iloc[0] if not knee_flx.empty else pd.Series()
+                        kf_l = knee_flx.iloc[-1] if not knee_flx.empty else pd.Series()
+
+                        ke_bL, ke_bR = ke_b.get('L Max Force (N)', 0.0), ke_b.get('R Max Force (N)', 0.0)
+                        ke_lL, ke_lR = ke_l.get('L Max Force (N)', 0.0), ke_l.get('R Max Force (N)', 0.0)
+                        kf_bL, kf_bR = kf_b.get('L Max Force (N)', 0.0), kf_b.get('R Max Force (N)', 0.0)
+                        kf_lL, kf_lR = kf_l.get('L Max Force (N)', 0.0), kf_l.get('R Max Force (N)', 0.0)
+
+                        latest_date_str = ke_l.get('Date', pd.Timestamp.now()).strftime('%m/%d/%Y') if pd.notna(ke_l.get('Date')) else "N/A"
+
+                        st.markdown(f"""
+                            <div class="hud-metric-row-light">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-orange">1</span>KNEE EXTENSION & FLEXION</span>
+                                    <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {latest_date_str}</span>
+                                </div>
+                                <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
+                                    <b>Extension:</b> Initial L {ke_bL:.1f}N | R {ke_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(ke_lL, ke_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(ke_lR, ke_bR, '{:.1f}', 'N')}<br>
+                                    <b>Flexion:</b> Initial L {kf_bL:.1f}N | R {kf_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(kf_lL, kf_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(kf_lR, kf_bR, '{:.1f}', 'N')}
+                                </div>
+                            </div>
+                        """, unsafe_allow_html=True)
+
+                    # NODE 2: NORDIC HAMSTRING
+                    if not nordic_ath.empty:
+                        b_n, l_n = nordic_ath.iloc[0], nordic_ath.iloc[-1]
+                        bnL, bnR = b_n.get('L Max Force (N)', 0.0), b_n.get('R Max Force (N)', 0.0)
+                        lnL, lnR = l_n.get('L Max Force (N)', 0.0), l_n.get('R Max Force (N)', 0.0)
+                        date_str = l_n['Date'].strftime('%m/%d/%Y') if pd.notna(l_n.get('Date')) else "N/A"
+
+                        st.markdown(f"""
+                            <div class="hud-metric-row-light">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-orange">2</span>NORDIC HAMSTRING STRENGTH</span>
+                                    <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
+                                </div>
+                                <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
+                                    <b>Initial Force:</b> L {bnL:.1f}N | R {bnR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(lnL, bnL, '{:.1f}', 'N')} | R {render_val_with_arrow(lnR, bnR, '{:.1f}', 'N')}
+                                </div>
+                            </div>
+                        """, unsafe_allow_html=True)
+
+                    # NODE 3 & 4: HIP AD/AB
                     if not hip_ath.empty:
                         hip_ad = hip_ath[hip_ath['TestDirection'].str.contains('AD|Adduction', case=False, na=False)] if 'TestDirection' in hip_ath.columns else hip_ath
                         hip_ab = hip_ath[hip_ath['TestDirection'].str.contains('AB|Abduction', case=False, na=False)] if 'TestDirection' in hip_ath.columns else hip_ath
@@ -1382,9 +1463,9 @@ with active_season:
                             date_str = ad_l['Date'].strftime('%m/%d/%Y') if pd.notna(ad_l.get('Date')) else "N/A"
 
                             st.markdown(f"""
-                                <div class="hud-metric-row-light">
+                                <div class="hud-metric-row-light-blue">
                                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                        <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-orange">1</span>HIP ADDUCTION (AD) FORCE</span>
+                                        <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">3</span>HIP ADDUCTION (AD)</span>
                                         <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
                                     </div>
                                     <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
@@ -1400,9 +1481,9 @@ with active_season:
                             date_str = ab_l['Date'].strftime('%m/%d/%Y') if pd.notna(ab_l.get('Date')) else "N/A"
 
                             st.markdown(f"""
-                                <div class="hud-metric-row-light">
+                                <div class="hud-metric-row-light-blue">
                                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                        <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-orange">1</span>HIP ABDUCTION (AB) FORCE</span>
+                                        <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">4</span>HIP ABDUCTION (AB)</span>
                                         <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
                                     </div>
                                     <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
@@ -1411,67 +1492,7 @@ with active_season:
                                 </div>
                             """, unsafe_allow_html=True)
 
-                    # NODE 2: KNEE EXTENSION & FLEXION
-                    if not knee_ath.empty:
-                        knee_ext = knee_ath[knee_ath['TestDirection'].str.contains('Extension', case=False, na=False)] if 'TestDirection' in knee_ath.columns else knee_ath
-                        knee_flx = knee_ath[knee_ath['TestDirection'].str.contains('Flexion', case=False, na=False)] if 'TestDirection' in knee_ath.columns else knee_ath
-
-                        if not knee_ext.empty:
-                            ke_b, ke_l = knee_ext.iloc[0], knee_ext.iloc[-1]
-                            ke_bL, ke_bR = ke_b.get('L Max Force (N)', 0.0), ke_b.get('R Max Force (N)', 0.0)
-                            ke_lL, ke_lR = ke_l.get('L Max Force (N)', 0.0), ke_l.get('R Max Force (N)', 0.0)
-                            date_str = ke_l['Date'].strftime('%m/%d/%Y') if pd.notna(ke_l.get('Date')) else "N/A"
-
-                            st.markdown(f"""
-                                <div class="hud-metric-row-light">
-                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                        <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-orange">2</span>KNEE EXTENSION</span>
-                                        <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
-                                    </div>
-                                    <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
-                                        <b>Initial Force:</b> L {ke_bL:.1f}N | R {ke_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(ke_lL, ke_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(ke_lR, ke_bR, '{:.1f}', 'N')}
-                                    </div>
-                                </div>
-                            """, unsafe_allow_html=True)
-
-                        if not knee_flx.empty:
-                            kf_b, kf_l = knee_flx.iloc[0], knee_flx.iloc[-1]
-                            kf_bL, kf_bR = kf_b.get('L Max Force (N)', 0.0), kf_b.get('R Max Force (N)', 0.0)
-                            kf_lL, kf_lR = kf_l.get('L Max Force (N)', 0.0), kf_l.get('R Max Force (N)', 0.0)
-                            date_str = kf_l['Date'].strftime('%m/%d/%Y') if pd.notna(kf_l.get('Date')) else "N/A"
-
-                            st.markdown(f"""
-                                <div class="hud-metric-row-light">
-                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                        <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-orange">2</span>KNEE FLEXION</span>
-                                        <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
-                                    </div>
-                                    <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
-                                        <b>Initial Force:</b> L {kf_bL:.1f}N | R {kf_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(kf_lL, kf_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(kf_lR, kf_bR, '{:.1f}', 'N')}
-                                    </div>
-                                </div>
-                            """, unsafe_allow_html=True)
-
-                    # NODE 3: NORDIC HAMSTRING
-                    if not nordic_ath.empty:
-                        b_n, l_n = nordic_ath.iloc[0], nordic_ath.iloc[-1]
-                        bnL, bnR = b_n.get('L Max Force (N)', 0.0), b_n.get('R Max Force (N)', 0.0)
-                        lnL, lnR = l_n.get('L Max Force (N)', 0.0), l_n.get('R Max Force (N)', 0.0)
-                        date_str = l_n['Date'].strftime('%m/%d/%Y') if pd.notna(l_n.get('Date')) else "N/A"
-
-                        st.markdown(f"""
-                            <div class="hud-metric-row-light-blue">
-                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">3</span>NORDIC HAMSTRING STRENGTH</span>
-                                    <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
-                                </div>
-                                <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
-                                    <b>Initial Force:</b> L {bnL:.1f}N | R {bnR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(lnL, bnL, '{:.1f}', 'N')} | R {render_val_with_arrow(lnR, bnR, '{:.1f}', 'N')}
-                                </div>
-                            </div>
-                        """, unsafe_allow_html=True)
-
-                    # NODE 4: ANKLE PLANTAR FLEXION
+                    # NODE 5: ANKLE PLANTAR FLEXION
                     if not ankle_ath.empty:
                         b_a, l_a = ankle_ath.iloc[0], ankle_ath.iloc[-1]
                         baL, baR = b_a.get('L Max Force (N)', 0.0), b_a.get('R Max Force (N)', 0.0)
@@ -1481,7 +1502,7 @@ with active_season:
                         st.markdown(f"""
                             <div class="hud-metric-row-light-blue">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">4</span>ANKLE PLANTAR FLEXION</span>
+                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">5</span>ANKLE PLANTAR FLEXION</span>
                                     <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
                                 </div>
                                 <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
