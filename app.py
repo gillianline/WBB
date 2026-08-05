@@ -1371,7 +1371,7 @@ with active_season:
                     </body>
                     </html>
                     """
-                    components.html(hud_html, height=450)
+                    st.info("Anatomy map temporarily disabled.")
 
                 # --- RIGHT PANEL: LIGHT DETAILS CARDS ---
                 with hud_col2:
