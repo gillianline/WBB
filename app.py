@@ -1219,159 +1219,82 @@ with active_season:
 
                 hud_col1, hud_col2 = st.columns([1.2, 1.8])
 
-                # --- LEFT PANEL: REFINED PROPORTIONAL ANATOMY MAP ---
+                # --- LEFT PANEL: REFINED PROPORTIONAL ANATOMY MAP (LIGHTWEIGHT SVG) ---
                 with hud_col1:
-                    hud_html = """
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                    <style>
-                        body {
-                            margin: 0;
-                            padding: 0;
-                            background-color: transparent;
-                            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-                        }
-                        .hud-dashboard-card {
-                            background: #FFFFFF;
-                            border-radius: 16px;
-                            padding: 16px;
-                            border: 1px solid #E5E5E7;
-                            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
-                        }
-                        .hud-header-title {
-                            color: #1D1D1F;
-                            font-weight: 800;
-                            font-size: 13px;
-                            letter-spacing: 1px;
-                            text-transform: uppercase;
-                            border-bottom: 2px solid #FF8200;
-                            padding-bottom: 6px;
-                            margin-bottom: 12px;
-                        }
-                        .hud-body-viewport {
-                            position: relative;
-                            width: 100%;
-                            height: 380px;
-                            background: #FAFDFD;
-                            border-radius: 12px;
-                            border: 1px solid #D5E5E8;
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                            overflow: hidden;
-                        }
-                        svg {
-                            width: 100%;
-                            height: 100%;
-                        }
-                    </style>
-                    </head>
-                    <body>
-                        <div class="hud-dashboard-card">
-                            <div class="hud-header-title">Anatomy Location Map</div>
-                            <div class="hud-body-viewport">
-                                <svg viewBox="0 0 140 220" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
-                                    <defs>
-                                        <linearGradient id="anatomicalBodyGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                                            <stop offset="0%" stop-color="#C5CACC" />
-                                            <stop offset="25%" stop-color="#E8ECEE" />
-                                            <stop offset="50%" stop-color="#F2F5F7" />
-                                            <stop offset="75%" stop-color="#D0D5D8" />
-                                            <stop offset="100%" stop-color="#9AA0A6" />
-                                        </linearGradient>
-                                    </defs>
-
-                                    <!-- DROP SHADOW AT BASE -->
-                                    <ellipse cx="68" cy="214" rx="20" ry="3.5" fill="#000000" opacity="0.12" />
-
-                                    <!-- BASE PROPORTIONAL HUMAN FRAME -->
-                                    <g stroke="#1D1D1F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                                        
-                                        <!-- Head & Facial Outline -->
-                                        <ellipse cx="68" cy="17" rx="7" ry="9" fill="#FFE0D0" />
-                                        <path d="M 64 17 C 62 17, 62 21, 64 22" fill="#FFE0D0" />
-                                        <path d="M 72 17 C 74 17, 74 21, 72 22" fill="#FFE0D0" />
-                                        <ellipse cx="65.5" cy="17" rx="1" ry="1" fill="#1D1D1F" />
-                                        <ellipse cx="70.5" cy="17" rx="1" ry="1" fill="#1D1D1F" />
-                                        <path d="M 68 18 L 67 20 L 69 20" fill="none" stroke-width="0.8" />
-                                        <path d="M 66 23 C 67 24, 69 24, 70 23" fill="none" stroke-width="1" />
-                                        
-                                        <!-- Neck -->
-                                        <line x1="65" y1="25" x2="63" y2="33" stroke-width="1.5" />
-                                        <line x1="71" y1="25" x2="73" y2="33" stroke-width="1.5" />
-
-                                        <!-- Arms -->
-                                        <path d="M 42 40 C 37 43, 35 52, 33 64 C 31 74, 29 82, 27 92 C 25 96, 23 100, 22 104 C 21 106, 23 107, 25 106 C 27 104, 28 98, 30 92 C 33 82, 36 74, 38 64 C 40 54, 42 48, 43 56 Z" fill="#FFE0D0" />
-                                        <path d="M 22 104 C 20 106, 18 108, 17 110 M 23 105 C 21 108, 20 110, 19 112 M 24 105 C 23 108, 22 110, 21 112 M 25 104 C 25 107, 24 109, 23 111" fill="none" stroke-width="1" />
-                                        
-                                        <path d="M 94 40 C 99 43, 101 52, 103 64 C 105 74, 107 82, 109 92 C 111 96, 113 100, 114 104 C 115 106, 113 107, 111 106 C 109 104, 108 98, 106 92 C 103 82, 100 74, 98 64 C 96 54, 94 48, 93 56 Z" fill="#FFE0D0" />
-                                        <path d="M 114 104 C 116 106, 118 108, 119 110 M 113 105 C 115 108, 116 110, 117 112 M 112 105 C 113 108, 114 110, 115 112 M 111 104 C 111 107, 112 109, 113 111" fill="none" stroke-width="1" />
-
-                                        <!-- Feet -->
-                                        <polygon points="48,202 44,210 56,210 56,202" fill="#FFE0D0" />
-                                        <polygon points="88,202 92,210 80,210 80,202" fill="#FFE0D0" />
-
-                                        <!-- PLUMB LINE -->
-                                        <line x1="68" y1="8" x2="68" y2="210" stroke="#FF8200" stroke-width="1.3" />
-
-                                        <!-- RED HORIZONTAL GUIDELINES -->
-                                        <line x1="51" y1="116" x2="85" y2="116" stroke="#D32F2F" stroke-width="1.2" />
-                                        <line x1="55" y1="168" x2="81" y2="168" stroke="#D32F2F" stroke-width="1.2" />
-
-                                        <!-- ISOLATED MUSCLE POD BLOCKS -->
-                                        <path d="M 45 38 C 50 36, 55 41, 52 48 C 47 47, 43 42, 45 38 Z" fill="#FF8200" stroke="#1D1D1F" stroke-width="1.8" />
-                                        <path d="M 91 38 C 86 36, 81 41, 84 48 C 89 47, 93 42, 91 38 Z" fill="#FF8200" stroke="#1D1D1F" stroke-width="1.8" />
-
-                                        <path d="M 53 43 C 61 42, 67 46, 67 52 C 59 54, 52 50, 53 43 Z" fill="#FF8200" stroke="#1D1D1F" stroke-width="1.8" />
-                                        <path d="M 83 43 C 75 42, 69 46, 69 52 C 77 54, 84 50, 83 43 Z" fill="#FF8200" stroke="#1D1D1F" stroke-width="1.8" />
-
-                                        <g fill="#FF8200" stroke="#1D1D1F" stroke-width="1.8">
-                                            <rect x="59" y="55" width="7" height="7" rx="1.5" />
-                                            <rect x="70" y="55" width="7" height="7" rx="1.5" />
-                                            <rect x="59" y="64" width="7" height="7" rx="1.5" />
-                                            <rect x="70" y="64" width="7" height="7" rx="1.5" />
-                                            <rect x="60" y="73" width="6" height="7" rx="1.5" />
-                                            <rect x="70" y="73" width="6" height="7" rx="1.5" />
-                                        </g>
-
-                                        <path d="M 52 94 C 47 94, 46 122, 53 134 C 57 125, 56 101, 52 94 Z" fill="#38BDF8" stroke="#1D1D1F" stroke-width="1.8" />
-                                        <path d="M 84 94 C 89 94, 90 122, 83 134 C 79 125, 80 101, 84 94 Z" fill="#38BDF8" stroke="#1D1D1F" stroke-width="1.8" />
-
-                                        <path d="M 60 97 C 57 103, 56 120, 62 134 C 65 124, 64 104, 60 97 Z" fill="#38BDF8" stroke="#1D1D1F" stroke-width="1.8" />
-                                        <path d="M 76 97 C 79 103, 80 120, 74 134 C 71 124, 72 104, 76 97 Z" fill="#38BDF8" stroke="#1D1D1F" stroke-width="1.8" />
-
-                                        <path d="M 54 148 C 50 156, 51 176, 56 192 C 58 178, 58 160, 56 148 Z" fill="#38BDF8" stroke="#1D1D1F" stroke-width="1.8" />
-                                        <path d="M 82 148 C 86 156, 85 176, 80 192 C 78 178, 78 160, 80 148 Z" fill="#38BDF8" stroke="#1D1D1F" stroke-width="1.8" />
+                    svg_code = """
+                    <div style="background:#FFFFFF; border-radius:16px; padding:16px; border:1px solid #E5E5E7; box-shadow:0 4px 12px rgba(0,0,0,0.03);">
+                        <div style="color:#1D1D1F; font-weight:800; font-size:13px; letter-spacing:1px; text-transform:uppercase; border-bottom:2px solid #FF8200; padding-bottom:6px; margin-bottom:12px;">Anatomy Location Map</div>
+                        <div style="position:relative; width:100%; height:380px; background:#FAFDFD; border-radius:12px; border:1px solid #D5E5E8; display:flex; align-items:center; justify-content:center; overflow:hidden;">
+                            <svg viewBox="0 0 140 220" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="width:100%; height:100%;">
+                                <defs>
+                                    <linearGradient id="anatomicalBodyGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                                        <stop offset="0%" stop-color="#C5CACC" />
+                                        <stop offset="25%" stop-color="#E8ECEE" />
+                                        <stop offset="50%" stop-color="#F2F5F7" />
+                                        <stop offset="75%" stop-color="#D0D5D8" />
+                                        <stop offset="100%" stop-color="#9AA0A6" />
+                                    </linearGradient>
+                                </defs>
+                                <ellipse cx="68" cy="214" rx="20" ry="3.5" fill="#000000" opacity="0.12" />
+                                <g stroke="#1D1D1F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                    <ellipse cx="68" cy="17" rx="7" ry="9" fill="#FFE0D0" />
+                                    <path d="M 64 17 C 62 17, 62 21, 64 22" fill="#FFE0D0" />
+                                    <path d="M 72 17 C 74 17, 74 21, 72 22" fill="#FFE0D0" />
+                                    <ellipse cx="65.5" cy="17" rx="1" ry="1" fill="#1D1D1F" />
+                                    <ellipse cx="70.5" cy="17" rx="1" ry="1" fill="#1D1D1F" />
+                                    <path d="M 68 18 L 67 20 L 69 20" fill="none" stroke-width="0.8" />
+                                    <path d="M 66 23 C 67 24, 69 24, 70 23" fill="none" stroke-width="1" />
+                                    <line x1="65" y1="25" x2="63" y2="33" stroke-width="1.5" />
+                                    <line x1="71" y1="25" x2="73" y2="33" stroke-width="1.5" />
+                                    <path d="M 42 40 C 37 43, 35 52, 33 64 C 31 74, 29 82, 27 92 C 25 96, 23 100, 22 104 C 21 106, 23 107, 25 106 C 27 104, 28 98, 30 92 C 33 82, 36 74, 38 64 C 40 54, 42 48, 43 56 Z" fill="#FFE0D0" />
+                                    <path d="M 22 104 C 20 106, 18 108, 17 110 M 23 105 C 21 108, 20 110, 19 112 M 24 105 C 23 108, 22 110, 21 112 M 25 104 C 25 107, 24 109, 23 111" fill="none" stroke-width="1" />
+                                    <path d="M 94 40 C 99 43, 101 52, 103 64 C 105 74, 107 82, 109 92 C 111 96, 113 100, 114 104 C 115 106, 113 107, 111 106 C 109 104, 108 98, 106 92 C 103 82, 100 74, 98 64 C 96 54, 94 48, 93 56 Z" fill="#FFE0D0" />
+                                    <path d="M 114 104 C 116 106, 118 108, 119 110 M 113 105 C 115 108, 116 110, 117 112 M 112 105 C 113 108, 114 110, 115 112 M 111 104 C 111 107, 112 109, 113 111" fill="none" stroke-width="1" />
+                                    <polygon points="48,202 44,210 56,210 56,202" fill="#FFE0D0" />
+                                    <polygon points="88,202 92,210 80,210 80,202" fill="#FFE0D0" />
+                                    <line x1="68" y1="8" x2="68" y2="210" stroke="#FF8200" stroke-width="1.3" />
+                                    <line x1="51" y1="116" x2="85" y2="116" stroke="#D32F2F" stroke-width="1.2" />
+                                    <line x1="55" y1="168" x2="81" y2="168" stroke="#D32F2F" stroke-width="1.2" />
+                                    <path d="M 45 38 C 50 36, 55 41, 52 48 C 47 47, 43 42, 45 38 Z" fill="#FF8200" stroke="#1D1D1F" stroke-width="1.8" />
+                                    <path d="M 91 38 C 86 36, 81 41, 84 48 C 89 47, 93 42, 91 38 Z" fill="#FF8200" stroke="#1D1D1F" stroke-width="1.8" />
+                                    <path d="M 53 43 C 61 42, 67 46, 67 52 C 59 54, 52 50, 53 43 Z" fill="#FF8200" stroke="#1D1D1F" stroke-width="1.8" />
+                                    <path d="M 83 43 C 75 42, 69 46, 69 52 C 77 54, 84 50, 83 43 Z" fill="#FF8200" stroke="#1D1D1F" stroke-width="1.8" />
+                                    <g fill="#FF8200" stroke="#1D1D1F" stroke-width="1.8">
+                                        <rect x="59" y="55" width="7" height="7" rx="1.5" />
+                                        <rect x="70" y="55" width="7" height="7" rx="1.5" />
+                                        <rect x="59" y="64" width="7" height="7" rx="1.5" />
+                                        <rect x="70" y="64" width="7" height="7" rx="1.5" />
+                                        <rect x="60" y="73" width="6" height="7" rx="1.5" />
+                                        <rect x="70" y="73" width="6" height="7" rx="1.5" />
                                     </g>
-
-                                    <!-- NODE CALLOUTS -->
-                                    <circle cx="38" cy="100" r="3.5" fill="#FF8200" stroke="#FFFFFF" stroke-width="1" />
-                                    <line x1="38" y1="100" x2="12" y2="100" stroke="#FF8200" stroke-width="1.5" stroke-dasharray="2,2" />
-                                    <rect x="6" y="94" width="12" height="12" rx="2" fill="#FF8200" />
-                                    <text x="12" y="103" font-size="8" font-weight="900" fill="#FFFFFF" text-anchor="middle">1</text>
-
-                                    <circle cx="49" cy="148" r="3.5" fill="#FF8200" stroke="#FFFFFF" stroke-width="1" />
-                                    <line x1="49" y1="148" x2="12" y2="148" stroke="#FF8200" stroke-width="1.5" stroke-dasharray="2,2" />
-                                    <rect x="6" y="142" width="12" height="12" rx="2" fill="#FF8200" />
-                                    <text x="12" y="151" font-size="8" font-weight="900" fill="#FFFFFF" text-anchor="middle">2</text>
-
-                                    <circle cx="71" cy="135" r="3.5" fill="#38BDF8" stroke="#FFFFFF" stroke-width="1" />
-                                    <line x1="71" y1="135" x2="108" y2="135" stroke="#38BDF8" stroke-width="1.5" stroke-dasharray="2,2" />
-                                    <rect x="100" y="129" width="12" height="12" rx="2" fill="#38BDF8" />
-                                    <text x="106" y="138" font-size="8" font-weight="900" fill="#FFFFFF" text-anchor="middle">3</text>
-
-                                    <circle cx="71" cy="180" r="3.5" fill="#38BDF8" stroke="#FFFFFF" stroke-width="1" />
-                                    <line x1="71" y1="180" x2="108" y2="180" stroke="#38BDF8" stroke-width="1.5" stroke-dasharray="2,2" />
-                                    <rect x="100" y="174" width="12" height="12" rx="2" fill="#38BDF8" />
-                                    <text x="106" y="183" font-size="8" font-weight="900" fill="#FFFFFF" text-anchor="middle">4</text>
-                                </svg>
-                            </div>
+                                    <path d="M 52 94 C 47 94, 46 122, 53 134 C 57 125, 56 101, 52 94 Z" fill="#38BDF8" stroke="#1D1D1F" stroke-width="1.8" />
+                                    <path d="M 84 94 C 89 94, 90 122, 83 134 C 79 125, 80 101, 84 94 Z" fill="#38BDF8" stroke="#1D1D1F" stroke-width="1.8" />
+                                    <path d="M 60 97 C 57 103, 56 120, 62 134 C 65 124, 64 104, 60 97 Z" fill="#38BDF8" stroke="#1D1D1F" stroke-width="1.8" />
+                                    <path d="M 76 97 C 79 103, 80 120, 74 134 C 71 124, 72 104, 76 97 Z" fill="#38BDF8" stroke="#1D1D1F" stroke-width="1.8" />
+                                    <path d="M 54 148 C 50 156, 51 176, 56 192 C 58 178, 58 160, 56 148 Z" fill="#38BDF8" stroke="#1D1D1F" stroke-width="1.8" />
+                                    <path d="M 82 148 C 86 156, 85 176, 80 192 C 78 178, 78 160, 80 148 Z" fill="#38BDF8" stroke="#1D1D1F" stroke-width="1.8" />
+                                </g>
+                                <circle cx="38" cy="100" r="3.5" fill="#FF8200" stroke="#FFFFFF" stroke-width="1" />
+                                <line x1="38" y1="100" x2="12" y2="100" stroke="#FF8200" stroke-width="1.5" stroke-dasharray="2,2" />
+                                <rect x="6" y="94" width="12" height="12" rx="2" fill="#FF8200" />
+                                <text x="12" y="103" font-size="8" font-weight="900" fill="#FFFFFF" text-anchor="middle">1</text>
+                                <circle cx="49" cy="148" r="3.5" fill="#FF8200" stroke="#FFFFFF" stroke-width="1" />
+                                <line x1="49" y1="148" x2="12" y2="148" stroke="#FF8200" stroke-width="1.5" stroke-dasharray="2,2" />
+                                <rect x="6" y="142" width="12" height="12" rx="2" fill="#FF8200" />
+                                <text x="12" y="151" font-size="8" font-weight="900" fill="#FFFFFF" text-anchor="middle">2</text>
+                                <circle cx="71" cy="135" r="3.5" fill="#38BDF8" stroke="#FFFFFF" stroke-width="1" />
+                                <line x1="71" y1="135" x2="108" y2="135" stroke="#38BDF8" stroke-width="1.5" stroke-dasharray="2,2" />
+                                <rect x="100" y="129" width="12" height="12" rx="2" fill="#38BDF8" />
+                                <text x="106" y="138" font-size="8" font-weight="900" fill="#FFFFFF" text-anchor="middle">3</text>
+                                <circle cx="71" cy="180" r="3.5" fill="#38BDF8" stroke="#FFFFFF" stroke-width="1" />
+                                <line x1="71" y1="180" x2="108" y2="180" stroke="#38BDF8" stroke-width="1.5" stroke-dasharray="2,2" />
+                                <rect x="100" y="174" width="12" height="12" rx="2" fill="#38BDF8" />
+                                <text x="106" y="183" font-size="8" font-weight="900" fill="#FFFFFF" text-anchor="middle">4</text>
+                            </svg>
                         </div>
-                    </body>
-                    </html>
+                    </div>
                     """
-                    st.info("Anatomy map temporarily disabled.")
+                    st.markdown(svg_code, unsafe_allow_html=True)
 
                 # --- RIGHT PANEL: LIGHT DETAILS CARDS ---
                 with hud_col2:
