@@ -175,7 +175,6 @@ def load_sheet_data():
         cmj_df = fetch_csv("cmj_url")
         roster_df = fetch_csv("roster_url")
         
-        # New Intake Testing Datasets
         nordic_df = fetch_csv("nordic_url")
         ankle_df = fetch_csv("ankle_url")
         knee_df = fetch_csv("knee_url")
@@ -190,7 +189,7 @@ def load_sheet_data():
                 df["Date_Str"] = df["Date"].dt.strftime("%Y-%m-%d")
 
         return (
-            vol_df, int_df, comp_raw_df, weekly_df, cmj_df, roster_df,
+            vol_df, int_df, comp_df, weekly_df, cmj_df, roster_df,
             nordic_df, ankle_df, knee_df, hip_df
         )
     except Exception as e:
