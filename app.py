@@ -1441,7 +1441,7 @@ with active_season:
                             st.markdown(f"""
                                 <div class="hud-metric-row-light">
                                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                        <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-orange">2</span>KNEE EXTENSION FORCE</span>
+                                        <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-orange">2</span>KNEE EXTENSION</span>
                                         <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
                                     </div>
                                     <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
@@ -1459,7 +1459,7 @@ with active_season:
                             st.markdown(f"""
                                 <div class="hud-metric-row-light">
                                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                        <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-orange">2</span>KNEE FLEXION FORCE</span>
+                                        <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-orange">2</span>KNEE FLEXION</span>
                                         <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
                                     </div>
                                     <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
