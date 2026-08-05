@@ -1330,7 +1330,8 @@ with active_season:
 
                 # --- RIGHT PANEL: LIGHT DETAILS CARDS ---
                 with hud_col2:
-                    st.markdown("""
+                    st.markdown(
+                        """
                         <style>
                         .hud-details-card {
                             background: #FFFFFF;
@@ -1400,7 +1401,9 @@ with active_season:
                         </style>
                         <div class="hud-details-card">
                             <div class="hud-header-title-light">Anatomy Location Assessment Details</div>
-                    """, unsafe_allow_html=True)
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
                     # NODE 1: KNEE EXTENSION & FLEXION
                     if not knee_ath.empty:
