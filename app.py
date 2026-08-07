@@ -8,8 +8,6 @@ import streamlit as st
 import streamlit.components.v1 as components
 import requests
 
-TARGET_GID = "1922017148"
-
 # -----------------------------------------------------------------------------
 # GOOGLE SHEETS REAL-TIME CHECKBOX SYNC
 # -----------------------------------------------------------------------------
