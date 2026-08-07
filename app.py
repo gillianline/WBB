@@ -22,6 +22,15 @@ def get_eastern_now():
     return datetime.datetime.now(EASTERN_TZ)
 
 
+def format_date_clean(val):
+    if pd.isna(val) or str(val).strip() == "":
+        return "N/A"
+    dt = pd.to_datetime(val, errors="coerce")
+    if pd.isna(dt):
+        return str(val).split(" ")[0]
+    return dt.strftime("%Y-%m-%d")
+
+
 # -----------------------------------------------------------------------------
 # 1. PAGE CONFIGURATION & STYLING
 # -----------------------------------------------------------------------------
@@ -309,13 +318,17 @@ def render_vball_table(df):
         return (
             "<p style='color:#64748B; font-style:italic;'>No data available.</p>"
         )
+    df_clean = df.copy()
+    if "Date" in df_clean.columns:
+        df_clean["Date"] = df_clean["Date"].apply(format_date_clean)
+
     html = '<table class="vball-table"><thead><tr>'
-    for col in df.columns:
+    for col in df_clean.columns:
         html += f"<th>{col}</th>"
     html += "</tr></thead><tbody>"
-    for _, row in df.iterrows():
+    for _, row in df_clean.iterrows():
         html += "<tr>"
-        for col in df.columns:
+        for col in df_clean.columns:
             val = row[col]
             if col == "Grade":
                 bg_c, fg_c = get_vball_color(val)
@@ -509,11 +522,11 @@ def render_metric_subcard_html(p_comp, col_name, title_name, unit):
 
     all_time_max = valid_df[col_name].max()
     max_row = valid_df[valid_df[col_name] == all_time_max].iloc[-1]
-    max_date = max_row["Date_Str"]
+    max_date = format_date_clean(max_row["Date_Str"])
 
     recent_row = valid_df.iloc[-1]
     recent_val = recent_row[col_name]
-    recent_date = recent_row["Date_Str"]
+    recent_date = format_date_clean(recent_row["Date_Str"])
 
     pct_max = (
         f"{(recent_val / all_time_max * 100):.1f}%"
@@ -730,7 +743,7 @@ with active_season:
                     )
                     score_history.append(
                         {
-                            "Date": d_str,
+                            "Date": format_date_clean(d_str),
                             "Volume Score": v_sc,
                             "Intensity Score": i_sc,
                         }
@@ -774,10 +787,11 @@ with active_season:
 
             wk_str = str(wk).replace("Week ", "")
             dy_str = str(dy).replace("Day ", "")
+            clean_date = format_date_clean(latest_date_str)
 
             with col_g2:
                 st.markdown(
-                    f"#### Latest Practice Metrics ({latest_date_str})"
+                    f"#### Latest Practice Metrics ({clean_date})"
                 )
                 st.markdown(
                     f"""
@@ -1044,7 +1058,8 @@ with active_season:
                 if not vol_raw.empty
                 else []
             )
-            session_date = st.selectbox("Select Session Date:", available_dates)
+            formatted_dates = [format_date_clean(d) for d in available_dates]
+            session_date = st.selectbox("Select Session Date:", available_dates, format_func=format_date_clean)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
@@ -1556,6 +1571,18 @@ with active_season:
                                 <line x1="51" y1="116" x2="85" y2="116" stroke="#D32F2F" stroke-width="1.1" />
                                 <line x1="55" y1="168" x2="81" y2="168" stroke="#D32F2F" stroke-width="1.1" />
                             </g>
+                            
+                            <!-- Location Badge 1: Knee -->
+                            <rect x="61" y="132" width="14" height="14" rx="3" fill="#FF8200" stroke="#FFFFFF" stroke-width="1"/>
+                            <text x="68" y="142" font-size="10" font-weight="bold" fill="#FFFFFF" text-anchor="middle">1</text>
+                            
+                            <!-- Location Badge 2: Hip -->
+                            <rect x="61" y="96" width="14" height="14" rx="3" fill="#FF8200" stroke="#FFFFFF" stroke-width="1"/>
+                            <text x="68" y="106" font-size="10" font-weight="bold" fill="#FFFFFF" text-anchor="middle">2</text>
+
+                            <!-- Location Badge 3: Ankle -->
+                            <rect x="61" y="174" width="14" height="14" rx="3" fill="#FF8200" stroke="#FFFFFF" stroke-width="1"/>
+                            <text x="68" y="184" font-size="10" font-weight="bold" fill="#FFFFFF" text-anchor="middle">3</text>
                         </svg>
                     </div>
                 </div>
@@ -1571,7 +1598,6 @@ with active_season:
                     .hud-metric-row-light { background: #F8F9FA; border-left: 4px solid #FF8200; border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; color: #1D1D1F; border: 1px solid #E5E5E7; border-left: 4px solid #FF8200; }
                     .hud-metric-row-light-blue { background: #F8F9FA; border-left: 4px solid #4895DB; border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; color: #1D1D1F; border: 1px solid #E5E5E7; border-left: 4px solid #4895DB; }
                     .node-badge-orange { display: inline-block; width: 20px; height: 20px; background: #FF8200; color: #FFFFFF; font-weight: 900; font-size: 11px; border-radius: 4px; text-align: center; line-height: 20px; margin-right: 8px; }
-                    .node-badge-blue { display: inline-block; width: 20px; height: 20px; background: #4895DB; color: #FFFFFF; font-weight: 900; font-size: 11px; border-radius: 4px; text-align: center; line-height: 20px; margin-right: 8px; }
                     </style>
                     <div class="hud-details-card">
                         <div class="hud-header-title-light">Anatomy Location Assessment Details</div>
@@ -1635,13 +1661,7 @@ with active_season:
                             "L Max Force (N)", 0.0
                         ), kf_l.get("R Max Force (N)", 0.0)
 
-                        latest_date_str = (
-                            ke_l.get("Date", pd.Timestamp.now()).strftime(
-                                "%m/%d/%Y"
-                            )
-                            if pd.notna(ke_l.get("Date"))
-                            else "N/A"
-                        )
+                        latest_date_str = format_date_clean(ke_l.get("Date"))
 
                         st.markdown(
                             f"""
@@ -1659,7 +1679,7 @@ with active_season:
                             unsafe_allow_html=True,
                         )
 
-                    # NODE 2 & 3: HIP AD/AB
+                    # NODE 2: HIP AD & AB
                     if not hip_ath.empty:
                         hip_ad = (
                             hip_ath[
@@ -1680,65 +1700,33 @@ with active_season:
                             else hip_ath
                         )
 
-                        if not hip_ad.empty:
-                            ad_b, ad_l = hip_ad.iloc[0], hip_ad.iloc[-1]
-                            ad_bL, ad_bR = ad_b.get(
-                                "L Max Force (N)", 0.0
-                            ), ad_b.get("R Max Force (N)", 0.0)
-                            ad_lL, ad_lR = ad_l.get(
-                                "L Max Force (N)", 0.0
-                            ), ad_l.get("R Max Force (N)", 0.0)
-                            date_str = (
-                                ad_l["Date"].strftime("%m/%d/%Y")
-                                if pd.notna(ad_l.get("Date"))
-                                else "N/A"
-                            )
+                        ad_b, ad_l = hip_ad.iloc[0] if not hip_ad.empty else pd.Series(), hip_ad.iloc[-1] if not hip_ad.empty else pd.Series()
+                        ab_b, ab_l = hip_ab.iloc[0] if not hip_ab.empty else pd.Series(), hip_ab.iloc[-1] if not hip_ab.empty else pd.Series()
 
-                            st.markdown(
-                                f"""
-                                <div class="hud-metric-row-light-blue">
-                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                        <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">2</span>HIP ADDUCTION (AD)</span>
-                                        <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
-                                    </div>
-                                    <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
-                                        <b>Initial Force:</b> L {ad_bL:.1f}N | R {ad_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(ad_lL, ad_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(ad_lR, ad_bR, '{:.1f}', 'N')}
-                                    </div>
+                        ad_bL, ad_bR = ad_b.get("L Max Force (N)", 0.0), ad_b.get("R Max Force (N)", 0.0)
+                        ad_lL, ad_lR = ad_l.get("L Max Force (N)", 0.0), ad_l.get("R Max Force (N)", 0.0)
+                        ab_bL, ab_bR = ab_b.get("L Max Force (N)", 0.0), ab_b.get("R Max Force (N)", 0.0)
+                        ab_lL, ab_lR = ab_l.get("L Max Force (N)", 0.0), ab_l.get("R Max Force (N)", 0.0)
+
+                        date_str = format_date_clean(ad_l.get("Date") if not ad_l.empty else ab_l.get("Date"))
+
+                        st.markdown(
+                            f"""
+                            <div class="hud-metric-row-light">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-orange">2</span>HIP ADDUCTION & ABDUCTION</span>
+                                    <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
                                 </div>
-                            """,
-                                unsafe_allow_html=True,
-                            )
-
-                        if not hip_ab.empty:
-                            ab_b, ab_l = hip_ab.iloc[0], hip_ab.iloc[-1]
-                            ab_bL, ab_bR = ab_b.get(
-                                "L Max Force (N)", 0.0
-                            ), ab_b.get("R Max Force (N)", 0.0)
-                            ab_lL, ab_lR = ab_l.get(
-                                "L Max Force (N)", 0.0
-                            ), ab_l.get("R Max Force (N)", 0.0)
-                            date_str = (
-                                ab_l["Date"].strftime("%m/%d/%Y")
-                                if pd.notna(ab_l.get("Date"))
-                                else "N/A"
-                            )
-
-                            st.markdown(
-                                f"""
-                                <div class="hud-metric-row-light-blue">
-                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                        <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">3</span>HIP ABDUCTION (AB)</span>
-                                        <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
-                                    </div>
-                                    <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
-                                        <b>Initial Force:</b> L {ab_bL:.1f}N | R {ab_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(ab_lL, ab_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(ab_lR, ab_bR, '{:.1f}', 'N')}
-                                    </div>
+                                <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
+                                    <b>Adduction (AD):</b> Initial L {ad_bL:.1f}N | R {ad_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(ad_lL, ad_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(ad_lR, ad_bR, '{:.1f}', 'N')}<br>
+                                    <b>Abduction (AB):</b> Initial L {ab_bL:.1f}N | R {ab_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(ab_lL, ab_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(ab_lR, ab_bR, '{:.1f}', 'N')}
                                 </div>
-                            """,
-                                unsafe_allow_html=True,
-                            )
+                            </div>
+                        """,
+                            unsafe_allow_html=True,
+                        )
 
-                    # NODE 4: ANKLE PLANTAR FLEXION
+                    # NODE 3: ANKLE PLANTAR FLEXION
                     if not calf_ath.empty:
                         b_a, l_a = calf_ath.iloc[0], calf_ath.iloc[-1]
                         baL, baR = b_a.get(
@@ -1747,17 +1735,13 @@ with active_season:
                         laL, laR = l_a.get(
                             "L Max Force (N)", 0.0
                         ), l_a.get("R Max Force (N)", 0.0)
-                        date_str = (
-                            l_a["Date"].strftime("%m/%d/%Y")
-                            if pd.notna(l_a.get("Date"))
-                            else "N/A"
-                        )
+                        date_str = format_date_clean(l_a.get("Date"))
 
                         st.markdown(
                             f"""
-                            <div class="hud-metric-row-light-blue">
+                            <div class="hud-metric-row-light">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">4</span>ANKLE PLANTAR FLEXION</span>
+                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-orange">3</span>ANKLE PLANTAR FLEXION</span>
                                     <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
                                 </div>
                                 <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
@@ -1775,14 +1759,14 @@ with active_season:
 
                 st.markdown("</div>", unsafe_allow_html=True)
 
-        # SUB-TAB 3: NORDBORD
+        # SUB-TAB 3: NORDBORD (SPLIT BY TEST TYPES: ISO 30, ISO 60, NORDIC)
         with testing_tab_nordic:
             st.markdown(
-                '<div class="vball-section-title">NordBord Hamstring Testing</div>',
+                '<div class="vball-section-title">NordBord Testing Profiles</div>',
                 unsafe_allow_html=True,
             )
-            c_nord_ath, _ = st.columns([1, 2])
-            with c_nord_ath:
+            c_nord1, c_nord2 = st.columns([1, 1])
+            with c_nord1:
                 selected_nord_athlete = st.selectbox(
                     "Select Athlete for NordBord View:",
                     roster_players,
@@ -1798,39 +1782,50 @@ with active_season:
             )
 
             if not p_nordic.empty:
-                l_col = next((c for c in p_nordic.columns if "l max force" in c.lower() or "left max" in c.lower()), None)
-                r_col = next((c for c in p_nordic.columns if "r max force" in c.lower() or "right max" in c.lower()), None)
+                test_type_col = next((c for c in p_nordic.columns if "test" in c.lower()), None)
+                available_tests = (
+                    p_nordic[test_type_col].dropna().unique().tolist()
+                    if test_type_col
+                    else ["Nordic"]
+                )
 
-                if l_col and r_col:
-                    p_nordic["Left_Force"] = pd.to_numeric(p_nordic[l_col], errors="coerce")
-                    p_nordic["Right_Force"] = pd.to_numeric(p_nordic[r_col], errors="coerce")
-                    p_nordic["Imbalance_%"] = np.where(
-                        p_nordic["Right_Force"] > 0,
-                        ((p_nordic["Left_Force"] - p_nordic["Right_Force"]) / p_nordic["Right_Force"]) * 100,
-                        0.0
+                with c_nord2:
+                    selected_test_type = st.selectbox(
+                        "Select Test Type:",
+                        available_tests,
+                        key="nordic_test_type_select"
                     )
+
+                df_filtered_nord = p_nordic[p_nordic[test_type_col] == selected_test_type] if test_type_col else p_nordic
+
+                l_col = next((c for c in df_filtered_nord.columns if "l max force" in c.lower() or "left max" in c.lower()), None)
+                r_col = next((c for c in df_filtered_nord.columns if "r max force" in c.lower() or "right max" in c.lower()), None)
+
+                if not df_filtered_nord.empty and l_col and r_col:
+                    df_filtered_nord["Left_Force"] = pd.to_numeric(df_filtered_nord[l_col], errors="coerce")
+                    df_filtered_nord["Right_Force"] = pd.to_numeric(df_filtered_nord[r_col], errors="coerce")
 
                     fig_nordic = go.Figure()
                     fig_nordic.add_trace(go.Scatter(
-                        x=p_nordic["Date"], y=p_nordic["Left_Force"],
+                        x=df_filtered_nord["Date"], y=df_filtered_nord["Left_Force"],
                         name="Left Max Force (N)", mode="lines+markers",
                         line=dict(color="#FF8200", width=3)
                     ))
                     fig_nordic.add_trace(go.Scatter(
-                        x=p_nordic["Date"], y=p_nordic["Right_Force"],
+                        x=df_filtered_nord["Date"], y=df_filtered_nord["Right_Force"],
                         name="Right Max Force (N)", mode="lines+markers",
                         line=dict(color="#38BDF8", width=3)
                     ))
 
                     fig_nordic.update_layout(
-                        title=f"Nordic Peak Force Trend — {selected_nord_athlete}",
-                        height=300, margin=dict(l=20, r=20, t=40, b=20),
+                        title=f"{selected_test_type} Force Trend — {selected_nord_athlete}",
+                        height=320, margin=dict(l=20, r=20, t=40, b=20),
                         plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                     )
                     st.plotly_chart(fig_nordic, use_container_width=True)
 
                 disp_nord = [c for c in p_nordic.columns if c not in ["Name", "Date_Str"]]
-                st.markdown(f"#### Nordic Data Log for {selected_nord_athlete}")
+                st.markdown(f"#### Complete NordBord Logs for {selected_nord_athlete}")
                 st.markdown(render_vball_table(p_nordic[disp_nord]), unsafe_allow_html=True)
             else:
                 st.info(f"No NordBord records logged for {selected_nord_athlete}.")
@@ -1926,22 +1921,34 @@ with active_season:
                     records.append({
                         "Category": "Countermovement Jump",
                         "Best Test Value": f"{best_cmj['JH_Val']:.2f} in/cm",
-                        "Date Achieved": best_cmj.get("Date_Str", "N/A")
+                        "Date Achieved": format_date_clean(best_cmj.get("Date"))
                     })
 
-            # 2. NordBord Best Peak
+            # 2. NordBord Best Peaks per Test Type (ISO 30, ISO 60, Nordic)
             p_nord_ov = nordic_raw[nordic_raw["Name"] == selected_ov_athlete] if not nordic_raw.empty and "Name" in nordic_raw.columns else pd.DataFrame()
             if not p_nord_ov.empty:
                 l_c = next((c for c in p_nord_ov.columns if "l max force" in c.lower()), None)
                 r_c = next((c for c in p_nord_ov.columns if "r max force" in c.lower()), None)
+                t_c = next((c for c in p_nord_ov.columns if "test" in c.lower()), None)
                 if l_c and r_c:
                     p_nord_ov["Peak_Force"] = p_nord_ov[[l_c, r_c]].apply(pd.to_numeric, errors="coerce").max(axis=1)
-                    best_nord = p_nord_ov.sort_values("Peak_Force", ascending=False).iloc[0]
-                    records.append({
-                        "Category": "NordBord Hamstring",
-                        "Best Test Value": f"{best_nord['Peak_Force']:.1f} N",
-                        "Date Achieved": best_nord.get("Date_Str", "N/A")
-                    })
+                    if t_c:
+                        for test_type_val in p_nord_ov[t_c].dropna().unique():
+                            sub_df = p_nord_ov[p_nord_ov[t_c] == test_type_val]
+                            if not sub_df.empty:
+                                best_nord_sub = sub_df.sort_values("Peak_Force", ascending=False).iloc[0]
+                                records.append({
+                                    "Category": f"NordBord - {test_type_val}",
+                                    "Best Test Value": f"{best_nord_sub['Peak_Force']:.1f} N",
+                                    "Date Achieved": format_date_clean(best_nord_sub.get("Date"))
+                                })
+                    else:
+                        best_nord = p_nord_ov.sort_values("Peak_Force", ascending=False).iloc[0]
+                        records.append({
+                            "Category": "NordBord Hamstring",
+                            "Best Test Value": f"{best_nord['Peak_Force']:.1f} N",
+                            "Date Achieved": format_date_clean(best_nord.get("Date"))
+                        })
 
             # 3. Belt Squat Best Peak
             p_bs_ov = belt_squat_raw[belt_squat_raw["Name"] == selected_ov_athlete] if not belt_squat_raw.empty and "Name" in belt_squat_raw.columns else pd.DataFrame()
@@ -1953,7 +1960,7 @@ with active_season:
                     records.append({
                         "Category": "Harness Belt Squat",
                         "Best Test Value": f"{best_bs['PVF']:.1f} N",
-                        "Date Achieved": best_bs.get("Date_Str", "N/A")
+                        "Date Achieved": format_date_clean(best_bs.get("Date"))
                     })
 
             # 4. Knee Extension
@@ -1966,7 +1973,7 @@ with active_season:
                     records.append({
                         "Category": "Knee Extension",
                         "Best Test Value": f"{best_ke['MaxF']:.1f} N",
-                        "Date Achieved": best_ke.get("Date_Str", "N/A")
+                        "Date Achieved": format_date_clean(best_ke.get("Date"))
                     })
 
             # 5. Ankle Plantar Flexion
@@ -1977,7 +1984,7 @@ with active_season:
                 records.append({
                     "Category": "Ankle Plantar Flexion",
                     "Best Test Value": f"{best_ank['MaxF']:.1f} N",
-                    "Date Achieved": best_ank.get("Date_Str", "N/A")
+                    "Date Achieved": format_date_clean(best_ank.get("Date"))
                 })
 
             if records:
@@ -1999,14 +2006,11 @@ with active_season:
         today = local_now.date()
         current_monday = today - datetime.timedelta(days=today.weekday())
 
-        # Load live recovery records from Google Sheet
         live_rec_df = fetch_live_recovery_sheet()
 
-        # Seed local session state from Google Sheet records
         if "recovery_local_state" not in st.session_state:
             st.session_state.recovery_local_state = set()
 
-        # Merge live sheet items into session_state set
         if not live_rec_df.empty:
             for _, row in live_rec_df.iterrows():
                 wk_val = str(row.get("Week_Starting", "")).strip()
@@ -2167,7 +2171,6 @@ with active_season:
                 unsafe_allow_html=True,
             )
 
-            # Build summary dataframe directly from unified state
             summary_rows = []
             for item in st.session_state.recovery_local_state:
                 parts = item.split("|")
