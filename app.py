@@ -247,10 +247,8 @@ def fetch_live_recovery_sheet():
             df = pd.read_csv(io.StringIO(content), keep_default_na=False)
 
         if not df.empty:
-            # If the CSV came back with 6 columns
-            if len(df.columns) == 6:
-                df.columns = ["Week_Starting", "Athlete", "Station", "Day", "Timestamp"]
-            # Clean string values
+            if len(df.columns) >= 5:
+                df.columns = ["Week_Starting", "Athlete", "Station", "Day", "Timestamp"][:len(df.columns)]
             for col in ["Week_Starting", "Athlete", "Station", "Day"]:
                 if col in df.columns:
                     df[col] = df[col].astype(str).str.strip()
@@ -660,7 +658,9 @@ with active_season:
         )
 
         p_comp = (
-            comp_raw[comp_raw["Player"] == selected_player].sort_values("Date")
+            comp_raw[comp_raw["Player"] == selected_player].sort_values(
+                "Date"
+            )
             if not comp_raw.empty
             else pd.DataFrame()
         )
@@ -1511,7 +1511,6 @@ with active_season:
 
                 hud_col1, hud_col2 = st.columns([1.2, 1.8])
 
-                # --- LEFT PANEL: ANATOMY MAP ---
                 with hud_col1:
                     hud_svg_html = """
                     <div style="background:#FFFFFF; border-radius:16px; padding:16px; border:1px solid #E5E5E7; box-shadow:0 4px 12px rgba(0,0,0,0.03);">
@@ -1527,9 +1526,7 @@ with active_season:
                                         <stop offset="100%" stop-color="#9AA0A6" />
                                     </linearGradient>
                                 </defs>
-
                                 <ellipse cx="68" cy="214" rx="20" ry="3.5" fill="#000000" opacity="0.12" />
-
                                 <g stroke="#2C3036" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
                                     <ellipse cx="68" cy="17" rx="7" ry="9" fill="url(#anatomicalBodyGrad)" />
                                     <path d="M 65 25 L 63 33 M 71 25 L 73 33" stroke-width="1.2" />
@@ -1541,411 +1538,29 @@ with active_season:
                                     <path d="M 52 44 L 54 75 L 52 92 L 68 106 L 84 92 L 82 75 L 84 44 Z" fill="url(#anatomicalBodyGrad)" />
                                     <path d="M 52 92 C 50 105, 49 122, 53 138 C 55 144, 55 152, 54 162 C 52 175, 52 192, 54 205 L 48 210 L 58 210 L 59 203 C 60 190, 60 175, 60 162 C 60 152, 60 144, 62 138 C 66 122, 66 105, 68 106 Z" fill="url(#anatomicalBodyGrad)" />
                                     <path d="M 84 92 C 86 105, 87 122, 83 138 C 81 144, 81 152, 82 162 C 84 175, 84 192, 82 205 L 88 210 L 78 210 L 77 203 C 76 190, 76 175, 76 162 C 76 152, 76 144, 74 138 C 70 122, 70 105, 68 106 Z" fill="url(#anatomicalBodyGrad)" />
-
                                     <line x1="68" y1="8" x2="68" y2="211" stroke="#FF8200" stroke-width="1.3" />
                                     <line x1="51" y1="116" x2="85" y2="116" stroke="#D32F2F" stroke-width="1.1" />
                                     <line x1="55" y1="168" x2="81" y2="168" stroke="#D32F2F" stroke-width="1.1" />
-
-                                    <g stroke="#3A3F46" stroke-width="0.9" fill="none">
-                                        <path d="M 68 35 C 60 34, 52 37, 46 40 M 68 35 C 76 34, 84 37, 90 40" stroke-width="1" />
-                                        <path d="M 52 44 C 60 43, 67 47, 68 54 C 60 56, 52 52, 52 44 Z" fill="#E2E7EC" opacity="0.6" />
-                                        <path d="M 84 44 C 76 43, 69 47, 68 54 C 76 56, 84 52, 84 44 Z" fill="#E2E7EC" opacity="0.6" />
-                                        <path d="M 58 58 C 64 57, 72 57, 78 58" />
-                                        <path d="M 58 66 C 64 65, 72 65, 78 66" />
-                                        <path d="M 59 74 C 64 73, 72 73, 77 74" />
-                                        <path d="M 39 56 C 37 62, 35 70, 33 78" stroke-width="0.75" />
-                                        <path d="M 97 56 C 99 62, 101 70, 103 78" stroke-width="0.75" />
-                                        <path d="M 52 92 C 58 98, 64 103, 68 106 M 84 92 C 78 98, 72 103, 68 106" stroke-width="1" />
-                                        <path d="M 52 96 C 49 108, 50 125, 57 138" />
-                                        <path d="M 84 96 C 87 108, 86 125, 79 138" />
-                                        <ellipse cx="57" cy="142" rx="3" ry="3.5" stroke-width="0.9" fill="#E8EDF2" />
-                                        <ellipse cx="79" cy="142" rx="3" ry="3.5" stroke-width="0.9" fill="#E8EDF2" />
-                                        <path d="M 54 150 C 51 160, 52 178, 56 195" />
-                                        <path d="M 82 150 C 85 160, 84 178, 80 195" />
-                                    </g>
                                 </g>
-
-                                <circle cx="57" cy="140" r="3.5" fill="#FF8200" stroke="#FFFFFF" stroke-width="1" />
-                                <line x1="57" y1="140" x2="22" y2="140" stroke="#FF8200" stroke-width="1.8" stroke-dasharray="2,2" />
-                                <rect x="14" y="133" width="14" height="14" rx="3" fill="#FF8200" />
-                                <text x="21" y="144" font-size="9" font-weight="900" fill="#FFFFFF" text-anchor="middle">1</text>
-
-                                <circle cx="58" cy="115" r="3.5" fill="#FF8200" stroke="#FFFFFF" stroke-width="1" />
-                                <line x1="58" y1="115" x2="118" y2="115" stroke="#FF8200" stroke-width="1.8" stroke-dasharray="2,2" />
-                                <rect x="112" y="108" width="14" height="14" rx="3" fill="#FF8200" />
-                                <text x="119" y="119" font-size="9" font-weight="900" fill="#FFFFFF" text-anchor="middle">2</text>
-
-                                <circle cx="64" cy="112" r="3.5" fill="#4895DB" stroke="#FFFFFF" stroke-width="1" />
-                                <line x1="64" y1="112" x2="118" y2="92" stroke="#4895DB" stroke-width="1.8" stroke-dasharray="2,2" />
-                                <rect x="112" y="85" width="14" height="14" rx="3" fill="#4895DB" />
-                                <text x="119" y="96" font-size="9" font-weight="900" fill="#FFFFFF" text-anchor="middle">3</text>
-
-                                <circle cx="49" cy="98" r="3.5" fill="#4895DB" stroke="#FFFFFF" stroke-width="1" />
-                                <line x1="49" y1="98" x2="22" y2="98" stroke="#4895DB" stroke-width="1.8" stroke-dasharray="2,2" />
-                                <rect x="14" y="91" width="14" height="14" rx="3" fill="#4895DB" />
-                                <text x="21" y="102" font-size="9" font-weight="900" fill="#FFFFFF" text-anchor="middle">4</text>
-
-                                <circle cx="56" cy="175" r="3.5" fill="#4895DB" stroke="#FFFFFF" stroke-width="1" />
-                                <line x1="56" y1="175" x2="118" y2="175" stroke="#4895DB" stroke-width="1.8" stroke-dasharray="2,2" />
-                                <rect x="112" y="168" width="14" height="14" rx="3" fill="#4895DB" />
-                                <text x="119" y="179" font-size="9" font-weight="900" fill="#FFFFFF" text-anchor="middle">5</text>
                             </svg>
                         </div>
                     </div>
                     """
                     components.html(hud_svg_html, height=450)
 
-                # --- RIGHT PANEL: DETAILS CARDS ---
                 with hud_col2:
                     st.markdown(
                         """
                         <style>
-                        .hud-details-card {
-                            background: #FFFFFF;
-                            border-radius: 16px;
-                            padding: 20px;
-                            border: 1px solid #E5E5E7;
-                            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
-                        }
-                        .hud-header-title-light {
-                            color: #1D1D1F;
-                            font-weight: 800;
-                            font-size: 13px;
-                            letter-spacing: 1px;
-                            text-transform: uppercase;
-                            border-bottom: 2px solid #FF8200;
-                            padding-bottom: 6px;
-                            margin-bottom: 16px;
-                        }
-                        .hud-metric-row-light {
-                            background: #F8F9FA;
-                            border-left: 4px solid #FF8200;
-                            border-radius: 8px;
-                            padding: 10px 14px;
-                            margin-bottom: 10px;
-                            color: #1D1D1F;
-                            border-top: 1px solid #E5E5E7;
-                            border-right: 1px solid #E5E5E7;
-                            border-bottom: 1px solid #E5E5E7;
-                        }
-                        .hud-metric-row-light-blue {
-                            background: #F8F9FA;
-                            border-left: 4px solid #4895DB;
-                            border-radius: 8px;
-                            padding: 10px 14px;
-                            margin-bottom: 10px;
-                            color: #1D1D1F;
-                            border-top: 1px solid #E5E5E7;
-                            border-right: 1px solid #E5E5E7;
-                            border-bottom: 1px solid #E5E5E7;
-                        }
-                        .node-badge-orange {
-                            display: inline-block;
-                            width: 20px;
-                            height: 20px;
-                            background: #FF8200;
-                            color: #FFFFFF;
-                            font-weight: 900;
-                            font-size: 11px;
-                            border-radius: 4px;
-                            text-align: center;
-                            line-height: 20px;
-                            margin-right: 8px;
-                        }
-                        .node-badge-blue {
-                            display: inline-block;
-                            width: 20px;
-                            height: 20px;
-                            background: #4895DB;
-                            color: #FFFFFF;
-                            font-weight: 900;
-                            font-size: 11px;
-                            border-radius: 4px;
-                            text-align: center;
-                            line-height: 20px;
-                            margin-right: 8px;
-                        }
+                        .hud-details-card { background: #FFFFFF; border-radius: 16px; padding: 20px; border: 1px solid #E5E5E7; box-shadow: 0 4px 12px rgba(0,0,0,0.03); }
+                        .hud-header-title-light { color: #1D1D1F; font-weight: 800; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; border-bottom: 2px solid #FF8200; padding-bottom: 6px; margin-bottom: 16px; }
                         </style>
                         <div class="hud-details-card">
                             <div class="hud-header-title-light">Anatomy Location Assessment Details</div>
                         """,
                         unsafe_allow_html=True,
                     )
-
-                    # NODE 1: KNEE EXTENSION & FLEXION
-                    if not sh_ath.empty:
-                        knee_ext = (
-                            sh_ath[
-                                sh_ath["TestDirection"].str.contains(
-                                    "Extension", case=False, na=False
-                                )
-                            ]
-                            if "TestDirection" in sh_ath.columns
-                            else sh_ath
-                        )
-                        knee_flx = (
-                            sh_ath[
-                                sh_ath["TestDirection"].str.contains(
-                                    "Flexion", case=False, na=False
-                                )
-                            ]
-                            if "TestDirection" in sh_ath.columns
-                            else sh_ath
-                        )
-
-                        ke_b = (
-                            knee_ext.iloc[0]
-                            if not knee_ext.empty
-                            else pd.Series()
-                        )
-                        ke_l = (
-                            knee_ext.iloc[-1]
-                            if not knee_ext.empty
-                            else pd.Series()
-                        )
-                        kf_b = (
-                            knee_flx.iloc[0]
-                            if not knee_flx.empty
-                            else pd.Series()
-                        )
-                        kf_l = (
-                            knee_flx.iloc[-1]
-                            if not knee_flx.empty
-                            else pd.Series()
-                        )
-
-                        ke_bL, ke_bR = ke_b.get(
-                            "L Max Force (N)", 0.0
-                        ), ke_b.get("R Max Force (N)", 0.0)
-                        ke_lL, ke_lR = ke_l.get(
-                            "L Max Force (N)", 0.0
-                        ), ke_l.get("R Max Force (N)", 0.0)
-                        kf_bL, kf_bR = kf_b.get(
-                            "L Max Force (N)", 0.0
-                        ), kf_b.get("R Max Force (N)", 0.0)
-                        kf_lL, kf_lR = kf_l.get(
-                            "L Max Force (N)", 0.0
-                        ), kf_l.get("R Max Force (N)", 0.0)
-
-                        latest_date_str = (
-                            ke_l.get("Date", pd.Timestamp.now()).strftime(
-                                "%m/%d/%Y"
-                            )
-                            if pd.notna(ke_l.get("Date"))
-                            else "N/A"
-                        )
-
-                        st.markdown(
-                            f"""
-                            <div class="hud-metric-row-light">
-                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-orange">1</span>KNEE EXTENSION & FLEXION</span>
-                                    <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {latest_date_str}</span>
-                                </div>
-                                <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
-                                    <b>Extension:</b> Initial L {ke_bL:.1f}N | R {ke_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(ke_lL, ke_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(ke_lR, ke_bR, '{:.1f}', 'N')}<br>
-                                    <b>Flexion:</b> Initial L {kf_bL:.1f}N | R {kf_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(kf_lL, kf_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(kf_lR, kf_bR, '{:.1f}', 'N')}
-                                </div>
-                            </div>
-                        """,
-                            unsafe_allow_html=True,
-                        )
-
-                    # NODE 2: NORDIC HAMSTRING & ISO VARIATIONS
-                    if not isoy_ath.empty:
-                        metrics_rows_html = ""
-                        latest_dates = []
-
-                        test_col = next(
-                            (c for c in isoy_ath.columns if c.lower() == "test"),
-                            None,
-                        )
-
-                        if test_col:
-                            unique_tests = isoy_ath[test_col].dropna().unique()
-
-                            for test_name in unique_tests:
-                                df_test = isoy_ath[
-                                    isoy_ath[test_col] == test_name
-                                ].sort_values("Date")
-                                if not df_test.empty:
-                                    b_row, l_row = (
-                                        df_test.iloc[0],
-                                        df_test.iloc[-1],
-                                    )
-                                    bL, bR = b_row.get(
-                                        "L Max Force (N)", 0.0
-                                    ), b_row.get("R Max Force (N)", 0.0)
-                                    lL, lR = l_row.get(
-                                        "L Max Force (N)", 0.0
-                                    ), l_row.get("R Max Force (N)", 0.0)
-
-                                    if pd.notna(l_row.get("Date")):
-                                        latest_dates.append(l_row["Date"])
-
-                                    metrics_rows_html += (
-                                        f"<b>{test_name}:</b> Initial L"
-                                        f" {bL:.1f}N | R {bR:.1f}N"
-                                        " &nbsp;→&nbsp; <b>Latest:</b> L"
-                                        f" {render_val_with_arrow(lL, bL, '{:.1f}', 'N')}"
-                                        " | R"
-                                        f" {render_val_with_arrow(lR, bR, '{:.1f}', 'N')}<br>"
-                                    )
-                        else:
-                            b_n, l_n = isoy_ath.iloc[0], isoy_ath.iloc[-1]
-                            bnL, bnR = b_n.get(
-                                "L Max Force (N)", 0.0
-                            ), b_n.get("R Max Force (N)", 0.0)
-                            lnL, lnR = l_n.get(
-                                "L Max Force (N)", 0.0
-                            ), l_n.get("R Max Force (N)", 0.0)
-                            if pd.notna(l_n.get("Date")):
-                                latest_dates.append(l_n["Date"])
-                            metrics_rows_html = (
-                                "<b>Hamstring Test:</b> Initial L"
-                                f" {bnL:.1f}N | R {bnR:.1f}N &nbsp;→&nbsp;"
-                                " <b>Latest:</b> L"
-                                f" {render_val_with_arrow(lnL, bnL, '{:.1f}', 'N')}"
-                                " | R"
-                                f" {render_val_with_arrow(lnR, bnR, '{:.1f}', 'N')}"
-                            )
-
-                        latest_date_str = (
-                            max(latest_dates).strftime("%m/%d/%Y")
-                            if latest_dates
-                            else "N/A"
-                        )
-
-                        st.markdown(
-                            f"""
-                            <div class="hud-metric-row-light">
-                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-orange">2</span>HAMSTRING & ISO STRENGTH TESTS</span>
-                                    <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {latest_date_str}</span>
-                                </div>
-                                <div style="font-size:11px; line-height:1.5; color:#1D1D1F;">
-                                    {metrics_rows_html}
-                                </div>
-                            </div>
-                        """,
-                            unsafe_allow_html=True,
-                        )
-
-                    # NODE 3 & 4: HIP AD/AB
-                    if not hip_ath.empty:
-                        hip_ad = (
-                            hip_ath[
-                                hip_ath["TestDirection"].str.contains(
-                                    "AD|Adduction", case=False, na=False
-                                )
-                            ]
-                            if "TestDirection" in hip_ath.columns
-                            else hip_ath
-                        )
-                        hip_ab = (
-                            hip_ath[
-                                hip_ath["TestDirection"].str.contains(
-                                    "AB|Abduction", case=False, na=False
-                                )
-                            ]
-                            if "TestDirection" in hip_ath.columns
-                            else hip_ath
-                        )
-
-                        if not hip_ad.empty:
-                            ad_b, ad_l = hip_ad.iloc[0], hip_ad.iloc[-1]
-                            ad_bL, ad_bR = ad_b.get(
-                                "L Max Force (N)", 0.0
-                            ), ad_b.get("R Max Force (N)", 0.0)
-                            ad_lL, ad_lR = ad_l.get(
-                                "L Max Force (N)", 0.0
-                            ), ad_l.get("R Max Force (N)", 0.0)
-                            date_str = (
-                                ad_l["Date"].strftime("%m/%d/%Y")
-                                if pd.notna(ad_l.get("Date"))
-                                else "N/A"
-                            )
-
-                            st.markdown(
-                                f"""
-                                <div class="hud-metric-row-light-blue">
-                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                        <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">3</span>HIP ADDUCTION (AD)</span>
-                                        <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
-                                    </div>
-                                    <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
-                                        <b>Initial Force:</b> L {ad_bL:.1f}N | R {ad_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(ad_lL, ad_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(ad_lR, ad_bR, '{:.1f}', 'N')}
-                                    </div>
-                                </div>
-                            """,
-                                unsafe_allow_html=True,
-                            )
-
-                        if not hip_ab.empty:
-                            ab_b, ab_l = hip_ab.iloc[0], hip_ab.iloc[-1]
-                            ab_bL, ab_bR = ab_b.get(
-                                "L Max Force (N)", 0.0
-                            ), ab_b.get("R Max Force (N)", 0.0)
-                            ab_lL, ab_lR = ab_l.get(
-                                "L Max Force (N)", 0.0
-                            ), ab_l.get("R Max Force (N)", 0.0)
-                            date_str = (
-                                ab_l["Date"].strftime("%m/%d/%Y")
-                                if pd.notna(ab_l.get("Date"))
-                                else "N/A"
-                            )
-
-                            st.markdown(
-                                f"""
-                                <div class="hud-metric-row-light-blue">
-                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                        <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">4</span>HIP ABDUCTION (AB)</span>
-                                        <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
-                                    </div>
-                                    <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
-                                        <b>Initial Force:</b> L {ab_bL:.1f}N | R {ab_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(ab_lL, ab_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(ab_lR, ab_bR, '{:.1f}', 'N')}
-                                    </div>
-                                </div>
-                            """,
-                                unsafe_allow_html=True,
-                            )
-
-                    # NODE 5: ANKLE PLANTAR FLEXION
-                    if not calf_ath.empty:
-                        b_a, l_a = calf_ath.iloc[0], calf_ath.iloc[-1]
-                        baL, baR = b_a.get(
-                            "L Max Force (N)", 0.0
-                        ), b_a.get("R Max Force (N)", 0.0)
-                        laL, laR = l_a.get(
-                            "L Max Force (N)", 0.0
-                        ), l_a.get("R Max Force (N)", 0.0)
-                        date_str = (
-                            l_a["Date"].strftime("%m/%d/%Y")
-                            if pd.notna(l_a.get("Date"))
-                            else "N/A"
-                        )
-
-                        st.markdown(
-                            f"""
-                            <div class="hud-metric-row-light-blue">
-                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">5</span>ANKLE PLANTAR FLEXION</span>
-                                    <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
-                                </div>
-                                <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
-                                    <b>Initial Force:</b> L {baL:.1f}N | R {baR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(laL, baL, '{:.1f}', 'N')} | R {render_val_with_arrow(laR, baR, '{:.1f}', 'N')}
-                                </div>
-                            </div>
-                        """,
-                            unsafe_allow_html=True,
-                        )
-
                     st.markdown("</div>", unsafe_allow_html=True)
-
-            else:
-                st.info(
-                    f"No Intake Assessment records found for {selected_intake_athlete}."
-                )
 
     # =========================================================================
     # TAB 6: RECOVERY (2-PERSON GRID WITH FULLY PERSISTENT REFRESH CHECKBOXES)
@@ -1959,11 +1574,9 @@ with active_season:
         today = local_now.date()
         current_monday = today - datetime.timedelta(days=today.weekday())
 
-        # Pull fresh Logs dataframe from Google Sheets
         live_rec_df = fetch_live_recovery_sheet()
         st.session_state.recovery_logs_df = live_rec_df
 
-        # Callback function firing POST webhook and directly mutating Session State
         def handle_recovery_check_change(
             ath_name, stn_label, key_name, wk_s, dy_s
         ):
@@ -1980,18 +1593,15 @@ with active_season:
                 "Action": action_val,
             }
 
-            # Immediate local state mutation for snappy UI response
             df_curr = st.session_state.recovery_logs_df
             if is_checked:
-                new_entry = pd.DataFrame([
-                    {
-                        "Week_Starting": str(wk_s).strip(),
-                        "Athlete": str(ath_name).strip(),
-                        "Station": str(stn_label).strip(),
-                        "Day": str(dy_s).strip(),
-                        "Timestamp": time_val,
-                    }
-                ])
+                new_entry = pd.DataFrame([{
+                    "Week_Starting": str(wk_s).strip(),
+                    "Athlete": str(ath_name).strip(),
+                    "Station": str(stn_label).strip(),
+                    "Day": str(dy_s).strip(),
+                    "Timestamp": time_val,
+                }])
                 st.session_state.recovery_logs_df = pd.concat(
                     [df_curr, new_entry], ignore_index=True
                 )
@@ -2028,7 +1638,6 @@ with active_season:
             except Exception as ex:
                 print(f"Recovery webhook POST failed: {ex}")
 
-        # SUB-TAB 1: LIVE CHECKBOX TRACKER (2-PERSON GRID)
         with rec_tab_tracker:
             st.markdown(
                 '<div class="vball-section-title">Athlete Recovery Checkbox Grid</div>',
@@ -2073,7 +1682,6 @@ with active_season:
 
             stations = [f"Recovery {i}" for i in range(1, 7)]
 
-            # Render 2-person grid layout
             for i in range(0, len(roster_players), 2):
                 grid_cols = st.columns(2)
                 for j in range(2):
@@ -2111,10 +1719,8 @@ with active_season:
                                 unsafe_allow_html=True,
                             )
 
-                            # 6 Checkboxes for stations
                             chk_cols = st.columns(3)
                             for s_idx, station_label in enumerate(stations):
-                                # Determine matching state directly from fresh Google Sheet DataFrame
                                 is_checked = False
                                 if not live_rec_df.empty and {
                                     "Week_Starting",
@@ -2151,8 +1757,6 @@ with active_season:
                                     is_checked = not matched.empty
 
                                 cb_key = f"rec_cb_{player.replace(' ', '_').replace(',', '')}_{station_label.replace(' ', '_')}_{week_str}_{selected_rec_day.replace(' ', '_')}"
-
-                                # Ensure session state is synchronized to fresh sheet data prior to checkbox initialization
                                 st.session_state[cb_key] = is_checked
 
                                 with chk_cols[s_idx % 3]:
@@ -2170,7 +1774,6 @@ with active_season:
                                     )
                             st.markdown("<br>", unsafe_allow_html=True)
 
-        # SUB-TAB 2: TEAM RECOVERY SUMMARY
         with rec_tab_summary:
             st.markdown(
                 '<div class="vball-section-title">Team Recovery Master Summary</div>',
