@@ -1814,6 +1814,32 @@ with active_season:
 
                 st.markdown("</div>", unsafe_allow_html=True)
 
+            st.divider()
+
+            # RAW DATA LOG TABLES BELOW ANATOMY MAP
+            st.markdown(f"### Intake Assessment Raw Logs for {selected_intake_athlete}")
+
+            with st.expander("Knee Extension / Flexion Log", expanded=False):
+                if not sh_ath.empty:
+                    disp_knee = [c for c in sh_ath.columns if c not in ["Name", "Date_Str"]]
+                    st.markdown(render_vball_table(sh_ath[disp_knee]), unsafe_allow_html=True)
+                else:
+                    st.info(f"No Knee Assessment records for {selected_intake_athlete}.")
+
+            with st.expander("Hip Adduction / Abduction Log", expanded=False):
+                if not hip_ath.empty:
+                    disp_hip = [c for c in hip_ath.columns if c not in ["Name", "Date_Str"]]
+                    st.markdown(render_vball_table(hip_ath[disp_hip]), unsafe_allow_html=True)
+                else:
+                    st.info(f"No Hip Assessment records for {selected_intake_athlete}.")
+
+            with st.expander("Ankle Plantar Flexion Log", expanded=False):
+                if not calf_ath.empty:
+                    disp_ankle = [c for c in calf_ath.columns if c not in ["Name", "Date_Str"]]
+                    st.markdown(render_vball_table(calf_ath[disp_ankle]), unsafe_allow_html=True)
+                else:
+                    st.info(f"No Ankle Assessment records for {selected_intake_athlete}.")
+
         # SUB-TAB 3: NORDBORD (SPLIT BY TEST TYPES: ISO 30, ISO 60, NORDIC)
         with testing_tab_nordic:
             st.markdown(
