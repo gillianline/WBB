@@ -1721,6 +1721,7 @@ with active_season:
                     st.metric("Active Athletes Logged", live_rec_df["Athlete"].nunique() if "Athlete" in live_rec_df.columns else 0)
                 with s3:
                     # Safe check preventing argmax/idxmax crash on empty Series
+                    # SAFE TOP STATION LOGIC
                     station_counts = live_rec_df["Station"].dropna().value_counts()
                     top_station = station_counts.idxmax() if not station_counts.empty else "N/A"
                     st.metric("Most Popular Station", f"{top_station}")
