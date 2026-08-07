@@ -1570,7 +1570,7 @@ with active_season:
                 st.info(f"No Intake Assessment records found for {selected_intake_athlete}.")
 
     # =========================================================================
-    # TAB 6: RECOVERY (2-PERSON GRID WITH CHECKBOX AUTO-SYNC)
+    # TAB 6: RECOVERY (2-PERSON GRID WITH CHECKBOX AUTO-SYNC & PERSISTENCE)
     # =========================================================================
     elif main_tab == "Recovery":
         rec_tab_tracker, rec_tab_summary = st.tabs(["Live Recovery Tracker", "Team Recovery Summary"])
@@ -1578,6 +1578,10 @@ with active_season:
         local_now = get_eastern_now()
         today = local_now.date()
         current_monday = today - datetime.timedelta(days=today.weekday())
+
+        # Load live recovery logs from sheet into session state
+        if "recovery_logs_df" not in st.session_state:
+            st.session_state.recovery_logs_df = fetch_live_recovery_sheet()
 
         live_rec_df = st.session_state.recovery_logs_df
 
@@ -1596,7 +1600,7 @@ with active_season:
                 "Action": action_val,
             }
 
-            # Mutate local state directly to prevent out-of-sync app redraws
+            # Mutate local session state directly to keep UI synchronized instantly
             df_curr = st.session_state.recovery_logs_df
             if is_checked:
                 new_entry = pd.DataFrame([{
@@ -1716,7 +1720,9 @@ with active_season:
                 with s2:
                     st.metric("Active Athletes Logged", live_rec_df["Athlete"].nunique() if "Athlete" in live_rec_df.columns else 0)
                 with s3:
-                    top_station = live_rec_df["Station"].value_counts().idxmax() if not live_rec_df["Station"].empty else "N/A"
+                    # Safe check preventing argmax/idxmax crash on empty Series
+                    station_counts = live_rec_df["Station"].dropna().value_counts()
+                    top_station = station_counts.idxmax() if not station_counts.empty else "N/A"
                     st.metric("Most Popular Station", f"{top_station}")
 
                 st.markdown("<br>", unsafe_allow_html=True)
@@ -1725,12 +1731,12 @@ with active_season:
 
                 with col_sum1:
                     st.markdown("#### Completions by Station")
-                    station_counts = live_rec_df["Station"].value_counts().reset_index()
-                    station_counts.columns = ["Station", "Count"]
-                    station_counts["Station"] = station_counts["Station"].astype(str)
+                    station_counts_df = live_rec_df["Station"].dropna().value_counts().reset_index()
+                    station_counts_df.columns = ["Station", "Count"]
+                    station_counts_df["Station"] = station_counts_df["Station"].astype(str)
 
                     fig_rec_bar = px.bar(
-                        station_counts,
+                        station_counts_df,
                         x="Station",
                         y="Count",
                         color="Station",
