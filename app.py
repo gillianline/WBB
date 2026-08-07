@@ -8,13 +8,12 @@ import streamlit as st
 import streamlit.components.v1 as components
 import requests
 
-# Target Sheet GID
 TARGET_GID = "1922017148"
 
 # -----------------------------------------------------------------------------
-# GOOGLE SHEETS REAL-TIME SYNC FUNCTIONS
+# GOOGLE SHEETS REAL-TIME CHECKBOX SYNC
 # -----------------------------------------------------------------------------
-def sync_recovery_metric(athlete, metric, count_val, week_starting, day_selected):
+def sync_recovery_checkbox(athlete, station, is_checked, week_starting, day_selected):
     sheet_url = st.secrets.get("Live Track") or st.secrets.get("sheets", {}).get("live_track_url")
     
     if not sheet_url:
@@ -24,9 +23,9 @@ def sync_recovery_metric(athlete, metric, count_val, week_starting, day_selected
     payload = {
         "Week_Starting": str(week_starting),
         "Athlete": athlete,
+        "Station": str(station),
         "Day": day_selected,
-        "Metric": metric,
-        "Count": int(count_val),
+        "Completed": is_checked,
         "gid": TARGET_GID
     }
 
@@ -44,7 +43,6 @@ def fetch_live_recovery_sheet():
     if not sheet_url:
         return pd.DataFrame()
     try:
-        # Append GID query parameter if supported
         url = f"{sheet_url}?gid={TARGET_GID}" if "?" not in sheet_url else f"{sheet_url}&gid={TARGET_GID}"
         response = requests.get(url, timeout=5)
         if response.status_code == 200:
@@ -142,13 +140,13 @@ st.markdown(
         .compliance-metric-value { font-size: 1.05rem; font-weight: 800; color: #0F172A; }
         .compliance-metric-sub { font-size: 0.68rem; color: #94A3B8; margin-top: 2px; }
 
-        .recovery-player-card {
+        .rec-grid-card {
             background: #FFFFFF;
             border: 1px solid #CBD5E1;
             border-radius: 12px;
-            padding: 14px 18px;
+            padding: 16px;
+            margin-bottom: 20px;
             box-shadow: 0 2px 6px rgba(0,0,0,0.03);
-            margin-bottom: 12px;
         }
     </style>
 """,
@@ -224,7 +222,7 @@ def load_sheet_data():
                 df["Date_Str"] = df["Date"].dt.strftime("%Y-%m-%d")
 
         return (
-            vol_df, int_df, comp_df, weekly_df, cmj_df, roster_df,
+            vol_df, int_df, comp_df, weekly_raw, cmj_raw, roster_raw,
             nordic_df, ankle_df, knee_df, hip_df
         )
     except Exception as e:
@@ -245,11 +243,11 @@ def get_vball_color(score):
     if score is None or pd.isna(score):
         return "#E2E8F0", "#475569"
     if score < 50:
-        return "#BBF7D0", "#166534"  # Green
+        return "#BBF7D0", "#166534"
     elif score < 75:
-        return "#FEF08A", "#854D0E"  # Yellow
+        return "#FEF08A", "#854D0E"
     else:
-        return "#FFD6D6", "#991B1B"  # Red
+        return "#FFD6D6", "#991B1B"
 
 
 def render_vball_table(df):
@@ -1290,7 +1288,7 @@ with active_season:
                                     
                                     <!-- Right Arm -->
                                     <path d="M 94 40 C 99 43, 101 52, 103 64 C 105 74, 107 82, 109 92 C 111 96, 113 100, 114 104 C 115 106, 113 107, 111 106 C 109 104, 108 98, 106 92 C 103 82, 100 74, 98 64 C 96 54, 94 48, 93 56 Z" fill="url(#anatomicalBodyGrad)" />
-                                    <path d="M 114 104 C 116 106, 118 108, 119 110 M 113 105 C 115 108, 116 110, 117 112 M 112 105 C 113 108, 114 110, 115 112 M 111 104 C 111 107, 112 109, 113 111" fill="none" stroke-width="0.8" />
+                                    <path d="M 114 104 C 116 106, 118 108, 119 110 M 113 105 C 21 108, 20 110, 17 112 M 112 105 C 113 108, 114 110, 115 112 M 111 104 C 111 107, 112 109, 113 111" fill="none" stroke-width="0.8" />
 
                                     <!-- Torso & Waist -->
                                     <path d="M 52 44 L 54 75 L 52 92 L 68 106 L 84 92 L 82 75 L 84 44 Z" fill="url(#anatomicalBodyGrad)" />
@@ -1586,17 +1584,17 @@ with active_season:
                 st.info(f"No Intake Assessment records found for {selected_intake_athlete}.")
 
     # =========================================================================
-    # TAB 6: RECOVERY (AUTO-SYNCING TO SPECIFIC TAB GID: 1922017148)
+    # TAB 6: RECOVERY (2-PERSON GRID WITH CHECKBOXES AUTO-SYNC)
     # =========================================================================
     elif main_tab == "Recovery":
         rec_tab_tracker, rec_tab_summary = st.tabs(["Live Recovery Tracker", "Team Recovery Summary"])
 
         live_rec_df = fetch_live_recovery_sheet()
 
-        # SUB-TAB 1: LIVE RECOVERY TRACKER
+        # SUB-TAB 1: LIVE CHECKBOX TRACKER (2-PERSON GRID)
         with rec_tab_tracker:
             st.markdown(
-                '<div class="vball-section-title">Live Athlete Recovery Tracker (Auto-Syncing)</div>',
+                '<div class="vball-section-title">Athlete Recovery Checkbox Grid</div>',
                 unsafe_allow_html=True,
             )
 
@@ -1608,64 +1606,63 @@ with active_season:
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            recovery_options = ["1", "2", "3", "4", "5", "6"]
+            stations = ["1", "2", "3", "4", "5", "6"]
 
-            for player in roster_players:
-                p_row = roster_raw[roster_raw["Name"] == player] if not roster_raw.empty else pd.DataFrame()
-                p_pos = p_row["Position"].values[0] if not p_row.empty else "Athlete"
-                p_img = p_row["Picture"].values[0] if not p_row.empty else "https://via.placeholder.com/70"
+            # Loop through roster in 2-person grid format
+            for i in range(0, len(roster_players), 2):
+                grid_cols = st.columns(2)
+                for j in range(2):
+                    if i + j < len(roster_players):
+                        player = roster_players[i + j]
+                        p_row = roster_raw[roster_raw["Name"] == player] if not roster_raw.empty else pd.DataFrame()
+                        p_pos = p_row["Position"].values[0] if not p_row.empty else "Athlete"
+                        p_img = p_row["Picture"].values[0] if not p_row.empty else "https://via.placeholder.com/70"
 
-                st.markdown(
-                    f"""
-                    <div class="recovery-player-card">
-                        <div style="display: flex; align-items: center; gap: 15px;">
-                            <img src="{p_img}" class="athlete-avatar" style="width: 50px; height: 50px;">
-                            <div>
-                                <h4 style="margin: 0; color: #0F172A; font-weight: 700;">{player}</h4>
-                                <span style="color: #64748B; font-size: 0.85rem;">{p_pos}</span>
-                            </div>
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+                        with grid_cols[j]:
+                            st.markdown(
+                                f"""
+                                <div class="rec-grid-card">
+                                    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 10px;">
+                                        <img src="{p_img}" class="athlete-avatar" style="width: 55px; height: 55px;">
+                                        <div>
+                                            <h4 style="margin: 0; color: #0F172A; font-weight: 700;">{player}</h4>
+                                            <span style="color: #64748B; font-size: 0.85rem;">{p_pos}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
 
-                cols = st.columns(6)
-                for idx, r_metric in enumerate(recovery_options):
-                    existing_count = 0
-                    metric_key = f"Recovery {r_metric}"
-                    if not live_rec_df.empty:
-                        matched = live_rec_df[
-                            (live_rec_df["Week_Starting"].astype(str) == str(selected_rec_week)) &
-                            (live_rec_df["Athlete"].astype(str) == str(player)) &
-                            (live_rec_df["Day"].astype(str) == str(selected_rec_day)) &
-                            (live_rec_df["Metric"].astype(str) == str(metric_key))
-                        ]
-                        if not matched.empty:
-                            try:
-                                existing_count = int(float(matched["Count"].values[0]))
-                            except ValueError:
-                                existing_count = 0
+                            # 6 Checkboxes for stations underneath
+                            chk_cols = st.columns(3)
+                            for s_idx, station in enumerate(stations):
+                                is_checked = False
+                                if not live_rec_df.empty:
+                                    matched = live_rec_df[
+                                        (live_rec_df["Week_Starting"].astype(str) == str(selected_rec_week)) &
+                                        (live_rec_df["Athlete"].astype(str) == str(player)) &
+                                        (live_rec_df["Station"].astype(str) == str(station)) &
+                                        (live_rec_df["Day"].astype(str) == str(selected_rec_day))
+                                    ]
+                                    is_checked = not matched.empty
 
-                    with cols[idx]:
-                        input_key = f"auto_{player}_{metric_key}_{selected_rec_week}_{selected_rec_day}"
-                        st.number_input(
-                            f"Recovery {r_metric}",
-                            min_value=0,
-                            max_value=50,
-                            value=existing_count,
-                            step=1,
-                            key=input_key,
-                            on_change=sync_recovery_metric,
-                            kwargs={
-                                "athlete": player,
-                                "metric": metric_key,
-                                "count_val": st.session_state.get(input_key, 0),
-                                "week_starting": selected_rec_week,
-                                "day_selected": selected_rec_day,
-                            }
-                        )
-                st.divider()
+                                with chk_cols[s_idx % 3]:
+                                    cb_key = f"chk_{player}_s{station}_{selected_rec_week}_{selected_rec_day}"
+                                    st.checkbox(
+                                        f"Station {station}",
+                                        value=is_checked,
+                                        key=cb_key,
+                                        on_change=sync_recovery_checkbox,
+                                        kwargs={
+                                            "athlete": player,
+                                            "station": station,
+                                            "is_checked": st.session_state.get(cb_key, False),
+                                            "week_starting": selected_rec_week,
+                                            "day_selected": selected_rec_day,
+                                        }
+                                    )
+                            st.markdown("<br>", unsafe_allow_html=True)
 
         # SUB-TAB 2: TEAM RECOVERY SUMMARY
         with rec_tab_summary:
@@ -1675,28 +1672,27 @@ with active_season:
             )
 
             if not live_rec_df.empty:
-                live_rec_df["Count"] = pd.to_numeric(live_rec_df["Count"], errors="coerce").fillna(0)
-
                 s1, s2, s3 = st.columns(3)
                 with s1:
-                    st.metric("Total Recovery Sessions Logged", int(live_rec_df["Count"].sum()))
+                    st.metric("Total Stations Completed", len(live_rec_df))
                 with s2:
-                    st.metric("Active Athletes Tracking", live_rec_df["Athlete"].nunique())
+                    st.metric("Active Athletes Logged", live_rec_df["Athlete"].nunique())
                 with s3:
-                    st.metric("Most Utilized Modality", live_rec_df.groupby("Metric")["Count"].sum().idxmax() if not live_rec_df.empty else "N/A")
+                    st.metric("Most Popular Station", live_rec_df["Station"].value_counts().idxmax() if not live_rec_df.empty else "N/A")
 
                 st.markdown("<br>", unsafe_allow_html=True)
 
                 col_sum1, col_sum2 = st.columns(2)
 
                 with col_sum1:
-                    st.markdown("#### Total Recovery Volume by Modality")
-                    metric_summary = live_rec_df.groupby("Metric")["Count"].sum().reset_index()
+                    st.markdown("#### Completions by Station")
+                    station_counts = live_rec_df["Station"].value_counts().reset_index()
+                    station_counts.columns = ["Station", "Count"]
                     fig_rec_bar = px.bar(
-                        metric_summary,
-                        x="Metric",
+                        station_counts,
+                        x="Station",
                         y="Count",
-                        color="Metric",
+                        color="Station",
                         color_discrete_sequence=px.colors.qualitative.Bold,
                         text="Count"
                     )
@@ -1704,17 +1700,18 @@ with active_season:
                     st.plotly_chart(fig_rec_bar, use_container_width=True)
 
                 with col_sum2:
-                    st.markdown("#### Athlete Recovery Completion Matrix")
+                    st.markdown("#### Athlete Station Completion Matrix")
+                    live_rec_df["Value"] = 1
                     pivot_summary = live_rec_df.pivot_table(
                         index="Athlete",
-                        columns="Metric",
-                        values="Count",
+                        columns="Station",
+                        values="Value",
                         aggfunc="sum",
                         fill_value=0
                     )
                     st.dataframe(pivot_summary, use_container_width=True)
 
-                st.markdown("#### Full Live Recovery Sheet Log (GID: 1922017148)")
+                st.markdown("#### Live Log (Google Sheet GID: 1922017148)")
                 st.dataframe(live_rec_df, use_container_width=True)
             else:
                 st.info("No recovery data currently recorded in Google Sheets.")
