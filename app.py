@@ -231,6 +231,7 @@ def load_sheet_data():
 
 
 def fetch_live_recovery_sheet():
+    # 1. Try Direct Apps Script Web App GET first
     macro_url = (
         st.secrets.get("MACRO_URL")
         or st.secrets.get("Live Track")
@@ -239,7 +240,7 @@ def fetch_live_recovery_sheet():
 
     if macro_url:
         try:
-            res = requests.get(macro_url, timeout=6)
+            res = requests.get(macro_url, timeout=5)
             if res.status_code == 200:
                 data = res.json()
                 if isinstance(data, list) and len(data) > 0:
@@ -249,8 +250,9 @@ def fetch_live_recovery_sheet():
                             df_json[col] = df_json[col].astype(str).str.strip()
                     return df_json
         except Exception as e:
-            print(f"Direct Apps Script GET fallback to CSV: {e}")
+            print(f"Apps Script GET fallback: {e}")
 
+    # 2. Fallback to gviz CSV
     try:
         sheet_base_url = st.secrets["connections"]["gsheets"]["spreadsheet"]
         cache_buster = f"&cache={datetime.datetime.now().timestamp()}"
@@ -1860,7 +1862,7 @@ with active_season:
                 st.markdown("</div>", unsafe_allow_html=True)
 
     # =========================================================================
-    # TAB 6: RECOVERY (2-PERSON GRID WITH FIXED PERSISTENCE & NO LOGS TABLE)
+    # TAB 6: RECOVERY (2-PERSON GRID WITH LOCAL STATE PERSISTENCE)
     # =========================================================================
     elif main_tab == "Recovery":
         rec_tab_tracker, rec_tab_summary = st.tabs(
@@ -1871,12 +1873,27 @@ with active_season:
         today = local_now.date()
         current_monday = today - datetime.timedelta(days=today.weekday())
 
-        live_rec_df = fetch_live_recovery_sheet()
+        # Initialize local persistent recovery log dictionary in session_state
+        if "recovery_local_state" not in st.session_state:
+            st.session_state.recovery_local_state = set()
+            # Seed local state from current live Google Sheet state on cold start
+            live_df = fetch_live_recovery_sheet()
+            if not live_df.empty and {"Week_Starting", "Athlete", "Station", "Day"}.issubset(live_df.columns):
+                for _, row in live_df.iterrows():
+                    key = f"{str(row['Week_Starting']).strip()}|{str(row['Athlete']).strip()}|{str(row['Station']).strip()}|{str(row['Day']).strip()}"
+                    st.session_state.recovery_local_state.add(key)
 
         def handle_recovery_check_change(
             ath_name, stn_label, key_name, wk_s, dy_s
         ):
             is_checked = st.session_state[key_name]
+            state_key = f"{str(wk_s).strip()}|{str(ath_name).strip()}|{str(stn_label).strip()}|{str(dy_s).strip()}"
+
+            if is_checked:
+                st.session_state.recovery_local_state.add(state_key)
+            else:
+                st.session_state.recovery_local_state.discard(state_key)
+
             action_val = "add" if is_checked else "remove"
             time_val = get_eastern_time_str() if is_checked else ""
 
@@ -1983,47 +2000,15 @@ with active_season:
 
                             chk_cols = st.columns(3)
                             for s_idx, station_label in enumerate(stations):
-                                is_checked = False
-                                if not live_rec_df.empty and {
-                                    "Week_Starting",
-                                    "Athlete",
-                                    "Station",
-                                    "Day",
-                                }.issubset(live_rec_df.columns):
-                                    matched = live_rec_df[
-                                        (
-                                            live_rec_df["Week_Starting"]
-                                            .astype(str)
-                                            .str.strip()
-                                            == str(week_str).strip()
-                                        )
-                                        & (
-                                            live_rec_df["Athlete"]
-                                            .astype(str)
-                                            .str.strip()
-                                            == str(player).strip()
-                                        )
-                                        & (
-                                            live_rec_df["Station"]
-                                            .astype(str)
-                                            .str.strip()
-                                            == str(station_label).strip()
-                                        )
-                                        & (
-                                            live_rec_df["Day"]
-                                            .astype(str)
-                                            .str.strip()
-                                            == str(selected_rec_day).strip()
-                                        )
-                                    ]
-                                    is_checked = not matched.empty
+                                state_key = f"{str(week_str).strip()}|{str(player).strip()}|{str(station_label).strip()}|{str(selected_rec_day).strip()}"
+                                is_checked = state_key in st.session_state.recovery_local_state
 
                                 cb_key = f"rec_cb_{player.replace(' ', '_').replace(',', '')}_{station_label.replace(' ', '_')}_{week_str}_{selected_rec_day.replace(' ', '_')}"
-                                st.session_state[cb_key] = is_checked
 
                                 with chk_cols[s_idx % 3]:
                                     st.checkbox(
                                         f"{station_label}",
+                                        value=is_checked,
                                         key=cb_key,
                                         on_change=handle_recovery_check_change,
                                         args=(
@@ -2041,6 +2026,20 @@ with active_season:
                 '<div class="vball-section-title">Team Recovery Master Summary</div>',
                 unsafe_allow_html=True,
             )
+
+            # Build summary dataframe directly from memory state
+            summary_rows = []
+            for item in st.session_state.recovery_local_state:
+                parts = item.split("|")
+                if len(parts) == 4:
+                    summary_rows.append({
+                        "Week_Starting": parts[0],
+                        "Athlete": parts[1],
+                        "Station": parts[2],
+                        "Day": parts[3]
+                    })
+
+            live_rec_df = pd.DataFrame(summary_rows) if summary_rows else pd.DataFrame(columns=["Week_Starting", "Athlete", "Station", "Day"])
 
             if not live_rec_df.empty and "Station" in live_rec_df.columns:
                 s1, s2, s3 = st.columns(3)
@@ -2113,4 +2112,4 @@ with active_season:
                         )
                         st.dataframe(pivot_summary, use_container_width=True)
             else:
-                st.info("No recovery data currently recorded in Google Sheets.")
+                st.info("No recovery data currently recorded.")
