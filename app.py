@@ -1,15 +1,15 @@
-import io
-import urllib.request
-import json
 import datetime
+import io
+import json
+import urllib.request
 from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import requests
 import streamlit as st
 import streamlit.components.v1 as components
-import requests
 
 EASTERN_TZ = ZoneInfo("America/New_York")
 
@@ -1047,6 +1047,119 @@ with active_season:
             )
             st.plotly_chart(fig_ind_dl, use_container_width=True)
 
+        st.divider()
+
+        # =========================================================================
+        # NEW SECTION: 5. ADDITIONAL ASSESSMENT RECORDS
+        # =========================================================================
+        st.markdown(
+            '<div class="vball-section-title">5. Additional Assessment Records</div>',
+            unsafe_allow_html=True,
+        )
+
+        ind_records = []
+
+        # 1. NordBord Best Peaks per Test Type
+        p_nord_ind = nordic_raw[nordic_raw["Name"] == selected_player] if not nordic_raw.empty and "Name" in nordic_raw.columns else pd.DataFrame()
+        if not p_nord_ind.empty:
+            l_c = next((c for c in p_nord_ind.columns if "l max force" in c.lower()), None)
+            r_c = next((c for c in p_nord_ind.columns if "r max force" in c.lower()), None)
+            t_c = next((c for c in p_nord_ind.columns if "test" in c.lower()), None)
+            if l_c and r_c:
+                p_nord_ind["Peak_Force"] = p_nord_ind[[l_c, r_c]].apply(pd.to_numeric, errors="coerce").max(axis=1)
+                if t_c:
+                    for test_type_val in p_nord_ind[t_c].dropna().unique():
+                        sub_df = p_nord_ind[p_nord_ind[t_c] == test_type_val]
+                        if not sub_df.empty:
+                            best_nord_sub = sub_df.sort_values("Peak_Force", ascending=False).iloc[0]
+                            ind_records.append({
+                                "Assessment": f"NordBord ({test_type_val})",
+                                "Peak Value": f"{best_nord_sub['Peak_Force']:.1f} N",
+                                "Date": format_date_clean(best_nord_sub.get("Date"))
+                            })
+                else:
+                    best_nord = p_nord_ind.sort_values("Peak_Force", ascending=False).iloc[0]
+                    ind_records.append({
+                        "Assessment": "NordBord Hamstring",
+                        "Peak Value": f"{best_nord['Peak_Force']:.1f} N",
+                        "Date": format_date_clean(best_nord.get("Date"))
+                    })
+
+        # 2. Harness Belt Squat
+        p_bs_ind = belt_squat_raw[belt_squat_raw["Name"] == selected_player] if not belt_squat_raw.empty and "Name" in belt_squat_raw.columns else pd.DataFrame()
+        if not p_bs_ind.empty:
+            f_c = next((c for c in p_bs_ind.columns if "peak vertical force [n]" in c.lower()), None)
+            if f_c:
+                p_bs_ind["PVF"] = pd.to_numeric(p_bs_ind[f_c].astype(str).str.replace(r"[^0-9.]", "", regex=True), errors="coerce")
+                best_bs = p_bs_ind.sort_values("PVF", ascending=False).iloc[0]
+                ind_records.append({
+                    "Assessment": "Harness Belt Squat",
+                    "Peak Value": f"{best_bs['PVF']:.1f} N",
+                    "Date": format_date_clean(best_bs.get("Date"))
+                })
+
+        # 3. Knee Extension & Flexion
+        p_knee_ind = knee_raw[knee_raw["Name"] == selected_player] if not knee_raw.empty and "Name" in knee_raw.columns else pd.DataFrame()
+        if not p_knee_ind.empty:
+            if "TestDirection" in p_knee_ind.columns:
+                ke_df = p_knee_ind[p_knee_ind["TestDirection"].str.contains("Extension", case=False, na=False)]
+                kf_df = p_knee_ind[p_knee_ind["TestDirection"].str.contains("Flexion", case=False, na=False)]
+                if not ke_df.empty:
+                    ke_df["MaxF"] = ke_df[["L Max Force (N)", "R Max Force (N)"]].apply(pd.to_numeric, errors="coerce").max(axis=1)
+                    best_ke = ke_df.sort_values("MaxF", ascending=False).iloc[0]
+                    ind_records.append({
+                        "Assessment": "Knee Extension",
+                        "Peak Value": f"{best_ke['MaxF']:.1f} N",
+                        "Date": format_date_clean(best_ke.get("Date"))
+                    })
+                if not kf_df.empty:
+                    kf_df["MaxF"] = kf_df[["L Max Force (N)", "R Max Force (N)"]].apply(pd.to_numeric, errors="coerce").max(axis=1)
+                    best_kf = kf_df.sort_values("MaxF", ascending=False).iloc[0]
+                    ind_records.append({
+                        "Assessment": "Knee Flexion",
+                        "Peak Value": f"{best_kf['MaxF']:.1f} N",
+                        "Date": format_date_clean(best_kf.get("Date"))
+                    })
+
+        # 4. Hip Adduction & Abduction
+        p_hip_ind = hip_raw[hip_raw["Name"] == selected_player] if not hip_raw.empty and "Name" in hip_raw.columns else pd.DataFrame()
+        if not p_hip_ind.empty:
+            if "TestDirection" in p_hip_ind.columns:
+                ad_df = p_hip_ind[p_hip_ind["TestDirection"].str.contains("AD|Adduction", case=False, na=False)]
+                ab_df = p_hip_ind[p_hip_ind["TestDirection"].str.contains("AB|Abduction", case=False, na=False)]
+                if not ad_df.empty:
+                    ad_df["MaxF"] = ad_df[["L Max Force (N)", "R Max Force (N)"]].apply(pd.to_numeric, errors="coerce").max(axis=1)
+                    best_ad = ad_df.sort_values("MaxF", ascending=False).iloc[0]
+                    ind_records.append({
+                        "Assessment": "Hip Adduction",
+                        "Peak Value": f"{best_ad['MaxF']:.1f} N",
+                        "Date": format_date_clean(best_ad.get("Date"))
+                    })
+                if not ab_df.empty:
+                    ab_df["MaxF"] = ab_df[["L Max Force (N)", "R Max Force (N)"]].apply(pd.to_numeric, errors="coerce").max(axis=1)
+                    best_ab = ab_df.sort_values("MaxF", ascending=False).iloc[0]
+                    ind_records.append({
+                        "Assessment": "Hip Abduction",
+                        "Peak Value": f"{best_ab['MaxF']:.1f} N",
+                        "Date": format_date_clean(best_ab.get("Date"))
+                    })
+
+        # 5. Ankle Plantar Flexion
+        p_ank_ind = ankle_raw[ankle_raw["Name"] == selected_player] if not ankle_raw.empty and "Name" in ankle_raw.columns else pd.DataFrame()
+        if not p_ank_ind.empty:
+            p_ank_ind["MaxF"] = p_ank_ind[["L Max Force (N)", "R Max Force (N)"]].apply(pd.to_numeric, errors="coerce").max(axis=1)
+            best_ank = p_ank_ind.sort_values("MaxF", ascending=False).iloc[0]
+            ind_records.append({
+                "Assessment": "Ankle Plantar Flexion",
+                "Peak Value": f"{best_ank['MaxF']:.1f} N",
+                "Date": format_date_clean(best_ank.get("Date"))
+            })
+
+        if ind_records:
+            st.markdown(render_vball_table(pd.DataFrame(ind_records)), unsafe_allow_html=True)
+        else:
+            st.info(f"No additional assessment logs found for {selected_player}.")
+
     # =========================================================================
     # TAB 2: PRACTICE SCORE (TEAM/SESSION VIEW)
     # =========================================================================
@@ -1839,7 +1952,6 @@ with active_season:
                 )
 
                 st.plotly_chart(fig_jump_trend, use_container_width=True)
-
 
         # SUB-TAB 3: NORDBORD (SPLIT BY TEST TYPES: ISO 30, ISO 60, NORDIC)
         with testing_tab_nordic:
