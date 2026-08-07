@@ -231,6 +231,28 @@ def load_sheet_data():
 
 
 def fetch_live_recovery_sheet():
+    macro_url = (
+        st.secrets.get("MACRO_URL")
+        or st.secrets.get("Live Track")
+        or st.secrets.get("sheets", {}).get("live_track_url")
+    )
+    
+    # 1. Try Direct Web App GET (Zero CDN caching delay)
+    if macro_url:
+        try:
+            res = requests.get(macro_url, timeout=6)
+            if res.status_code == 200:
+                data = res.json()
+                if isinstance(data, list) and len(data) > 0:
+                    df_json = pd.DataFrame(data)
+                    for col in ["Week_Starting", "Athlete", "Station", "Day"]:
+                        if col in df_json.columns:
+                            df_json[col] = df_json[col].astype(str).str.strip()
+                    return df_json
+        except Exception as e:
+            print(f"Direct Apps Script GET fallback to CSV: {e}")
+
+    # 2. Fallback to gviz CSV export
     try:
         sheet_base_url = st.secrets["connections"]["gsheets"]["spreadsheet"]
         cache_buster = f"&cache={datetime.datetime.now().timestamp()}"
@@ -247,7 +269,6 @@ def fetch_live_recovery_sheet():
             df = pd.read_csv(io.StringIO(content), keep_default_na=False)
 
         if not df.empty:
-            # Map columns explicitly
             if len(df.columns) >= 5:
                 df.columns = ["Week_Starting", "Athlete", "Station", "Day", "Timestamp"][:len(df.columns)]
             for col in ["Week_Starting", "Athlete", "Station", "Day"]:
@@ -265,6 +286,8 @@ def fetch_live_recovery_sheet():
                 "Timestamp",
             ]
         )
+
+
 # -----------------------------------------------------------------------------
 # 4. HELPER FUNCTIONS
 # -----------------------------------------------------------------------------
@@ -1562,7 +1585,7 @@ with active_season:
                     st.markdown("</div>", unsafe_allow_html=True)
 
     # =========================================================================
-    # TAB 6: RECOVERY (2-PERSON GRID WITH FIXED PERSISTENCE & NO INSTANT DISAPPEAR)
+    # TAB 6: RECOVERY (2-PERSON GRID WITH ZERO-CACHE ZERO-DISAPPEAR REFRESH)
     # =========================================================================
     elif main_tab == "Recovery":
         rec_tab_tracker, rec_tab_summary = st.tabs(
@@ -1573,14 +1596,11 @@ with active_season:
         today = local_now.date()
         current_monday = today - datetime.timedelta(days=today.weekday())
 
-        # Load live recovery logs from Google Sheets on view load
-        if "recovery_logs_df" not in st.session_state:
-            st.session_state.recovery_logs_df = fetch_live_recovery_sheet()
+        live_rec_df = fetch_live_recovery_sheet()
 
-        live_rec_df = st.session_state.recovery_logs_df
-
-        # Callback function firing POST webhook and directly mutating Session State
-        def handle_recovery_check_change(ath_name, stn_label, key_name, wk_s, dy_s):
+        def handle_recovery_check_change(
+            ath_name, stn_label, key_name, wk_s, dy_s
+        ):
             is_checked = st.session_state[key_name]
             action_val = "add" if is_checked else "remove"
             time_val = get_eastern_time_str() if is_checked else ""
@@ -1594,43 +1614,6 @@ with active_season:
                 "Action": action_val,
             }
 
-            # Local state mutation keeps checkmarks locked in immediately
-            df_curr = st.session_state.recovery_logs_df
-            if is_checked:
-                new_entry = pd.DataFrame([
-                    {
-                        "Week_Starting": str(wk_s).strip(),
-                        "Athlete": str(ath_name).strip(),
-                        "Station": str(stn_label).strip(),
-                        "Day": str(dy_s).strip(),
-                        "Timestamp": time_val,
-                    }
-                ])
-                st.session_state.recovery_logs_df = pd.concat(
-                    [df_curr, new_entry], ignore_index=True
-                )
-            else:
-                st.session_state.recovery_logs_df = df_curr[
-                    ~(
-                        (
-                            df_curr["Week_Starting"].astype(str).str.strip()
-                            == str(wk_s).strip()
-                        )
-                        & (
-                            df_curr["Athlete"].astype(str).str.strip()
-                            == str(ath_name).strip()
-                        )
-                        & (
-                            df_curr["Station"].astype(str).str.strip()
-                            == str(stn_label).strip()
-                        )
-                        & (
-                            df_curr["Day"].astype(str).str.strip()
-                            == str(dy_s).strip()
-                        )
-                    )
-                ]
-
             try:
                 macro_url = (
                     st.secrets.get("MACRO_URL")
@@ -1642,7 +1625,6 @@ with active_season:
             except Exception as ex:
                 print(f"Recovery webhook POST failed: {ex}")
 
-        # SUB-TAB 1: LIVE CHECKBOX TRACKER (2-PERSON GRID)
         with rec_tab_tracker:
             st.markdown(
                 '<div class="vball-section-title">Athlete Recovery Checkbox Grid</div>',
@@ -1687,7 +1669,6 @@ with active_season:
 
             stations = [f"Recovery {i}" for i in range(1, 7)]
 
-            # Render 2-person grid layout
             for i in range(0, len(roster_players), 2):
                 grid_cols = st.columns(2)
                 for j in range(2):
@@ -1727,10 +1708,7 @@ with active_season:
 
                             chk_cols = st.columns(3)
                             for s_idx, station_label in enumerate(stations):
-                                cb_key = f"rec_cb_{player.replace(' ', '_').replace(',', '')}_{station_label.replace(' ', '_')}_{week_str}_{selected_rec_day.replace(' ', '_')}"
-
-                                # Check matching state from live sheet data
-                                is_sheet_checked = False
+                                is_checked = False
                                 if not live_rec_df.empty and {
                                     "Week_Starting",
                                     "Athlete",
@@ -1763,15 +1741,14 @@ with active_season:
                                             == str(selected_rec_day).strip()
                                         )
                                     ]
-                                    is_sheet_checked = not matched.empty
+                                    is_checked = not matched.empty
 
-                                # Initialize Key ONLY IF Not Set (Prevents Immediate Disappearing Checkmark)
-                                if cb_key not in st.session_state:
-                                    st.session_state[cb_key] = is_sheet_checked
+                                cb_key = f"rec_cb_{player.replace(' ', '_').replace(',', '')}_{station_label.replace(' ', '_')}_{week_str}_{selected_rec_day.replace(' ', '_')}"
 
                                 with chk_cols[s_idx % 3]:
                                     st.checkbox(
                                         f"{station_label}",
+                                        value=is_checked,
                                         key=cb_key,
                                         on_change=handle_recovery_check_change,
                                         args=(
@@ -1784,7 +1761,6 @@ with active_season:
                                     )
                             st.markdown("<br>", unsafe_allow_html=True)
 
-        # SUB-TAB 2: TEAM RECOVERY SUMMARY
         with rec_tab_summary:
             st.markdown(
                 '<div class="vball-section-title">Team Recovery Master Summary</div>',
