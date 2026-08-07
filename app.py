@@ -177,6 +177,7 @@ def load_sheet_data():
         roster_df = fetch_csv("roster_url")
 
         nordic_df = fetch_csv("nordic_url")
+        belt_squat_df = fetch_csv("belt_squat_url")
         ankle_df = fetch_csv("ankle_url")
         knee_df = fetch_csv("knee_url")
         hip_df = fetch_csv("hip_url")
@@ -188,6 +189,7 @@ def load_sheet_data():
             weekly_df,
             cmj_df,
             nordic_df,
+            belt_squat_df,
             ankle_df,
             knee_df,
             hip_df,
@@ -207,8 +209,9 @@ def load_sheet_data():
             cmj_df,
             roster_df,
             nordic_df,
+            belt_squat_df,
             ankle_df,
-            knee_raw_fallback if 'knee_raw_fallback' in locals() else knee_df,
+            knee_df,
             hip_df,
         )
     except Exception as e:
@@ -224,6 +227,7 @@ def load_sheet_data():
     cmj_raw,
     roster_raw,
     nordic_raw,
+    belt_squat_raw,
     ankle_raw,
     knee_raw,
     hip_raw,
@@ -1329,11 +1333,11 @@ with active_season:
             st.plotly_chart(fig_ind_dl, use_container_width=True)
 
     # =========================================================================
-    # TAB 5: TESTING (SUB-TABS FOR CMJ HISTORY & INTAKE TESTING)
+    # TAB 5: TESTING (SUB-TABS)
     # =========================================================================
     elif main_tab == "Testing":
-        testing_tab_cmj, testing_tab_intake = st.tabs(
-            ["CMJ History", "Intake Assessment"]
+        testing_tab_cmj, testing_tab_intake, testing_tab_nordic, testing_tab_bs, testing_tab_overall = st.tabs(
+            ["CMJ History", "Intake Assessment", "NordBord", "Harness Belt Squat", "Overall Profile"]
         )
 
         # SUB-TAB 1: CMJ HISTORY
@@ -1465,7 +1469,7 @@ with active_season:
 
                 st.plotly_chart(fig_jump_trend, use_container_width=True)
 
-        # SUB-TAB 2: INTAKE ASSESSMENT (ANATOMY MAP + ASSESSMENT DETAILS)
+        # SUB-TAB 2: INTAKE ASSESSMENT
         with testing_tab_intake:
             st.markdown(
                 "<h3 style='color:#1D1D1F; font-weight:900;"
@@ -1501,19 +1505,11 @@ with active_season:
                 if not knee_raw.empty and "Name" in knee_raw.columns
                 else pd.DataFrame()
             )
-            isoy_ath = (
-                nordic_raw[
-                    nordic_raw["Name"] == selected_intake_athlete
-                ].sort_values("Date")
-                if not nordic_raw.empty and "Name" in nordic_raw.columns
-                else pd.DataFrame()
-            )
 
             has_data = not (
                 calf_ath.empty
                 and hip_ath.empty
                 and sh_ath.empty
-                and isoy_ath.empty
             )
 
             def render_val_with_arrow(
@@ -1663,87 +1659,7 @@ with active_season:
                             unsafe_allow_html=True,
                         )
 
-                    # NODE 2: NORDIC HAMSTRING & ISO VARIATIONS
-                    if not isoy_ath.empty:
-                        metrics_rows_html = ""
-                        latest_dates = []
-
-                        test_col = next(
-                            (c for c in isoy_ath.columns if c.lower() == "test"),
-                            None,
-                        )
-
-                        if test_col:
-                            unique_tests = isoy_ath[test_col].dropna().unique()
-
-                            for test_name in unique_tests:
-                                df_test = isoy_ath[
-                                    isoy_ath[test_col] == test_name
-                                ].sort_values("Date")
-                                if not df_test.empty:
-                                    b_row, l_row = (
-                                        df_test.iloc[0],
-                                        df_test.iloc[-1],
-                                    )
-                                    bL, bR = b_row.get(
-                                        "L Max Force (N)", 0.0
-                                    ), b_row.get("R Max Force (N)", 0.0)
-                                    lL, lR = l_row.get(
-                                        "L Max Force (N)", 0.0
-                                    ), l_row.get("R Max Force (N)", 0.0)
-
-                                    if pd.notna(l_row.get("Date")):
-                                        latest_dates.append(l_row["Date"])
-
-                                    metrics_rows_html += (
-                                        f"<b>{test_name}:</b> Initial L"
-                                        f" {bL:.1f}N | R {bR:.1f}N"
-                                        " &nbsp;→&nbsp; <b>Latest:</b> L"
-                                        f" {render_val_with_arrow(lL, bL, '{:.1f}', 'N')}"
-                                        " | R"
-                                        f" {render_val_with_arrow(lR, bR, '{:.1f}', 'N')}<br>"
-                                    )
-                        else:
-                            b_n, l_n = isoy_ath.iloc[0], isoy_ath.iloc[-1]
-                            bnL, bnR = b_n.get(
-                                "L Max Force (N)", 0.0
-                            ), b_n.get("R Max Force (N)", 0.0)
-                            lnL, lnR = l_n.get(
-                                "L Max Force (N)", 0.0
-                            ), l_n.get("R Max Force (N)", 0.0)
-                            if pd.notna(l_n.get("Date")):
-                                latest_dates.append(l_n["Date"])
-                            metrics_rows_html = (
-                                "<b>Hamstring Test:</b> Initial L"
-                                f" {bnL:.1f}N | R {bnR:.1f}N &nbsp;→&nbsp;"
-                                " <b>Latest:</b> L"
-                                f" {render_val_with_arrow(lnL, bnL, '{:.1f}', 'N')}"
-                                " | R"
-                                f" {render_val_with_arrow(lnR, bnR, '{:.1f}', 'N')}"
-                            )
-
-                        latest_date_str = (
-                            max(latest_dates).strftime("%m/%d/%Y")
-                            if latest_dates
-                            else "N/A"
-                        )
-
-                        st.markdown(
-                            f"""
-                            <div class="hud-metric-row-light">
-                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-orange">2</span>HAMSTRING & ISO STRENGTH TESTS</span>
-                                    <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {latest_date_str}</span>
-                                </div>
-                                <div style="font-size:11px; line-height:1.5; color:#1D1D1F;">
-                                    {metrics_rows_html}
-                                </div>
-                            </div>
-                        """,
-                            unsafe_allow_html=True,
-                        )
-
-                    # NODE 3 & 4: HIP AD/AB
+                    # NODE 2 & 3: HIP AD/AB
                     if not hip_ath.empty:
                         hip_ad = (
                             hip_ath[
@@ -1782,7 +1698,7 @@ with active_season:
                                 f"""
                                 <div class="hud-metric-row-light-blue">
                                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                        <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">3</span>HIP ADDUCTION (AD)</span>
+                                        <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">2</span>HIP ADDUCTION (AD)</span>
                                         <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
                                     </div>
                                     <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
@@ -1811,7 +1727,7 @@ with active_season:
                                 f"""
                                 <div class="hud-metric-row-light-blue">
                                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                        <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">4</span>HIP ABDUCTION (AB)</span>
+                                        <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">3</span>HIP ABDUCTION (AB)</span>
                                         <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
                                     </div>
                                     <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
@@ -1822,7 +1738,7 @@ with active_season:
                                 unsafe_allow_html=True,
                             )
 
-                    # NODE 5: ANKLE PLANTAR FLEXION
+                    # NODE 4: ANKLE PLANTAR FLEXION
                     if not calf_ath.empty:
                         b_a, l_a = calf_ath.iloc[0], calf_ath.iloc[-1]
                         baL, baR = b_a.get(
@@ -1841,7 +1757,7 @@ with active_season:
                             f"""
                             <div class="hud-metric-row-light-blue">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">5</span>ANKLE PLANTAR FLEXION</span>
+                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">4</span>ANKLE PLANTAR FLEXION</span>
                                     <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
                                 </div>
                                 <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
@@ -1858,6 +1774,218 @@ with active_season:
                     )
 
                 st.markdown("</div>", unsafe_allow_html=True)
+
+        # SUB-TAB 3: NORDBORD
+        with testing_tab_nordic:
+            st.markdown(
+                '<div class="vball-section-title">NordBord Hamstring Testing</div>',
+                unsafe_allow_html=True,
+            )
+            c_nord_ath, _ = st.columns([1, 2])
+            with c_nord_ath:
+                selected_nord_athlete = st.selectbox(
+                    "Select Athlete for NordBord View:",
+                    roster_players,
+                    key="nordic_ath_select",
+                )
+
+            p_nordic = (
+                nordic_raw[nordic_raw["Name"] == selected_nord_athlete]
+                .sort_values("Date")
+                .copy()
+                if not nordic_raw.empty and "Name" in nordic_raw.columns
+                else pd.DataFrame()
+            )
+
+            if not p_nordic.empty:
+                l_col = next((c for c in p_nordic.columns if "l max force" in c.lower() or "left max" in c.lower()), None)
+                r_col = next((c for c in p_nordic.columns if "r max force" in c.lower() or "right max" in c.lower()), None)
+
+                if l_col and r_col:
+                    p_nordic["Left_Force"] = pd.to_numeric(p_nordic[l_col], errors="coerce")
+                    p_nordic["Right_Force"] = pd.to_numeric(p_nordic[r_col], errors="coerce")
+                    p_nordic["Imbalance_%"] = np.where(
+                        p_nordic["Right_Force"] > 0,
+                        ((p_nordic["Left_Force"] - p_nordic["Right_Force"]) / p_nordic["Right_Force"]) * 100,
+                        0.0
+                    )
+
+                    fig_nordic = go.Figure()
+                    fig_nordic.add_trace(go.Scatter(
+                        x=p_nordic["Date"], y=p_nordic["Left_Force"],
+                        name="Left Max Force (N)", mode="lines+markers",
+                        line=dict(color="#FF8200", width=3)
+                    ))
+                    fig_nordic.add_trace(go.Scatter(
+                        x=p_nordic["Date"], y=p_nordic["Right_Force"],
+                        name="Right Max Force (N)", mode="lines+markers",
+                        line=dict(color="#38BDF8", width=3)
+                    ))
+
+                    fig_nordic.update_layout(
+                        title=f"Nordic Peak Force Trend — {selected_nord_athlete}",
+                        height=300, margin=dict(l=20, r=20, t=40, b=20),
+                        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                    )
+                    st.plotly_chart(fig_nordic, use_container_width=True)
+
+                disp_nord = [c for c in p_nordic.columns if c not in ["Name", "Date_Str"]]
+                st.markdown(f"#### Nordic Data Log for {selected_nord_athlete}")
+                st.markdown(render_vball_table(p_nordic[disp_nord]), unsafe_allow_html=True)
+            else:
+                st.info(f"No NordBord records logged for {selected_nord_athlete}.")
+
+        # SUB-TAB 4: HARNESS BELT SQUAT
+        with testing_tab_bs:
+            st.markdown(
+                '<div class="vball-section-title">Harness Belt Squat Performance</div>',
+                unsafe_allow_html=True,
+            )
+            c_bs_ath, _ = st.columns([1, 2])
+            with c_bs_ath:
+                selected_bs_athlete = st.selectbox(
+                    "Select Athlete for Belt Squat View:",
+                    roster_players,
+                    key="belt_squat_ath_select",
+                )
+
+            p_bs = (
+                belt_squat_raw[belt_squat_raw["Name"] == selected_bs_athlete]
+                .sort_values("Date")
+                .copy()
+                if not belt_squat_raw.empty and "Name" in belt_squat_raw.columns
+                else pd.DataFrame()
+            )
+
+            if not p_bs.empty:
+                force_col = next((c for c in p_bs.columns if "peak vertical force [n]" in c.lower()), None)
+                rfd_col = next((c for c in p_bs.columns if "rfd" in c.lower()), None)
+
+                if force_col:
+                    p_bs["Peak_Force_Clean"] = pd.to_numeric(
+                        p_bs[force_col].astype(str).str.replace(r"[^0-9.]", "", regex=True),
+                        errors="coerce",
+                    )
+                    fig_bs = go.Figure()
+                    fig_bs.add_trace(go.Scatter(
+                        x=p_bs["Date"], y=p_bs["Peak_Force_Clean"],
+                        name="Peak Vertical Force [N]", mode="lines+markers",
+                        line=dict(color="#FF8200", width=4), marker=dict(size=8)
+                    ))
+
+                    if rfd_col:
+                        p_bs["RFD_Clean"] = pd.to_numeric(
+                            p_bs[rfd_col].astype(str).str.replace(r"[^0-9.]", "", regex=True),
+                            errors="coerce",
+                        )
+                        fig_bs.add_trace(go.Scatter(
+                            x=p_bs["Date"], y=p_bs["RFD_Clean"],
+                            name="RFD - 100ms [N/s]", mode="lines+markers", yaxis="y2",
+                            line=dict(color="#38BDF8", width=3, dash="dot"), marker=dict(size=8)
+                        ))
+
+                    fig_bs.update_layout(
+                        title=f"Belt Squat Peak Force & RFD — {selected_bs_athlete}",
+                        height=320, margin=dict(l=40, r=40, t=50, b=40),
+                        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                        yaxis=dict(side="left", title="Force [N]"),
+                        yaxis2=dict(overlaying="y", side="right", title="RFD [N/s]"),
+                        legend=dict(orientation="h", y=1.1, x=0.01)
+                    )
+                    st.plotly_chart(fig_bs, use_container_width=True)
+
+                disp_bs = [c for c in p_bs.columns if c not in ["Name", "Date_Str", "Peak_Force_Clean", "RFD_Clean"]]
+                st.markdown(f"#### Belt Squat Records for {selected_bs_athlete}")
+                st.markdown(render_vball_table(p_bs[disp_bs]), unsafe_allow_html=True)
+            else:
+                st.info(f"No Belt Squat records logged for {selected_bs_athlete}.")
+
+        # SUB-TAB 5: OVERALL PROFILE
+        with testing_tab_overall:
+            st.markdown(
+                '<div class="vball-section-title">Master Athletic Performance Summary</div>',
+                unsafe_allow_html=True,
+            )
+            c_ov_ath, _ = st.columns([1, 2])
+            with c_ov_ath:
+                selected_ov_athlete = st.selectbox(
+                    "Select Athlete for Master Profile:",
+                    roster_players,
+                    key="overall_ath_select",
+                )
+
+            records = []
+
+            # 1. CMJ Best Peak
+            p_cmj_ov = cmj_raw[cmj_raw["Name"] == selected_ov_athlete] if not cmj_raw.empty and "Name" in cmj_raw.columns else pd.DataFrame()
+            if not p_cmj_ov.empty:
+                jh_c = next((c for c in p_cmj_ov.columns if "jump" in c.lower() or "height" in c.lower()), None)
+                if jh_c:
+                    p_cmj_ov["JH_Val"] = pd.to_numeric(p_cmj_ov[jh_c].astype(str).str.replace(r"[^0-9.]", "", regex=True), errors="coerce")
+                    best_cmj = p_cmj_ov.sort_values("JH_Val", ascending=False).iloc[0]
+                    records.append({
+                        "Category": "Countermovement Jump",
+                        "Best Test Value": f"{best_cmj['JH_Val']:.2f} in/cm",
+                        "Date Achieved": best_cmj.get("Date_Str", "N/A")
+                    })
+
+            # 2. NordBord Best Peak
+            p_nord_ov = nordic_raw[nordic_raw["Name"] == selected_ov_athlete] if not nordic_raw.empty and "Name" in nordic_raw.columns else pd.DataFrame()
+            if not p_nord_ov.empty:
+                l_c = next((c for c in p_nord_ov.columns if "l max force" in c.lower()), None)
+                r_c = next((c for c in p_nord_ov.columns if "r max force" in c.lower()), None)
+                if l_c and r_c:
+                    p_nord_ov["Peak_Force"] = p_nord_ov[[l_c, r_c]].apply(pd.to_numeric, errors="coerce").max(axis=1)
+                    best_nord = p_nord_ov.sort_values("Peak_Force", ascending=False).iloc[0]
+                    records.append({
+                        "Category": "NordBord Hamstring",
+                        "Best Test Value": f"{best_nord['Peak_Force']:.1f} N",
+                        "Date Achieved": best_nord.get("Date_Str", "N/A")
+                    })
+
+            # 3. Belt Squat Best Peak
+            p_bs_ov = belt_squat_raw[belt_squat_raw["Name"] == selected_ov_athlete] if not belt_squat_raw.empty and "Name" in belt_squat_raw.columns else pd.DataFrame()
+            if not p_bs_ov.empty:
+                f_c = next((c for c in p_bs_ov.columns if "peak vertical force [n]" in c.lower()), None)
+                if f_c:
+                    p_bs_ov["PVF"] = pd.to_numeric(p_bs_ov[f_c].astype(str).str.replace(r"[^0-9.]", "", regex=True), errors="coerce")
+                    best_bs = p_bs_ov.sort_values("PVF", ascending=False).iloc[0]
+                    records.append({
+                        "Category": "Harness Belt Squat",
+                        "Best Test Value": f"{best_bs['PVF']:.1f} N",
+                        "Date Achieved": best_bs.get("Date_Str", "N/A")
+                    })
+
+            # 4. Knee Extension
+            p_knee_ov = knee_raw[knee_raw["Name"] == selected_ov_athlete] if not knee_raw.empty and "Name" in knee_raw.columns else pd.DataFrame()
+            if not p_knee_ov.empty:
+                ke_df = p_knee_ov[p_knee_ov["TestDirection"].str.contains("Extension", case=False, na=False)] if "TestDirection" in p_knee_ov.columns else p_knee_ov
+                if not ke_df.empty:
+                    ke_df["MaxF"] = ke_df[["L Max Force (N)", "R Max Force (N)"]].apply(pd.to_numeric, errors="coerce").max(axis=1)
+                    best_ke = ke_df.sort_values("MaxF", ascending=False).iloc[0]
+                    records.append({
+                        "Category": "Knee Extension",
+                        "Best Test Value": f"{best_ke['MaxF']:.1f} N",
+                        "Date Achieved": best_ke.get("Date_Str", "N/A")
+                    })
+
+            # 5. Ankle Plantar Flexion
+            p_ank_ov = ankle_raw[ankle_raw["Name"] == selected_ov_athlete] if not ankle_raw.empty and "Name" in ankle_raw.columns else pd.DataFrame()
+            if not p_ank_ov.empty:
+                p_ank_ov["MaxF"] = p_ank_ov[["L Max Force (N)", "R Max Force (N)"]].apply(pd.to_numeric, errors="coerce").max(axis=1)
+                best_ank = p_ank_ov.sort_values("MaxF", ascending=False).iloc[0]
+                records.append({
+                    "Category": "Ankle Plantar Flexion",
+                    "Best Test Value": f"{best_ank['MaxF']:.1f} N",
+                    "Date Achieved": best_ank.get("Date_Str", "N/A")
+                })
+
+            if records:
+                ov_df = pd.DataFrame(records)
+                st.markdown(f"### Peak Performance Snapshot for {selected_ov_athlete}")
+                st.markdown(render_vball_table(ov_df), unsafe_allow_html=True)
+            else:
+                st.info(f"No testing records found across modules for {selected_ov_athlete}.")
 
     # =========================================================================
     # TAB 6: RECOVERY (2-PERSON GRID WITH FAILSAFE PERSISTENCE)
