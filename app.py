@@ -1543,9 +1543,9 @@ with active_season:
             with hud_col1:
                 hud_svg_html = """
                 <div style="background:#FFFFFF; border-radius:16px; padding:16px; border:1px solid #E5E5E7; box-shadow:0 4px 12px rgba(0,0,0,0.03);">
-                    <div style="color:#1D1D1F; font-weight:800; font-size:13px; letter-spacing:1px; text-transform:uppercase; border-bottom:2px solid #FF8200; padding-bottom:6px; margin-bottom:12px;">Anatomy Location Map</div>
+                    <div style="color:#1D1D1F; font-weight:800; font-size:13px; letter-spacing:1px; text-transform:uppercase; border-bottom:2px solid #FF8200; padding-bottom:6px; margin-bottom:12px;">ANATOMY LOCATION MAP</div>
                     <div style="position:relative; width:100%; height:380px; background:#FAFDFD; border-radius:12px; border:1px solid #D5E5E8; display:flex; align-items:center; justify-content:center; overflow:hidden;">
-                        <svg viewBox="0 0 140 220" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="width:100%; height:100%;">
+                        <svg viewBox="0 0 160 220" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="width:100%; height:100%;">
                             <defs>
                                 <linearGradient id="anatomicalBodyGrad" x1="0%" y1="0%" x2="100%" y2="0%">
                                     <stop offset="0%" stop-color="#C5CACC" />
@@ -1555,7 +1555,11 @@ with active_season:
                                     <stop offset="100%" stop-color="#9AA0A6" />
                                 </linearGradient>
                             </defs>
+                            
+                            <!-- Shadow -->
                             <ellipse cx="68" cy="214" rx="20" ry="3.5" fill="#000000" opacity="0.12" />
+                            
+                            <!-- Anatomical Body Silhouette -->
                             <g stroke="#2C3036" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
                                 <ellipse cx="68" cy="17" rx="7" ry="9" fill="url(#anatomicalBodyGrad)" />
                                 <path d="M 65 25 L 63 33 M 71 25 L 73 33" stroke-width="1.2" />
@@ -1572,17 +1576,29 @@ with active_season:
                                 <line x1="55" y1="168" x2="81" y2="168" stroke="#D32F2F" stroke-width="1.1" />
                             </g>
                             
-                            <!-- Node 1 Badge: Knee -->
-                            <circle cx="58" cy="138" r="6" fill="#FF8200" stroke="#FFFFFF" stroke-width="1.2" />
-                            <text x="58" y="141" font-size="8" font-weight="900" fill="#FFFFFF" text-anchor="middle">1</text>
+                            <!-- Node 1: Knee Extension/Flexion (Orange) -->
+                            <line x1="82" y1="58" x2="108" y2="58" stroke="#FF8200" stroke-width="2" stroke-dasharray="2 2" />
+                            <circle cx="82" cy="58" r="4" fill="#FF8200" stroke="#FFFFFF" stroke-width="1.2" />
+                            <rect x="108" y="50" width="16" height="16" rx="4" fill="#FF8200" />
+                            <text x="116" y="62" font-size="10" font-weight="900" fill="#FFFFFF" text-anchor="middle">1</text>
                             
-                            <!-- Node 2 Badge: Hip -->
-                            <circle cx="68" cy="98" r="6" fill="#FF8200" stroke="#FFFFFF" stroke-width="1.2" />
-                            <text x="68" y="101" font-size="8" font-weight="900" fill="#FFFFFF" text-anchor="middle">2</text>
+                            <!-- Node 3: Hip Adduction (Blue) -->
+                            <line x1="71" y1="122" x2="108" y2="122" stroke="#4895DB" stroke-width="2" stroke-dasharray="2 2" />
+                            <circle cx="71" cy="122" r="4" fill="#4895DB" stroke="#FFFFFF" stroke-width="1.2" />
+                            <rect x="108" y="114" width="16" height="16" rx="4" fill="#4895DB" />
+                            <text x="116" y="126" font-size="10" font-weight="900" fill="#FFFFFF" text-anchor="middle">3</text>
                             
-                            <!-- Node 3 Badge: Ankle -->
-                            <circle cx="56" cy="180" r="6" fill="#FF8200" stroke="#FFFFFF" stroke-width="1.2" />
-                            <text x="56" y="183" font-size="8" font-weight="900" fill="#FFFFFF" text-anchor="middle">3</text>
+                            <!-- Node 4: Hip Abduction (Blue) -->
+                            <line x1="58" y1="116" x2="28" y2="116" stroke="#4895DB" stroke-width="2" stroke-dasharray="2 2" />
+                            <circle cx="58" cy="116" r="4" fill="#4895DB" stroke="#FFFFFF" stroke-width="1.2" />
+                            <rect x="12" y="108" width="16" height="16" rx="4" fill="#4895DB" />
+                            <text x="20" y="120" font-size="10" font-weight="900" fill="#FFFFFF" text-anchor="middle">4</text>
+                            
+                            <!-- Node 5: Ankle Plantar Flexion (Blue) -->
+                            <line x1="74" y1="172" x2="108" y2="172" stroke="#4895DB" stroke-width="2" stroke-dasharray="2 2" />
+                            <circle cx="74" cy="172" r="4" fill="#4895DB" stroke="#FFFFFF" stroke-width="1.2" />
+                            <rect x="108" y="164" width="16" height="16" rx="4" fill="#4895DB" />
+                            <text x="116" y="176" font-size="10" font-weight="900" fill="#FFFFFF" text-anchor="middle">5</text>
                         </svg>
                     </div>
                 </div>
