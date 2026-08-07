@@ -246,11 +246,10 @@ def fetch_live_recovery_sheet():
             content = response.read().decode("utf-8")
             df = pd.read_csv(io.StringIO(content), keep_default_na=False)
 
-        # Handle 6-column format where Lift_Group might be empty
         if not df.empty:
             # If the CSV came back with 6 columns
             if len(df.columns) == 6:
-                df.columns = ["Week_Starting", "Athlete", "Lift_Group", "Station", "Day", "Timestamp"]
+                df.columns = ["Week_Starting", "Athlete", "Station", "Day", "Timestamp"]
             # Clean string values
             for col in ["Week_Starting", "Athlete", "Station", "Day"]:
                 if col in df.columns:
@@ -262,7 +261,6 @@ def fetch_live_recovery_sheet():
             columns=[
                 "Week_Starting",
                 "Athlete",
-                "Lift_Group",
                 "Station",
                 "Day",
                 "Timestamp",
@@ -1976,7 +1974,6 @@ with active_season:
             payload = {
                 "Week_Starting": str(wk_s).strip(),
                 "Athlete": str(ath_name).strip(),
-                "Lift_Group": "",
                 "Station": str(stn_label).strip(),
                 "Day": str(dy_s).strip(),
                 "Timestamp": time_val,
@@ -1990,7 +1987,6 @@ with active_season:
                     {
                         "Week_Starting": str(wk_s).strip(),
                         "Athlete": str(ath_name).strip(),
-                        "Lift_Group": "",
                         "Station": str(stn_label).strip(),
                         "Day": str(dy_s).strip(),
                         "Timestamp": time_val,
