@@ -222,7 +222,7 @@ def load_sheet_data():
                 df["Date_Str"] = df["Date"].dt.strftime("%Y-%m-%d")
 
         return (
-            vol_df, int_df, comp_df, weekly_raw, cmj_raw, roster_raw,
+            vol_df, int_df, comp_df, weekly_df, cmj_df, roster_df,
             nordic_df, ankle_df, knee_df, hip_df
         )
     except Exception as e:
@@ -234,7 +234,6 @@ def load_sheet_data():
     vol_raw, int_raw, comp_raw, weekly_raw, cmj_raw, roster_raw,
     nordic_raw, ankle_raw, knee_raw, hip_raw
 ) = load_sheet_data()
-
 
 # -----------------------------------------------------------------------------
 # 4. HELPER FUNCTIONS
