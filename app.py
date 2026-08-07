@@ -8,8 +8,10 @@ import streamlit as st
 import streamlit.components.v1 as components
 import requests
 
-
-def save_to_secret_sheet(athlete, metric, count_val, week_starting="", day_selected=""):
+# -----------------------------------------------------------------------------
+# REAL-TIME GOOGLE SHEETS API SYNC
+# -----------------------------------------------------------------------------
+def sync_recovery_metric(athlete, metric, count_val, week_starting, day_selected):
     sheet_url = st.secrets.get("Live Track") or st.secrets.get("sheets", {}).get("live_track_url")
     
     if not sheet_url:
@@ -19,19 +21,34 @@ def save_to_secret_sheet(athlete, metric, count_val, week_starting="", day_selec
     payload = {
         "Week_Starting": str(week_starting),
         "Athlete": athlete,
-        "Metric": metric,
         "Day": day_selected,
+        "Metric": metric,
         "Count": int(count_val),
     }
 
     try:
         response = requests.post(sheet_url, json=payload, timeout=5)
-        print(f"Sync Response: {response.status_code}")
+        st.cache_data.clear()  # Purge cache so UI immediately refetches live state
         return response.status_code == 200
     except Exception as e:
-        print(f"Sync error: {e}")
+        print(f"Auto-sync error: {e}")
         return False
 
+
+def fetch_live_recovery_sheet():
+    sheet_url = st.secrets.get("Live Track") or st.secrets.get("sheets", {}).get("live_track_url")
+    if not sheet_url:
+        return pd.DataFrame()
+    try:
+        response = requests.get(sheet_url, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            if data:
+                return pd.DataFrame(data)
+    except Exception as e:
+        print(f"Error fetching live recovery data: {e}")
+    return pd.DataFrame()
+    
 # -----------------------------------------------------------------------------
 # 1. PAGE CONFIGURATION & STYLING
 # -----------------------------------------------------------------------------
@@ -102,30 +119,13 @@ st.markdown(
         .vball-table tr:last-child td { border-bottom: none; }
         .grade-badge { font-weight: 700; padding: 2px 8px; border-radius: 4px; display: inline-block; }
 
-        .compliance-wrapper {
-            background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px;
-            padding: 20px; margin-bottom: 25px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);
-        }
-        .compliance-subcard {
-            background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 10px;
-            padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); height: 100%;
-        }
-        .compliance-metric-card {
-            background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px;
-            padding: 8px 6px; text-align: center;
-        }
-        .compliance-metric-label { font-size: 0.68rem; font-weight: 700; color: #64748B; text-transform: uppercase; margin-bottom: 2px; }
-        .compliance-metric-value { font-size: 1.05rem; font-weight: 800; color: #0F172A; }
-        .compliance-metric-sub { font-size: 0.68rem; color: #94A3B8; margin-top: 2px; }
-
-        .recovery-card {
+        .recovery-player-card {
             background: #FFFFFF;
-            border: 1px solid #E2E8F0;
+            border: 1px solid #CBD5E1;
             border-radius: 12px;
-            padding: 18px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
-            text-align: center;
-            margin-bottom: 15px;
+            padding: 16px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+            margin-bottom: 20px;
         }
     </style>
 """,
@@ -213,7 +213,6 @@ def load_sheet_data():
     vol_raw, int_raw, comp_raw, weekly_raw, cmj_raw, roster_raw,
     nordic_raw, ankle_raw, knee_raw, hip_raw
 ) = load_sheet_data()
-
         
 # -----------------------------------------------------------------------------
 # 4. HELPER FUNCTIONS
@@ -222,11 +221,11 @@ def get_vball_color(score):
     if score is None or pd.isna(score):
         return "#E2E8F0", "#475569"
     if score < 50:
-        return "#BBF7D0", "#166534"  # Green
+        return "#BBF7D0", "#166534"
     elif score < 75:
-        return "#FEF08A", "#854D0E"  # Yellow
+        return "#FEF08A", "#854D0E"
     else:
-        return "#FFD6D6", "#991B1B"  # Red
+        return "#FFD6D6", "#991B1B"
 
 
 def render_vball_table(df):
@@ -479,7 +478,7 @@ main_tab = st.sidebar.radio(
         "Compliance",
         "Weekly Data",
         "Testing",
-        "Recovery"
+        "Recovery Tracker"
     ],
     index=0,
 )
@@ -1566,65 +1565,137 @@ with active_season:
                 st.info(f"No Intake Assessment records found for {selected_intake_athlete}.")
 
     # =========================================================================
-    # TAB 6: RECOVERY DASHBOARD & SYNC LOG
+    # TAB 6: RECOVERY TRACKER (AUTO-SYNCING + VISUAL CARDS + SUMMARY TAB)
     # =========================================================================
-    elif main_tab == "Recovery":
-        st.markdown(
-            '<div class="vball-section-title">Athlete Recovery Tracker</div>',
-            unsafe_allow_html=True,
-        )
+    if main_tab == "Recovery Tracker":
+        rec_tab_tracker, rec_tab_summary = st.tabs(["Live Recovery Tracker", "Team Recovery Summary"])
 
-        r_col1, r_col2, r_col3 = st.columns(3)
-        with r_col1:
-            rec_athlete = st.selectbox("Select Athlete:", roster_players, key="rec_ath_select")
-        with r_col2:
-            rec_week = st.date_input("Week Starting:", key="rec_week_select")
-        with r_col3:
-            rec_day = st.selectbox("Day Selected:", ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"], key="rec_day_select")
+        live_rec_df = fetch_live_recovery_sheet()
 
-        st.markdown("<br>", unsafe_allow_html=True)
+        # SUB-TAB 1: LIVE RECOVERY TRACKER WITH AUTOMATIC SYNC
+        with rec_tab_tracker:
+            st.markdown(
+                '<div class="vball-section-title">Live Athlete Recovery Tracker (Auto-Syncing)</div>',
+                unsafe_allow_html=True,
+            )
 
-        recovery_metrics = [f"1", f"2", f"3", f"4", f"5", f"6"]
+            c_rec1, c_rec2 = st.columns(2)
+            with c_rec1:
+                selected_rec_week = st.date_input("Select Week Starting:", key="rec_week_picker")
+            with c_rec2:
+                selected_rec_day = st.selectbox("Select Day:", ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"], key="rec_day_picker")
 
-        counts = {}
-        cols = st.columns(3)
+            st.markdown("<br>", unsafe_allow_html=True)
 
-        for i, metric in enumerate(recovery_metrics):
-            with cols[i % 3]:
+            recovery_options = ["Recovery 1", "Recovery 2", "Recovery 3", "Recovery 4", "Recovery 5", "Recovery 6"]
+
+            # Render visual player cards with recovery selections underneath
+            for player in roster_players:
+                p_row = roster_raw[roster_raw["Name"] == player] if not roster_raw.empty else pd.DataFrame()
+                p_pos = p_row["Position"].values[0] if not p_row.empty else "Athlete"
+                p_img = p_row["Picture"].values[0] if not p_row.empty else "https://via.placeholder.com/70"
+
                 st.markdown(
                     f"""
-                    <div class="recovery-card">
-                        <div style="font-weight:800; color:#0F172A; font-size:1.1rem; margin-bottom:8px;">Recovery {metric}</div>
+                    <div class="recovery-player-card">
+                        <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 12px;">
+                            <img src="{p_img}" class="athlete-avatar" style="width: 55px; height: 55px;">
+                            <div>
+                                <h4 style="margin: 0; color: #0F172A; font-weight: 700;">{player}</h4>
+                                <span style="color: #64748B; font-size: 0.85rem;">{p_pos}</span>
+                            </div>
+                        </div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
-                counts[metric] = st.number_input(
-                    f"Count for Recovery {metric}",
-                    min_value=0,
-                    value=0,
-                    step=1,
-                    key=f"rec_count_{metric}",
-                )
 
-        st.markdown("<br>", unsafe_allow_html=True)
+                cols = st.columns(6)
+                for idx, r_metric in enumerate(recovery_options):
+                    # Query existing count from Google Sheet backend
+                    existing_count = 0
+                    if not live_rec_df.empty:
+                        matched = live_rec_df[
+                            (live_rec_df["Week_Starting"].astype(str) == str(selected_rec_week)) &
+                            (live_rec_df["Athlete"].astype(str) == str(player)) &
+                            (live_rec_df["Day"].astype(str) == str(selected_rec_day)) &
+                            (live_rec_df["Metric"].astype(str) == str(r_metric))
+                        ]
+                        if not matched.empty:
+                            try:
+                                existing_count = int(float(matched["Count"].values[0]))
+                            except ValueError:
+                                existing_count = 0
 
-        if st.button("Save Recovery Data to Secret Sheet", type="primary"):
-            success_count = 0
-            for metric, val in counts.items():
-                if val > 0:
-                    metric_label = f"Recovery {metric}"
-                    ok = save_to_secret_sheet(
-                        athlete=rec_athlete,
-                        metric=metric_label,
-                        count_val=val,
-                        week_starting=rec_week,
-                        day_selected=rec_day
+                    with cols[idx]:
+                        st.number_input(
+                            f"{r_metric}",
+                            min_value=0,
+                            max_value=50,
+                            value=existing_count,
+                            step=1,
+                            key=f"auto_{player}_{r_metric}_{selected_rec_week}_{selected_rec_day}",
+                            on_change=sync_recovery_metric,
+                            kwargs={
+                                "athlete": player,
+                                "metric": r_metric,
+                                "count_val": st.session_state.get(f"auto_{player}_{r_metric}_{selected_rec_week}_{selected_rec_day}", 0),
+                                "week_starting": selected_rec_week,
+                                "day_selected": selected_rec_day,
+                            }
+                        )
+                st.divider()
+
+        # SUB-TAB 2: TEAM RECOVERY SUMMARY
+        with rec_tab_summary:
+            st.markdown(
+                '<div class="vball-section-title">Team Recovery Master Summary</div>',
+                unsafe_allow_html=True,
+            )
+
+            if not live_rec_df.empty:
+                # Cleaning data types
+                live_rec_df["Count"] = pd.to_numeric(live_rec_df["Count"], errors="coerce").fillna(0)
+
+                # Summary Metric Cards
+                s1, s2, s3 = st.columns(3)
+                with s1:
+                    st.metric("Total Recovery Sessions Logged", int(live_rec_df["Count"].sum()))
+                with s2:
+                    st.metric("Active Athletes Tracking", live_rec_df["Athlete"].nunique())
+                with s3:
+                    st.metric("Most Utilized Modality", live_rec_df.groupby("Metric")["Count"].sum().idxmax() if not live_rec_df.empty else "N/A")
+
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                col_sum1, col_sum2 = st.columns(2)
+
+                with col_sum1:
+                    st.markdown("#### Total Recovery Volume by Modality")
+                    metric_summary = live_rec_df.groupby("Metric")["Count"].sum().reset_index()
+                    fig_rec_bar = px.bar(
+                        metric_summary,
+                        x="Metric",
+                        y="Count",
+                        color="Metric",
+                        color_discrete_sequence=px.colors.qualitative.Bold,
+                        text="Count"
                     )
-                    if ok:
-                        success_count += 1
+                    fig_rec_bar.update_layout(showlegend=False, height=320, plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+                    st.plotly_chart(fig_rec_bar, use_container_width=True)
 
-            if success_count > 0:
-                st.success(f"Successfully saved {success_count} recovery entries to Live Track Sheet!")
+                with col_sum2:
+                    st.markdown("#### Athlete Recovery Completion Matrix")
+                    pivot_summary = live_rec_df.pivot_table(
+                        index="Athlete",
+                        columns="Metric",
+                        values="Count",
+                        aggfunc="sum",
+                        fill_value=0
+                    )
+                    st.dataframe(pivot_summary, use_container_width=True)
+
+                st.markdown("#### Full Live Recovery Sheet Log")
+                st.dataframe(live_rec_df, use_container_width=True)
             else:
-                st.info("No non-zero counts selected or sync URL missing.")
+                st.info("No recovery data currently recorded in Google Sheets.")
