@@ -208,7 +208,7 @@ def load_sheet_data():
             roster_df,
             nordic_df,
             ankle_df,
-            knee_df,
+            knee_raw_fallback if 'knee_raw_fallback' in locals() else knee_df,
             hip_df,
         )
     except Exception as e:
@@ -231,7 +231,6 @@ def load_sheet_data():
 
 
 def fetch_live_recovery_sheet():
-    # 1. Try Direct Apps Script Web App GET first
     macro_url = (
         st.secrets.get("MACRO_URL")
         or st.secrets.get("Live Track")
@@ -252,7 +251,6 @@ def fetch_live_recovery_sheet():
         except Exception as e:
             print(f"Apps Script GET fallback: {e}")
 
-    # 2. Fallback to gviz CSV
     try:
         sheet_base_url = st.secrets["connections"]["gsheets"]["spreadsheet"]
         cache_buster = f"&cache={datetime.datetime.now().timestamp()}"
@@ -591,8 +589,8 @@ st.sidebar.markdown("### DATA MANAGEMENT")
 
 if st.sidebar.button("Refresh Google Sheets Data"):
     st.cache_data.clear()
-    if "recovery_logs_df" in st.session_state:
-        del st.session_state["recovery_logs_df"]
+    if "recovery_local_state" in st.session_state:
+        del st.session_state["recovery_local_state"]
     st.sidebar.success("Data reloaded!")
     st.rerun()
 
@@ -1862,7 +1860,7 @@ with active_season:
                 st.markdown("</div>", unsafe_allow_html=True)
 
     # =========================================================================
-    # TAB 6: RECOVERY (2-PERSON GRID WITH LOCAL STATE PERSISTENCE)
+    # TAB 6: RECOVERY (2-PERSON GRID WITH FAILSAFE PERSISTENCE)
     # =========================================================================
     elif main_tab == "Recovery":
         rec_tab_tracker, rec_tab_summary = st.tabs(
@@ -1873,14 +1871,22 @@ with active_season:
         today = local_now.date()
         current_monday = today - datetime.timedelta(days=today.weekday())
 
-        # Initialize local persistent recovery log dictionary in session_state
+        # Load live recovery records from Google Sheet
+        live_rec_df = fetch_live_recovery_sheet()
+
+        # Seed local session state from Google Sheet records
         if "recovery_local_state" not in st.session_state:
             st.session_state.recovery_local_state = set()
-            # Seed local state from current live Google Sheet state on cold start
-            live_df = fetch_live_recovery_sheet()
-            if not live_df.empty and {"Week_Starting", "Athlete", "Station", "Day"}.issubset(live_df.columns):
-                for _, row in live_df.iterrows():
-                    key = f"{str(row['Week_Starting']).strip()}|{str(row['Athlete']).strip()}|{str(row['Station']).strip()}|{str(row['Day']).strip()}"
+
+        # Merge live sheet items into session_state set
+        if not live_rec_df.empty:
+            for _, row in live_rec_df.iterrows():
+                wk_val = str(row.get("Week_Starting", "")).strip()
+                ath_val = str(row.get("Athlete", "")).strip()
+                stn_val = str(row.get("Station", "")).strip()
+                dy_val = str(row.get("Day", "")).strip()
+                if wk_val and ath_val and stn_val and dy_val:
+                    key = f"{wk_val}|{ath_val}|{stn_val}|{dy_val}"
                     st.session_state.recovery_local_state.add(key)
 
         def handle_recovery_check_change(
@@ -1913,7 +1919,13 @@ with active_season:
                     or st.secrets.get("sheets", {}).get("live_track_url")
                 )
                 if macro_url:
-                    requests.post(macro_url, json=payload, timeout=5)
+                    requests.post(
+                        macro_url,
+                        data=json.dumps(payload),
+                        headers={"Content-Type": "text/plain;charset=utf-8"},
+                        allow_redirects=True,
+                        timeout=8
+                    )
             except Exception as ex:
                 print(f"Recovery webhook POST failed: {ex}")
 
@@ -2027,7 +2039,7 @@ with active_season:
                 unsafe_allow_html=True,
             )
 
-            # Build summary dataframe directly from memory state
+            # Build summary dataframe directly from unified state
             summary_rows = []
             for item in st.session_state.recovery_local_state:
                 parts = item.split("|")
@@ -2039,24 +2051,24 @@ with active_season:
                         "Day": parts[3]
                     })
 
-            live_rec_df = pd.DataFrame(summary_rows) if summary_rows else pd.DataFrame(columns=["Week_Starting", "Athlete", "Station", "Day"])
+            summary_df = pd.DataFrame(summary_rows) if summary_rows else pd.DataFrame(columns=["Week_Starting", "Athlete", "Station", "Day"])
 
-            if not live_rec_df.empty and "Station" in live_rec_df.columns:
+            if not summary_df.empty and "Station" in summary_df.columns:
                 s1, s2, s3 = st.columns(3)
                 with s1:
-                    st.metric("Total Stations Completed", len(live_rec_df))
+                    st.metric("Total Stations Completed", len(summary_df))
                 with s2:
                     st.metric(
                         "Active Athletes Logged",
                         (
-                            live_rec_df["Athlete"].nunique()
-                            if "Athlete" in live_rec_df.columns
+                            summary_df["Athlete"].nunique()
+                            if "Athlete" in summary_df.columns
                             else 0
                         ),
                     )
                 with s3:
                     station_counts = (
-                        live_rec_df["Station"].dropna().value_counts()
+                        summary_df["Station"].dropna().value_counts()
                     )
                     top_station = (
                         station_counts.idxmax()
@@ -2072,7 +2084,7 @@ with active_season:
                 with col_sum1:
                     st.markdown("#### Completions by Station")
                     station_counts_df = (
-                        live_rec_df["Station"]
+                        summary_df["Station"]
                         .dropna()
                         .value_counts()
                         .reset_index()
@@ -2100,10 +2112,10 @@ with active_season:
 
                 with col_sum2:
                     st.markdown("#### Athlete Station Completion Matrix")
-                    if "Athlete" in live_rec_df.columns:
-                        summary_df = live_rec_df.copy()
-                        summary_df["Value"] = 1
-                        pivot_summary = summary_df.pivot_table(
+                    if "Athlete" in summary_df.columns:
+                        p_df = summary_df.copy()
+                        p_df["Value"] = 1
+                        pivot_summary = p_df.pivot_table(
                             index="Athlete",
                             columns="Station",
                             values="Value",
