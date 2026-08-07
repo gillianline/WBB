@@ -1556,24 +1556,63 @@ with active_season:
                                 </linearGradient>
                             </defs>
                             
-                            <!-- Shadow -->
+                            <!-- Ground Shadow -->
                             <ellipse cx="68" cy="214" rx="20" ry="3.5" fill="#000000" opacity="0.12" />
                             
-                            <!-- Anatomical Body Silhouette -->
+                            <!-- Main Body Outer Contour -->
                             <g stroke="#2C3036" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+                                <!-- Head & Neck -->
                                 <ellipse cx="68" cy="17" rx="7" ry="9" fill="url(#anatomicalBodyGrad)" />
                                 <path d="M 65 25 L 63 33 M 71 25 L 73 33" stroke-width="1.2" />
+                                
+                                <!-- Shoulders & Upper Arms -->
                                 <path d="M 63 33 C 58 33, 48 36, 42 40 C 37 43, 36 50, 39 56 L 43 56 C 47 52, 49 46, 52 44 M 73 33 C 78 33, 88 36, 94 40 C 99 43, 100 50, 97 56 L 93 56 C 89 52, 87 46, 84 44" fill="url(#anatomicalBodyGrad)" />
+                                
+                                <!-- Arms -->
                                 <path d="M 42 40 C 37 43, 35 52, 33 64 C 31 74, 29 82, 27 92 C 25 96, 23 100, 22 104 C 21 106, 23 107, 25 106 C 27 104, 28 98, 30 92 C 33 82, 36 74, 38 64 C 40 54, 42 48, 43 56 Z" fill="url(#anatomicalBodyGrad)" />
                                 <path d="M 22 104 C 20 106, 18 108, 17 110 M 23 105 C 21 108, 20 110, 19 112 M 24 105 C 23 108, 22 110, 21 112 M 25 104 C 25 107, 24 109, 23 111" fill="none" stroke-width="0.8" />
                                 <path d="M 94 40 C 99 43, 101 52, 103 64 C 105 74, 107 82, 109 92 C 111 96, 113 100, 114 104 C 115 106, 113 107, 111 106 C 109 104, 108 98, 106 92 C 103 82, 100 74, 98 64 C 96 54, 94 48, 93 56 Z" fill="url(#anatomicalBodyGrad)" />
                                 <path d="M 114 104 C 116 106, 118 108, 119 110 M 113 105 C 115 108, 116 110, 117 112 M 112 105 C 113 108, 114 110, 115 112 M 111 104 C 111 107, 112 109, 113 111" fill="none" stroke-width="0.8" />
+                                
+                                <!-- Torso & Hips -->
                                 <path d="M 52 44 L 54 75 L 52 92 L 68 106 L 84 92 L 82 75 L 84 44 Z" fill="url(#anatomicalBodyGrad)" />
+                                
+                                <!-- Legs -->
                                 <path d="M 52 92 C 50 105, 49 122, 53 138 C 55 144, 55 152, 54 162 C 52 175, 52 192, 54 205 L 48 210 L 58 210 L 59 203 C 60 190, 60 175, 60 162 C 60 152, 60 144, 62 138 C 66 122, 66 105, 68 106 Z" fill="url(#anatomicalBodyGrad)" />
                                 <path d="M 84 92 C 86 105, 87 122, 83 138 C 81 144, 81 152, 82 162 C 84 175, 84 192, 82 205 L 88 210 L 78 210 L 77 203 C 76 190, 76 175, 76 162 C 76 152, 76 144, 74 138 C 70 122, 70 105, 68 106 Z" fill="url(#anatomicalBodyGrad)" />
+                                
+                                <!-- Center Axis Line -->
                                 <line x1="68" y1="8" x2="68" y2="211" stroke="#FF8200" stroke-width="1.3" />
+                                
+                                <!-- Joint Reference Baseline Markers -->
                                 <line x1="51" y1="116" x2="85" y2="116" stroke="#D32F2F" stroke-width="1.1" />
                                 <line x1="55" y1="168" x2="81" y2="168" stroke="#D32F2F" stroke-width="1.1" />
+                            </g>
+                            
+                            <!-- Anatomical Muscle Lines & Muscle Definition Outlines -->
+                            <g fill="none" stroke="#2C3036" stroke-width="0.8" opacity="0.75" stroke-linecap="round">
+                                <!-- Pectoral Arches -->
+                                <path d="M 54 48 C 60 52, 65 52, 68 50 M 82 48 C 76 52, 71 52, 68 50" />
+                                
+                                <!-- Abdominal Sections -->
+                                <path d="M 58 58 L 78 58 M 57 66 L 79 66 M 56 74 L 80 74" />
+                                <path d="M 62 50 L 62 82 M 74 50 L 74 82" stroke-width="0.6" stroke-dasharray="1 1.5" />
+                                
+                                <!-- Quadricep Outlines (Thigh Muscles) -->
+                                <path d="M 54 98 C 51 108, 52 120, 56 128" />
+                                <path d="M 64 98 C 66 108, 65 120, 61 128" />
+                                <circle cx="58" cy="132" r="3" stroke-width="0.7" />
+                                
+                                <path d="M 82 98 C 85 108, 84 120, 80 128" />
+                                <path d="M 72 98 C 70 108, 71 120, 75 128" />
+                                <circle cx="78" cy="132" r="3" stroke-width="0.7" />
+                                
+                                <!-- Gastrocnemius / Calf Outlines -->
+                                <path d="M 53 144 C 50 152, 51 160, 54 166" />
+                                <path d="M 61 144 C 62 152, 61 160, 59 166" />
+                                
+                                <path d="M 83 144 C 86 152, 85 160, 82 166" />
+                                <path d="M 75 144 C 74 152, 75 160, 77 166" />
                             </g>
                             
                             <!-- Node 1: Knee Extension/Flexion (Orange) -->
