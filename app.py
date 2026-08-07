@@ -1572,17 +1572,17 @@ with active_season:
                                 <line x1="55" y1="168" x2="81" y2="168" stroke="#D32F2F" stroke-width="1.1" />
                             </g>
                             
-                            <!-- Location Badge 1: Knee -->
-                            <rect x="61" y="132" width="14" height="14" rx="3" fill="#FF8200" stroke="#FFFFFF" stroke-width="1"/>
-                            <text x="68" y="142" font-size="10" font-weight="bold" fill="#FFFFFF" text-anchor="middle">1</text>
+                            <!-- Node 1 Badge: Knee -->
+                            <circle cx="58" cy="138" r="6" fill="#FF8200" stroke="#FFFFFF" stroke-width="1.2" />
+                            <text x="58" y="141" font-size="8" font-weight="900" fill="#FFFFFF" text-anchor="middle">1</text>
                             
-                            <!-- Location Badge 2: Hip -->
-                            <rect x="61" y="96" width="14" height="14" rx="3" fill="#FF8200" stroke="#FFFFFF" stroke-width="1"/>
-                            <text x="68" y="106" font-size="10" font-weight="bold" fill="#FFFFFF" text-anchor="middle">2</text>
-
-                            <!-- Location Badge 3: Ankle -->
-                            <rect x="61" y="174" width="14" height="14" rx="3" fill="#FF8200" stroke="#FFFFFF" stroke-width="1"/>
-                            <text x="68" y="184" font-size="10" font-weight="bold" fill="#FFFFFF" text-anchor="middle">3</text>
+                            <!-- Node 2 Badge: Hip -->
+                            <circle cx="68" cy="98" r="6" fill="#FF8200" stroke="#FFFFFF" stroke-width="1.2" />
+                            <text x="68" y="101" font-size="8" font-weight="900" fill="#FFFFFF" text-anchor="middle">2</text>
+                            
+                            <!-- Node 3 Badge: Ankle -->
+                            <circle cx="56" cy="180" r="6" fill="#FF8200" stroke="#FFFFFF" stroke-width="1.2" />
+                            <text x="56" y="183" font-size="8" font-weight="900" fill="#FFFFFF" text-anchor="middle">3</text>
                         </svg>
                     </div>
                 </div>
@@ -1920,7 +1920,7 @@ with active_season:
                     best_cmj = p_cmj_ov.sort_values("JH_Val", ascending=False).iloc[0]
                     records.append({
                         "Category": "Countermovement Jump",
-                        "Best Test Value": f"{best_cmj['JH_Val']:.2f} in/cm",
+                        "Best Test Value": f"{best_cmj['JH_Val']:.2f} cm",
                         "Date Achieved": format_date_clean(best_cmj.get("Date"))
                     })
 
