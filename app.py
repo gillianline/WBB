@@ -1,5 +1,8 @@
 import io
 import urllib.request
+import json
+import datetime
+from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -8,58 +11,13 @@ import streamlit as st
 import streamlit.components.v1 as components
 import requests
 
-# -----------------------------------------------------------------------------
-# GOOGLE SHEETS REAL-TIME CHECKBOX SYNC
-# -----------------------------------------------------------------------------
-TARGET_GID = "1922017148"
+EASTERN_TZ = ZoneInfo("America/New_York")
 
-def sync_recovery_checkbox(athlete, station, is_checked, week_starting, day_selected):
-    sheet_url = st.secrets.get("Live Track") or st.secrets.get("sheets", {}).get("live_track_url")
-    
-    if not sheet_url:
-        st.error("Sync Error: URL missing in st.secrets")
-        return False
+def get_eastern_time_str():
+    return datetime.datetime.now(EASTERN_TZ).strftime("%H:%M:%S")
 
-    payload = {
-        "Week_Starting": str(week_starting),
-        "Athlete": str(athlete),
-        "Station": str(station),
-        "Day": str(day_selected),
-        "Completed": bool(is_checked),
-        "gid": TARGET_GID
-    }
-
-    try:
-        # POST with redirect handling for Google Apps Script
-        response = requests.post(
-            sheet_url,
-            json=payload,
-            headers={"Content-Type": "application/json"},
-            allow_redirects=True,
-            timeout=8
-        )
-        st.cache_data.clear()
-        return response.status_code in [200, 302]
-    except Exception as e:
-        print(f"Auto-sync error: {e}")
-        return False
-
-
-def fetch_live_recovery_sheet():
-    sheet_url = st.secrets.get("Live Track") or st.secrets.get("sheets", {}).get("live_track_url")
-    if not sheet_url:
-        return pd.DataFrame()
-    try:
-        url = f"{sheet_url}?gid={TARGET_GID}" if "?" not in sheet_url else f"{sheet_url}&gid={TARGET_GID}"
-        response = requests.get(url, allow_redirects=True, timeout=8)
-        if response.status_code == 200:
-            data = response.json()
-            if isinstance(data, list) and len(data) > 0:
-                return pd.DataFrame(data)
-    except Exception as e:
-        print(f"Error fetching live recovery data: {e}")
-    return pd.DataFrame()
-
+def get_eastern_now():
+    return datetime.datetime.now(EASTERN_TZ)
 
 # -----------------------------------------------------------------------------
 # 1. PAGE CONFIGURATION & STYLING
@@ -152,7 +110,7 @@ st.markdown(
             border: 1px solid #CBD5E1;
             border-radius: 12px;
             padding: 16px;
-            margin-bottom: 20px;
+            margin-bottom: 12px;
             box-shadow: 0 2px 6px rgba(0,0,0,0.03);
         }
     </style>
@@ -241,6 +199,28 @@ def load_sheet_data():
     vol_raw, int_raw, comp_raw, weekly_raw, cmj_raw, roster_raw,
     nordic_raw, ankle_raw, knee_raw, hip_raw
 ) = load_sheet_data()
+
+
+def fetch_live_recovery_sheet():
+    try:
+        macro_url = st.secrets.get("MACRO_URL") or st.secrets.get("Live Track") or st.secrets.get("sheets", {}).get("live_track_url")
+        if not macro_url:
+            return pd.DataFrame()
+        
+        # Read from Logs sheet tab via gviz CSV export endpoint
+        sheet_base_url = st.secrets["connections"]["gsheets"]["spreadsheet"]
+        csv_url = sheet_base_url.replace("/edit", f"/gviz/tq?tqx=out:csv&sheet=Logs&cache={datetime.datetime.now().timestamp()}")
+        df = pd.read_csv(csv_url)
+        return df
+    except Exception as e:
+        print(f"Error fetching live recovery sheet: {e}")
+        return pd.DataFrame(columns=["Week_Starting", "Athlete", "Lift_Group", "Station", "Day", "Timestamp"])
+
+
+# Load live recovery state into session state
+if "recovery_logs_df" not in st.session_state:
+    st.session_state.recovery_logs_df = fetch_live_recovery_sheet()
+
 
 # -----------------------------------------------------------------------------
 # 4. HELPER FUNCTIONS
@@ -516,6 +496,7 @@ st.sidebar.markdown("### DATA MANAGEMENT")
 
 if st.sidebar.button("Refresh Google Sheets Data"):
     st.cache_data.clear()
+    st.session_state.recovery_logs_df = fetch_live_recovery_sheet()
     st.sidebar.success("Data reloaded!")
     st.rerun()
 
@@ -527,7 +508,6 @@ if st.sidebar.button("Logout"):
 # -----------------------------------------------------------------------------
 # 6. VIEW CONTROLLERS
 # -----------------------------------------------------------------------------
-
 st.markdown(
     """
     <div class="console-header">
@@ -567,7 +547,7 @@ with active_season:
         with c_sel:
             selected_player = st.selectbox("Select Athlete Profile:", roster_players)
 
-        p_row = roster_raw[roster_raw["Name"] == selected_player]
+        p_row = roster_raw[roster_raw["Name"] == selected_player] if not roster_raw.empty else pd.DataFrame()
         p_pos = (
             p_row["Position"].values[0]
             if not p_row.empty
@@ -597,7 +577,7 @@ with active_season:
             unsafe_allow_html=True,
         )
         
-        p_comp = comp_raw[comp_raw["Player"] == selected_player].sort_values("Date")
+        p_comp = comp_raw[comp_raw["Player"] == selected_player].sort_values("Date") if not comp_raw.empty else pd.DataFrame()
 
         for row_idx in range(0, len(compliance_metrics), 2):
             col1, col2 = st.columns(2)
@@ -620,7 +600,7 @@ with active_season:
 
         with col_g1:
             st.markdown("#### Practice Score History")
-            v_p = vol_raw[vol_raw["Player"] == selected_player].sort_values("Date")
+            v_p = vol_raw[vol_raw["Player"] == selected_player].sort_values("Date") if not vol_raw.empty else pd.DataFrame()
 
             if not v_p.empty:
                 score_history = []
@@ -659,7 +639,7 @@ with active_season:
 
         latest_date_str = vol_raw[vol_raw["Player"] == selected_player][
             "Date_Str"
-        ].max()
+        ].max() if not vol_raw.empty else None
 
         if pd.notna(latest_date_str):
             vol_df, int_df, vol_score, int_score, mins, wk, dy = (
@@ -728,7 +708,7 @@ with active_season:
             unsafe_allow_html=True,
         )
 
-        p_cmj_ind = cmj_raw[cmj_raw["Name"] == selected_player].sort_values("Date").copy()
+        p_cmj_ind = cmj_raw[cmj_raw["Name"] == selected_player].sort_values("Date").copy() if not cmj_raw.empty else pd.DataFrame()
         jump_cols_ind = [c for c in p_cmj_ind.columns if "jump" in c.lower() or "height" in c.lower()]
         j_col_ind = jump_cols_ind[0] if jump_cols_ind else None
         rsi_cols_ind = [c for c in p_cmj_ind.columns if "rsi" in c.lower()]
@@ -827,7 +807,7 @@ with active_season:
             unsafe_allow_html=True,
         )
 
-        p_weekly = weekly_raw[weekly_raw["Player"] == selected_player]
+        p_weekly = weekly_raw[weekly_raw["Player"] == selected_player] if not weekly_raw.empty else pd.DataFrame()
         t_weekly_avg = (
             weekly_raw.groupby("Week")
             .agg({
@@ -837,16 +817,16 @@ with active_season:
                 "Decels Load": "mean",
             })
             .reset_index()
-        )
+        ) if not weekly_raw.empty else pd.DataFrame(columns=["Week", "Distance (mi)", "Distance (speed | High Speed) (mi)", "Accumulated Acceleration Load", "Decels Load"])
 
-        all_weeks = t_weekly_avg["Week"].tolist()
+        all_weeks = t_weekly_avg["Week"].tolist() if not t_weekly_avg.empty else []
 
         col_p1, col_p2 = st.columns(2)
         with col_p1:
             fig_ind_td = create_team_bar_athlete_line_chart(
                 all_weeks,
-                t_weekly_avg["Distance (mi)"],
-                p_weekly["Distance (mi)"],
+                t_weekly_avg.get("Distance (mi)", []),
+                p_weekly.get("Distance (mi)", []),
                 f"Total Distance (mi) — {selected_player}",
                 selected_player,
                 "#FF8200",
@@ -855,8 +835,8 @@ with active_season:
 
             fig_ind_aal = create_team_bar_athlete_line_chart(
                 all_weeks,
-                t_weekly_avg["Accumulated Acceleration Load"],
-                p_weekly["Accumulated Acceleration Load"],
+                t_weekly_avg.get("Accumulated Acceleration Load", []),
+                p_weekly.get("Accumulated Acceleration Load", []),
                 f"AAL — {selected_player}",
                 selected_player,
                 "#38BDF8",
@@ -866,8 +846,8 @@ with active_season:
         with col_p2:
             fig_ind_hsd = create_team_bar_athlete_line_chart(
                 all_weeks,
-                t_weekly_avg["Distance (speed | High Speed) (mi)"],
-                p_weekly["Distance (speed | High Speed) (mi)"],
+                t_weekly_avg.get("Distance (speed | High Speed) (mi)", []),
+                p_weekly.get("Distance (speed | High Speed) (mi)", []),
                 f"High Speed Distance (mi) — {selected_player}",
                 selected_player,
                 "#FF8200",
@@ -876,8 +856,8 @@ with active_season:
 
             fig_ind_dl = create_team_bar_athlete_line_chart(
                 all_weeks,
-                t_weekly_avg["Decels Load"],
-                p_weekly["Decels Load"],
+                t_weekly_avg.get("Decels Load", []),
+                p_weekly.get("Decels Load", []),
                 f"Deceleration Load — {selected_player}",
                 selected_player,
                 "#38BDF8",
@@ -892,13 +872,13 @@ with active_season:
         with c_d:
             available_dates = (
                 vol_raw["Date_Str"].sort_values(ascending=False).unique()
-            )
+            ) if not vol_raw.empty else []
             session_date = st.selectbox("Select Session Date:", available_dates)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
         for player_name in roster_players:
-            p_row = roster_raw[roster_raw["Name"] == player_name]
+            p_row = roster_raw[roster_raw["Name"] == player_name] if not roster_raw.empty else pd.DataFrame()
             p_pos = (
                 p_row["Position"].values[0] if not p_row.empty else "Guard / Forward"
             )
@@ -971,11 +951,11 @@ with active_season:
 
         selected_player_comp = st.selectbox("Select Athlete Compliance Overview:", roster_players)
 
-        p_row = roster_raw[roster_raw["Name"] == selected_player_comp]
+        p_row = roster_raw[roster_raw["Name"] == selected_player_comp] if not roster_raw.empty else pd.DataFrame()
         p_pos = p_row["Position"].values[0] if not p_row.empty else "Guard / Forward | #00"
         p_img = p_row["Picture"].values[0] if not p_row.empty else "https://via.placeholder.com/60"
 
-        p_comp = comp_raw[comp_raw["Player"] == selected_player_comp].sort_values("Date")
+        p_comp = comp_raw[comp_raw["Player"] == selected_player_comp].sort_values("Date") if not comp_raw.empty else pd.DataFrame()
 
         st.markdown(
             f"""
@@ -1019,20 +999,20 @@ with active_season:
                 "Decels Load": "sum",
             })
             .reset_index()
-        )
+        ) if not weekly_raw.empty else pd.DataFrame(columns=["Week", "Distance (mi)", "Distance (speed | High Speed) (mi)", "Accumulated Acceleration Load", "Decels Load"])
 
-        weeks = weekly_agg["Week"].tolist()
+        weeks = weekly_agg["Week"].tolist() if not weekly_agg.empty else []
 
         w1, w2 = st.columns(2)
         with w1:
             fig_td = create_clean_bar_chart(
-                weeks, weekly_agg["Distance (mi)"], "Total Distance (mi)", "#38BDF8"
+                weeks, weekly_agg.get("Distance (mi)", []), "Total Distance (mi)", "#38BDF8"
             )
             st.plotly_chart(fig_td, use_container_width=True)
 
             fig_aal = create_clean_bar_chart(
                 weeks,
-                weekly_agg["Accumulated Acceleration Load"],
+                weekly_agg.get("Accumulated Acceleration Load", []),
                 "Accumulated Acceleration Load (AAL)",
                 "#FF8200",
             )
@@ -1041,14 +1021,14 @@ with active_season:
         with w2:
             fig_hsd = create_clean_bar_chart(
                 weeks,
-                weekly_agg["Distance (speed | High Speed) (mi)"],
+                weekly_agg.get("Distance (speed | High Speed) (mi)", []),
                 "High Speed Distance (mi)",
                 "#38BDF8",
             )
             st.plotly_chart(fig_hsd, use_container_width=True)
 
             fig_dl = create_clean_bar_chart(
-                weeks, weekly_agg["Decels Load"], "Deceleration Load", "#FF8200"
+                weeks, weekly_agg.get("Decels Load", []), "Deceleration Load", "#FF8200"
             )
             st.plotly_chart(fig_dl, use_container_width=True)
 
@@ -1060,7 +1040,7 @@ with active_season:
         )
         selected_player_w = st.selectbox("Select Athlete:", roster_players)
 
-        p_weekly = weekly_raw[weekly_raw["Player"] == selected_player_w]
+        p_weekly = weekly_raw[weekly_raw["Player"] == selected_player_w] if not weekly_raw.empty else pd.DataFrame()
         t_weekly_avg = (
             weekly_raw.groupby("Week")
             .agg({
@@ -1070,16 +1050,16 @@ with active_season:
                 "Decels Load": "mean",
             })
             .reset_index()
-        )
+        ) if not weekly_raw.empty else pd.DataFrame(columns=["Week", "Distance (mi)", "Distance (speed | High Speed) (mi)", "Accumulated Acceleration Load", "Decels Load"])
 
-        all_weeks = t_weekly_avg["Week"].tolist()
+        all_weeks = t_weekly_avg["Week"].tolist() if not t_weekly_avg.empty else []
 
         col_p1, col_p2 = st.columns(2)
         with col_p1:
             fig_ind_td = create_team_bar_athlete_line_chart(
                 all_weeks,
-                t_weekly_avg["Distance (mi)"],
-                p_weekly["Distance (mi)"],
+                t_weekly_avg.get("Distance (mi)", []),
+                p_weekly.get("Distance (mi)", []),
                 f"Total Distance (mi) — {selected_player_w}",
                 selected_player_w,
                 "#FF8200",
@@ -1088,8 +1068,8 @@ with active_season:
 
             fig_ind_aal = create_team_bar_athlete_line_chart(
                 all_weeks,
-                t_weekly_avg["Accumulated Acceleration Load"],
-                p_weekly["Accumulated Acceleration Load"],
+                t_weekly_avg.get("Accumulated Acceleration Load", []),
+                p_weekly.get("Accumulated Acceleration Load", []),
                 f"AAL — {selected_player_w}",
                 selected_player_w,
                 "#38BDF8",
@@ -1099,8 +1079,8 @@ with active_season:
         with col_p2:
             fig_ind_hsd = create_team_bar_athlete_line_chart(
                 all_weeks,
-                t_weekly_avg["Distance (speed | High Speed) (mi)"],
-                p_weekly["Distance (speed | High Speed) (mi)"],
+                t_weekly_avg.get("Distance (speed | High Speed) (mi)", []),
+                p_weekly.get("Distance (speed | High Speed) (mi)", []),
                 f"High Speed Distance (mi) — {selected_player_w}",
                 selected_player_w,
                 "#FF8200",
@@ -1109,8 +1089,8 @@ with active_season:
 
             fig_ind_dl = create_team_bar_athlete_line_chart(
                 all_weeks,
-                t_weekly_avg["Decels Load"],
-                p_weekly["Decels Load"],
+                t_weekly_avg.get("Decels Load", []),
+                p_weekly.get("Decels Load", []),
                 f"Deceleration Load — {selected_player_w}",
                 selected_player_w,
                 "#38BDF8",
@@ -1134,7 +1114,7 @@ with active_season:
             with c_filter:
                 selected_player_t = st.selectbox("Select Athlete:", roster_players, key="cmj_player_select")
 
-            p_cmj = cmj_raw[cmj_raw["Name"] == selected_player_t].sort_values("Date").copy()
+            p_cmj = cmj_raw[cmj_raw["Name"] == selected_player_t].sort_values("Date").copy() if not cmj_raw.empty else pd.DataFrame()
 
             jump_cols = [c for c in p_cmj.columns if "jump" in c.lower() or "height" in c.lower()]
             j_col = jump_cols[0] if jump_cols else None
@@ -1294,7 +1274,7 @@ with active_season:
                                     
                                     <!-- Right Arm -->
                                     <path d="M 94 40 C 99 43, 101 52, 103 64 C 105 74, 107 82, 109 92 C 111 96, 113 100, 114 104 C 115 106, 113 107, 111 106 C 109 104, 108 98, 106 92 C 103 82, 100 74, 98 64 C 96 54, 94 48, 93 56 Z" fill="url(#anatomicalBodyGrad)" />
-                                    <path d="M 114 104 C 116 106, 118 108, 119 110 M 113 105 C 21 108, 20 110, 17 112 M 112 105 C 113 108, 114 110, 115 112 M 111 104 C 111 107, 112 109, 113 111" fill="none" stroke-width="0.8" />
+                                    <path d="M 114 104 C 116 106, 118 108, 119 110 M 113 105 C 115 108, 116 110, 117 112 M 112 105 C 113 108, 114 110, 115 112 M 111 104 C 111 107, 112 109, 113 111" fill="none" stroke-width="0.8" />
 
                                     <!-- Torso & Waist -->
                                     <path d="M 52 44 L 54 75 L 52 92 L 68 106 L 84 92 L 82 75 L 84 44 Z" fill="url(#anatomicalBodyGrad)" />
@@ -1590,12 +1570,60 @@ with active_season:
                 st.info(f"No Intake Assessment records found for {selected_intake_athlete}.")
 
     # =========================================================================
-    # TAB 6: RECOVERY (2-PERSON GRID WITH CHECKBOXES AUTO-SYNC)
+    # TAB 6: RECOVERY (2-PERSON GRID WITH CHECKBOX AUTO-SYNC)
     # =========================================================================
     elif main_tab == "Recovery":
         rec_tab_tracker, rec_tab_summary = st.tabs(["Live Recovery Tracker", "Team Recovery Summary"])
 
-        live_rec_df = fetch_live_recovery_sheet()
+        local_now = get_eastern_now()
+        today = local_now.date()
+        current_monday = today - datetime.timedelta(days=today.weekday())
+
+        live_rec_df = st.session_state.recovery_logs_df
+
+        # Helper callback function to fire POST payload to Google Apps Script
+        def handle_recovery_check_change(ath_name, stn_num, key_name, wk_s, dy_s):
+            is_checked = st.session_state[key_name]
+            action_val = "add" if is_checked else "remove"
+            time_val = get_eastern_time_str() if is_checked else ""
+
+            payload = {
+                "Week_Starting": str(wk_s),
+                "Athlete": ath_name,
+                "Station": str(stn_num),
+                "Day": str(dy_s),
+                "Timestamp": time_val,
+                "Action": action_val,
+            }
+
+            # Mutate local state directly to prevent out-of-sync app redraws
+            df_curr = st.session_state.recovery_logs_df
+            if is_checked:
+                new_entry = pd.DataFrame([{
+                    "Week_Starting": str(wk_s),
+                    "Athlete": ath_name,
+                    "Lift_Group": "",
+                    "Station": str(stn_num),
+                    "Day": str(dy_s),
+                    "Timestamp": time_val,
+                }])
+                st.session_state.recovery_logs_df = pd.concat([df_curr, new_entry], ignore_index=True)
+            else:
+                st.session_state.recovery_logs_df = df_curr[
+                    ~(
+                        (df_curr["Week_Starting"].astype(str) == str(wk_s))
+                        & (df_curr["Athlete"].astype(str) == str(ath_name))
+                        & (df_curr["Station"].astype(str) == str(stn_num))
+                        & (df_curr["Day"].astype(str) == str(dy_s))
+                    )
+                ]
+
+            try:
+                macro_url = st.secrets.get("MACRO_URL") or st.secrets.get("Live Track") or st.secrets.get("sheets", {}).get("live_track_url")
+                if macro_url:
+                    requests.post(macro_url, json=payload, timeout=4)
+            except Exception as ex:
+                print(f"Recovery webhook POST failed: {ex}")
 
         # SUB-TAB 1: LIVE CHECKBOX TRACKER (2-PERSON GRID)
         with rec_tab_tracker:
@@ -1606,13 +1634,23 @@ with active_season:
 
             c_rec1, c_rec2 = st.columns(2)
             with c_rec1:
-                selected_rec_week = st.date_input("Select Week Starting:", key="rec_week_picker")
+                selected_rec_monday = st.date_input("Select Week Starting (Monday):", value=current_monday, key="rec_week_picker")
+                if selected_rec_monday.weekday() != 0:
+                    selected_rec_monday = selected_rec_monday - datetime.timedelta(days=selected_rec_monday.weekday())
+                week_str = selected_rec_monday.strftime("%Y-%m-%d")
+
             with c_rec2:
-                selected_rec_day = st.selectbox("Select Day:", ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"], key="rec_day_picker")
+                days_options = [
+                    (selected_rec_monday + datetime.timedelta(days=i)).strftime("%A (%m/%d)")
+                    for i in range(7)
+                ]
+                current_day_str = local_now.strftime("%A (%m/%d)")
+                default_idx = days_options.index(current_day_str) if current_day_str in days_options else 0
+                selected_rec_day = st.selectbox("Select Day:", days_options, index=default_idx, key="rec_day_picker")
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            stations = ["1", "2", "3", "4", "5", "6"]
+            stations = [f"Recovery {i}" for i in range(1, 7)]
 
             # Loop through roster in 2-person grid format
             for i in range(0, len(roster_players), 2):
@@ -1628,7 +1666,7 @@ with active_season:
                             st.markdown(
                                 f"""
                                 <div class="rec-grid-card">
-                                    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 10px;">
+                                    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 8px;">
                                         <img src="{p_img}" class="athlete-avatar" style="width: 55px; height: 55px;">
                                         <div>
                                             <h4 style="margin: 0; color: #0F172A; font-weight: 700;">{player}</h4>
@@ -1642,31 +1680,25 @@ with active_season:
 
                             # 6 Checkboxes for stations underneath
                             chk_cols = st.columns(3)
-                            for s_idx, station in enumerate(stations):
+                            for s_idx, station_label in enumerate(stations):
                                 is_checked = False
                                 if not live_rec_df.empty:
                                     matched = live_rec_df[
-                                        (live_rec_df["Week_Starting"].astype(str) == str(selected_rec_week)) &
+                                        (live_rec_df["Week_Starting"].astype(str) == str(week_str)) &
                                         (live_rec_df["Athlete"].astype(str) == str(player)) &
-                                        (live_rec_df["Station"].astype(str) == str(station)) &
+                                        (live_rec_df["Station"].astype(str) == str(station_label)) &
                                         (live_rec_df["Day"].astype(str) == str(selected_rec_day))
                                     ]
                                     is_checked = not matched.empty
 
                                 with chk_cols[s_idx % 3]:
-                                    cb_key = f"chk_{player}_s{station}_{selected_rec_week}_{selected_rec_day}"
+                                    cb_key = f"rec_cb_{player.replace(' ', '_').replace(',', '')}_{station_label.replace(' ', '_')}_{week_str}_{selected_rec_day.replace(' ', '_')}"
                                     st.checkbox(
-                                        f"Station {station}",
+                                        f"{station_label}",
                                         value=is_checked,
                                         key=cb_key,
-                                        on_change=sync_recovery_checkbox,
-                                        kwargs={
-                                            "athlete": player,
-                                            "station": station,
-                                            "is_checked": st.session_state.get(cb_key, False),
-                                            "week_starting": selected_rec_week,
-                                            "day_selected": selected_rec_day,
-                                        }
+                                        on_change=handle_recovery_check_change,
+                                        args=(player, station_label, cb_key, week_str, selected_rec_day),
                                     )
                             st.markdown("<br>", unsafe_allow_html=True)
 
@@ -1677,14 +1709,15 @@ with active_season:
                 unsafe_allow_html=True,
             )
 
-            if not live_rec_df.empty:
+            if not live_rec_df.empty and "Station" in live_rec_df.columns:
                 s1, s2, s3 = st.columns(3)
                 with s1:
                     st.metric("Total Stations Completed", len(live_rec_df))
                 with s2:
-                    st.metric("Active Athletes Logged", live_rec_df["Athlete"].nunique())
+                    st.metric("Active Athletes Logged", live_rec_df["Athlete"].nunique() if "Athlete" in live_rec_df.columns else 0)
                 with s3:
-                    st.metric("Most Popular Station", live_rec_df["Station"].value_counts().idxmax() if not live_rec_df.empty else "N/A")
+                    top_station = live_rec_df["Station"].value_counts().idxmax() if not live_rec_df["Station"].empty else "N/A"
+                    st.metric("Most Popular Station", f"{top_station}")
 
                 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -1694,6 +1727,8 @@ with active_season:
                     st.markdown("#### Completions by Station")
                     station_counts = live_rec_df["Station"].value_counts().reset_index()
                     station_counts.columns = ["Station", "Count"]
+                    station_counts["Station"] = station_counts["Station"].astype(str)
+
                     fig_rec_bar = px.bar(
                         station_counts,
                         x="Station",
@@ -1702,22 +1737,29 @@ with active_season:
                         color_discrete_sequence=px.colors.qualitative.Bold,
                         text="Count"
                     )
-                    fig_rec_bar.update_layout(showlegend=False, height=320, plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+                    fig_rec_bar.update_layout(
+                        showlegend=False, 
+                        height=320, 
+                        plot_bgcolor="rgba(0,0,0,0)", 
+                        paper_bgcolor="rgba(0,0,0,0)"
+                    )
                     st.plotly_chart(fig_rec_bar, use_container_width=True)
 
                 with col_sum2:
                     st.markdown("#### Athlete Station Completion Matrix")
-                    live_rec_df["Value"] = 1
-                    pivot_summary = live_rec_df.pivot_table(
-                        index="Athlete",
-                        columns="Station",
-                        values="Value",
-                        aggfunc="sum",
-                        fill_value=0
-                    )
-                    st.dataframe(pivot_summary, use_container_width=True)
+                    if "Athlete" in live_rec_df.columns:
+                        summary_df = live_rec_df.copy()
+                        summary_df["Value"] = 1
+                        pivot_summary = summary_df.pivot_table(
+                            index="Athlete",
+                            columns="Station",
+                            values="Value",
+                            aggfunc="sum",
+                            fill_value=0
+                        )
+                        st.dataframe(pivot_summary, use_container_width=True)
 
-                st.markdown("#### Live Log (Google Sheet GID: 1922017148)")
+                st.markdown("#### Full Live Recovery Logs Sheet")
                 st.dataframe(live_rec_df, use_container_width=True)
             else:
                 st.info("No recovery data currently recorded in Google Sheets.")
