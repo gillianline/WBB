@@ -1433,64 +1433,52 @@ with active_season:
                             </div>
                         """, unsafe_allow_html=True)
 
-                    # NODE 2: NORDIC HAMSTRING & ISO VARIATIONS
+                    # NODE 2: NORDIC HAMSTRING & ISO VARIATIONS (EXACT COLUMN: 'Test')
                     if not isoy_ath.empty:
-                        # Identify test variation column (adjust string match if your column name differs)
-                        test_col = next((c for c in isoy_ath.columns if c.lower() in ['testtype', 'test_type', 'testname', 'test_name', 'testdirection', 'test_direction']), None)
-    
-                        if test_col:
-                            # Separate data by variation
-                            nordic_df = isoy_ath[isoy_ath[test_col].astype(str).str.contains('nordic', case=False, na=False)]
-                            iso30_df  = isoy_ath[isoy_ath[test_col].astype(str).str.contains('30', case=False, na=False)]
-                            iso60_df  = isoy_ath[isoy_ath[test_col].astype(str).str.contains('60', case=False, na=False)]
-                        else:
-                            # Fallback if no test type column exists
-                            nordic_df, iso30_df, iso60_df = isoy_ath, pd.DataFrame(), pd.DataFrame()
-
-                        # Helper function to extract initial & latest forces for a specific test subset
-                        def get_test_metrics(df_sub):
-                            if df_sub.empty:
-                                return None
-                            b_row, l_row = df_sub.iloc[0], df_sub.iloc[-1]
-                            bL, bR = b_row.get('L Max Force (N)', 0.0), b_row.get('R Max Force (N)', 0.0)
-                            lL, lR = l_row.get('L Max Force (N)', 0.0), l_row.get('R Max Force (N)', 0.0)
-                            dt_str = l_row['Date'].strftime('%m/%d/%Y') if pd.notna(l_row.get('Date')) else "N/A"
-                            return bL, bR, lL, lR, dt_str
-
-                        nordic_vals = get_test_metrics(nordic_df)
-                        iso30_vals  = get_test_metrics(iso30_df)
-                        iso60_vals  = get_test_metrics(iso60_df)
-
-                        latest_date_str = (nordic_vals[4] if nordic_vals else 
-                                           iso30_vals[4] if iso30_vals else 
-                                               iso60_vals[4] if iso60_vals else "N/A")
-
-                        # Build metric display rows dynamically
                         metrics_rows_html = ""
-    
-                        if nordic_vals:
-                            bL, bR, lL, lR, _ = nordic_vals
-                            metrics_rows_html += f"<b>Nordic:</b> Initial L {bL:.1f}N | R {bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(lL, bL, '{:.1f}', 'N')} | R {render_val_with_arrow(lR, bR, '{:.1f}', 'N')}<br>"
-    
-                        if iso30_vals:
-                            bL, bR, lL, lR, _ = iso30_vals
-                            metrics_rows_html += f"<b>ISO 30°:</b> Initial L {bL:.1f}N | R {bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(lL, bL, '{:.1f}', 'N')} | R {render_val_with_arrow(lR, bR, '{:.1f}', 'N')}<br>"
-        
-                        if iso60_vals:
-                            bL, bR, lL, lR, _ = iso60_vals
-                            metrics_rows_html += f"<b>ISO 60°:</b> Initial L {bL:.1f}N | R {bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(lL, bL, '{:.1f}', 'N')} | R {render_val_with_arrow(lR, bR, '{:.1f}', 'N')}<br>"
+                        latest_dates = []
 
-                        if not metrics_rows_html:
-                            # Generic fallback if specific variations are not found in the string filter
+                        # Check for the exact column 'Test' (case-insensitive check for flexibility)
+                        test_col = next((c for c in isoy_ath.columns if c.lower() == 'test'), None)
+
+                        if test_col:
+                            # Group by each distinct test name (Nordic, ISO 30, ISO 60, etc.)
+                            unique_tests = isoy_ath[test_col].dropna().unique()
+
+                            for test_name in unique_tests:
+                                df_test = isoy_ath[isoy_ath[test_col] == test_name].sort_values('Date')
+                                if not df_test.empty:
+                                    b_row, l_row = df_test.iloc[0], df_test.iloc[-1]
+                                    bL, bR = b_row.get('L Max Force (N)', 0.0), b_row.get('R Max Force (N)', 0.0)
+                                    lL, lR = l_row.get('L Max Force (N)', 0.0), l_row.get('R Max Force (N)', 0.0)
+
+                                    if pd.notna(l_row.get('Date')):
+                                        latest_dates.append(l_row['Date'])
+
+                                    metrics_rows_html += (
+                                        f"<b>{test_name}:</b> Initial L {bL:.1f}N | R {bR:.1f}N &nbsp;→&nbsp; "
+                                        f"<b>Latest:</b> L {render_val_with_arrow(lL, bL, '{:.1f}', 'N')} | "
+                                        f"R {render_val_with_arrow(lR, bR, '{:.1f}', 'N')}<br>"
+                                    )
+                        else:
+                            # Fallback if 'Test' column isn't found in the dataset
                             b_n, l_n = isoy_ath.iloc[0], isoy_ath.iloc[-1]
                             bnL, bnR = b_n.get('L Max Force (N)', 0.0), b_n.get('R Max Force (N)', 0.0)
                             lnL, lnR = l_n.get('L Max Force (N)', 0.0), l_n.get('R Max Force (N)', 0.0)
-                            metrics_rows_html = f"<b>Initial Force:</b> L {bnL:.1f}N | R {bnR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(lnL, bnL, '{:.1f}', 'N')} | R {render_val_with_arrow(lnR, bnR, '{:.1f}', 'N')}"
+                            if pd.notna(l_n.get('Date')):
+                                latest_dates.append(l_n['Date'])
+                            metrics_rows_html = (
+                                f"<b>Hamstring Test:</b> Initial L {bnL:.1f}N | R {bnR:.1f}N &nbsp;→&nbsp; "
+                                f"<b>Latest:</b> L {render_val_with_arrow(lnL, bnL, '{:.1f}', 'N')} | "
+                                f"R {render_val_with_arrow(lnR, bnR, '{:.1f}', 'N')}"
+                            )
+
+                        latest_date_str = max(latest_dates).strftime('%m/%d/%Y') if latest_dates else "N/A"
 
                         st.markdown(f"""
                             <div class="hud-metric-row-light">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-orange">2</span>NORDIC & HAMSTRING ISO STRENGTH</span>
+                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-orange">2</span>HAMSTRING & ISO STRENGTH TESTS</span>
                                     <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {latest_date_str}</span>
                                 </div>
                                 <div style="font-size:11px; line-height:1.5; color:#1D1D1F;">
