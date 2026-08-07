@@ -203,14 +203,17 @@ def load_sheet_data():
 
 def fetch_live_recovery_sheet():
     try:
-        macro_url = st.secrets.get("MACRO_URL") or st.secrets.get("Live Track") or st.secrets.get("sheets", {}).get("live_track_url")
-        if not macro_url:
-            return pd.DataFrame()
-        
-        # Read from Logs sheet tab via gviz CSV export endpoint
         sheet_base_url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-        csv_url = sheet_base_url.replace("/edit", f"/gviz/tq?tqx=out:csv&sheet=Logs&cache={datetime.datetime.now().timestamp()}")
+        # Cache buster ensures every page refresh pulls the freshest data from Google Sheets
+        cache_buster = f"&cache={datetime.datetime.now().timestamp()}"
+        csv_url = sheet_base_url.replace("/edit", f"/gviz/tq?tqx=out:csv&sheet=Logs{cache_buster}")
+        
         df = pd.read_csv(csv_url)
+        if not df.empty:
+            # Clean and normalize strings for robust matching
+            for col in ["Week_Starting", "Athlete", "Station", "Day"]:
+                if col in df.columns:
+                    df[col] = df[col].astype(str).str.strip()
         return df
     except Exception as e:
         print(f"Error fetching live recovery sheet: {e}")
@@ -1570,7 +1573,7 @@ with active_season:
                 st.info(f"No Intake Assessment records found for {selected_intake_athlete}.")
 
     # =========================================================================
-    # TAB 6: RECOVERY (2-PERSON GRID WITH CHECKBOX AUTO-SYNC & PERSISTENCE)
+    # TAB 6: RECOVERY (2-PERSON GRID WITH PERSISTENT REFRESH CHECKBOXES)
     # =========================================================================
     elif main_tab == "Recovery":
         rec_tab_tracker, rec_tab_summary = st.tabs(["Live Recovery Tracker", "Team Recovery Summary"])
@@ -1579,46 +1582,44 @@ with active_season:
         today = local_now.date()
         current_monday = today - datetime.timedelta(days=today.weekday())
 
-        # Load live recovery logs from sheet into session state
-        if "recovery_logs_df" not in st.session_state:
-            st.session_state.recovery_logs_df = fetch_live_recovery_sheet()
-
-        live_rec_df = st.session_state.recovery_logs_df
+        # ALWAYS fetch fresh Google Sheet data on page load/refresh
+        live_rec_df = fetch_live_recovery_sheet()
+        st.session_state.recovery_logs_df = live_rec_df
 
         # Helper callback function to fire POST payload to Google Apps Script
-        def handle_recovery_check_change(ath_name, stn_num, key_name, wk_s, dy_s):
+        def handle_recovery_check_change(ath_name, stn_label, key_name, wk_s, dy_s):
             is_checked = st.session_state[key_name]
             action_val = "add" if is_checked else "remove"
             time_val = get_eastern_time_str() if is_checked else ""
 
             payload = {
-                "Week_Starting": str(wk_s),
-                "Athlete": ath_name,
-                "Station": str(stn_num),
-                "Day": str(dy_s),
+                "Week_Starting": str(wk_s).strip(),
+                "Athlete": str(ath_name).strip(),
+                "Station": str(stn_label).strip(),
+                "Day": str(dy_s).strip(),
                 "Timestamp": time_val,
                 "Action": action_val,
             }
 
-            # Mutate local session state directly to keep UI synchronized instantly
+            # Update local session state dataframe immediately for snappy UI feel
             df_curr = st.session_state.recovery_logs_df
             if is_checked:
                 new_entry = pd.DataFrame([{
-                    "Week_Starting": str(wk_s),
-                    "Athlete": ath_name,
+                    "Week_Starting": str(wk_s).strip(),
+                    "Athlete": str(ath_name).strip(),
                     "Lift_Group": "",
-                    "Station": str(stn_num),
-                    "Day": str(dy_s),
+                    "Station": str(stn_label).strip(),
+                    "Day": str(dy_s).strip(),
                     "Timestamp": time_val,
                 }])
                 st.session_state.recovery_logs_df = pd.concat([df_curr, new_entry], ignore_index=True)
             else:
                 st.session_state.recovery_logs_df = df_curr[
                     ~(
-                        (df_curr["Week_Starting"].astype(str) == str(wk_s))
-                        & (df_curr["Athlete"].astype(str) == str(ath_name))
-                        & (df_curr["Station"].astype(str) == str(stn_num))
-                        & (df_curr["Day"].astype(str) == str(dy_s))
+                        (df_curr["Week_Starting"].astype(str).str.strip() == str(wk_s).strip())
+                        & (df_curr["Athlete"].astype(str).str.strip() == str(ath_name).strip())
+                        & (df_curr["Station"].astype(str).str.strip() == str(stn_label).strip())
+                        & (df_curr["Day"].astype(str).str.strip() == str(dy_s).strip())
                     )
                 ]
 
@@ -1685,21 +1686,27 @@ with active_season:
                             # 6 Checkboxes for stations underneath
                             chk_cols = st.columns(3)
                             for s_idx, station_label in enumerate(stations):
+                                # Determine saved state directly from fresh Google Sheet DataFrame
                                 is_checked = False
-                                if not live_rec_df.empty:
+                                if not live_rec_df.empty and {"Week_Starting", "Athlete", "Station", "Day"}.issubset(live_rec_df.columns):
                                     matched = live_rec_df[
-                                        (live_rec_df["Week_Starting"].astype(str) == str(week_str)) &
-                                        (live_rec_df["Athlete"].astype(str) == str(player)) &
-                                        (live_rec_df["Station"].astype(str) == str(station_label)) &
-                                        (live_rec_df["Day"].astype(str) == str(selected_rec_day))
+                                        (live_rec_df["Week_Starting"].astype(str).str.strip() == str(week_str).strip()) &
+                                        (live_rec_df["Athlete"].astype(str).str.strip() == str(player).strip()) &
+                                        (live_rec_df["Station"].astype(str).str.strip() == str(station_label).strip()) &
+                                        (live_rec_df["Day"].astype(str).str.strip() == str(selected_rec_day).strip())
                                     ]
                                     is_checked = not matched.empty
 
+                                cb_key = f"rec_cb_{player.replace(' ', '_').replace(',', '')}_{station_label.replace(' ', '_')}_{week_str}_{selected_rec_day.replace(' ', '_')}"
+                                
+                                # Set session_state key prior to rendering checkbox to ensure persistence
+                                if cb_key not in st.session_state:
+                                    st.session_state[cb_key] = is_checked
+
                                 with chk_cols[s_idx % 3]:
-                                    cb_key = f"rec_cb_{player.replace(' ', '_').replace(',', '')}_{station_label.replace(' ', '_')}_{week_str}_{selected_rec_day.replace(' ', '_')}"
                                     st.checkbox(
                                         f"{station_label}",
-                                        value=is_checked,
+                                        value=st.session_state[cb_key],
                                         key=cb_key,
                                         on_change=handle_recovery_check_change,
                                         args=(player, station_label, cb_key, week_str, selected_rec_day),
@@ -1720,8 +1727,6 @@ with active_season:
                 with s2:
                     st.metric("Active Athletes Logged", live_rec_df["Athlete"].nunique() if "Athlete" in live_rec_df.columns else 0)
                 with s3:
-                    # Safe check preventing argmax/idxmax crash on empty Series
-                    # SAFE TOP STATION LOGIC
                     station_counts = live_rec_df["Station"].dropna().value_counts()
                     top_station = station_counts.idxmax() if not station_counts.empty else "N/A"
                     st.metric("Most Popular Station", f"{top_station}")
