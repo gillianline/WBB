@@ -13,26 +13,35 @@ TARGET_GID = "1922017148"
 # -----------------------------------------------------------------------------
 # GOOGLE SHEETS REAL-TIME CHECKBOX SYNC
 # -----------------------------------------------------------------------------
+TARGET_GID = "1922017148"
+
 def sync_recovery_checkbox(athlete, station, is_checked, week_starting, day_selected):
     sheet_url = st.secrets.get("Live Track") or st.secrets.get("sheets", {}).get("live_track_url")
     
     if not sheet_url:
-        print("Sync Error: No URL found in st.secrets")
+        st.error("Sync Error: URL missing in st.secrets")
         return False
 
     payload = {
         "Week_Starting": str(week_starting),
-        "Athlete": athlete,
+        "Athlete": str(athlete),
         "Station": str(station),
-        "Day": day_selected,
-        "Completed": is_checked,
+        "Day": str(day_selected),
+        "Completed": bool(is_checked),
         "gid": TARGET_GID
     }
 
     try:
-        response = requests.post(sheet_url, json=payload, timeout=5)
+        # POST with redirect handling for Google Apps Script
+        response = requests.post(
+            sheet_url,
+            json=payload,
+            headers={"Content-Type": "application/json"},
+            allow_redirects=True,
+            timeout=8
+        )
         st.cache_data.clear()
-        return response.status_code == 200
+        return response.status_code in [200, 302]
     except Exception as e:
         print(f"Auto-sync error: {e}")
         return False
@@ -44,10 +53,10 @@ def fetch_live_recovery_sheet():
         return pd.DataFrame()
     try:
         url = f"{sheet_url}?gid={TARGET_GID}" if "?" not in sheet_url else f"{sheet_url}&gid={TARGET_GID}"
-        response = requests.get(url, timeout=5)
+        response = requests.get(url, allow_redirects=True, timeout=8)
         if response.status_code == 200:
             data = response.json()
-            if data:
+            if isinstance(data, list) and len(data) > 0:
                 return pd.DataFrame(data)
     except Exception as e:
         print(f"Error fetching live recovery data: {e}")
