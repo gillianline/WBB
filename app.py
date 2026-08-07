@@ -1351,140 +1351,11 @@ with active_season:
     # TAB 5: TESTING (SUB-TABS)
     # =========================================================================
     elif main_tab == "Testing":
-        testing_tab_cmj, testing_tab_intake, testing_tab_nordic, testing_tab_bs, testing_tab_overall = st.tabs(
+        testing_tab_intake, testing_tab_cmj, testing_tab_nordic, testing_tab_bs, testing_tab_overall = st.tabs(
             ["Intake Assessment", "CMJ", "NordBord", "Harness Belt Squat", "Overall Profile"]
         )
 
-        # SUB-TAB 1: CMJ HISTORY
-        with testing_tab_cmj:
-            st.markdown(
-                '<div class="vball-section-title">CMJ History</div>',
-                unsafe_allow_html=True,
-            )
-
-            c_filter, _ = st.columns([1, 2])
-            with c_filter:
-                selected_player_t = st.selectbox(
-                    "Select Athlete:", roster_players, key="cmj_player_select"
-                )
-
-            p_cmj = (
-                cmj_raw[cmj_raw["Name"] == selected_player_t]
-                .sort_values("Date")
-                .copy()
-                if not cmj_raw.empty
-                else pd.DataFrame()
-            )
-
-            jump_cols = [
-                c
-                for c in p_cmj.columns
-                if "jump" in c.lower() or "height" in c.lower()
-            ]
-            j_col = jump_cols[0] if jump_cols else None
-
-            rsi_cols = [c for c in p_cmj.columns if "rsi" in c.lower()]
-            rsi_col = rsi_cols[0] if rsi_cols else None
-
-            display_cols = [
-                c for c in p_cmj.columns if c not in ["Name", "Date_Str"]
-            ]
-            st.markdown(f"### Jump History for {selected_player_t}")
-            st.markdown(
-                render_vball_table(p_cmj[display_cols]), unsafe_allow_html=True
-            )
-
-            st.markdown("<br>", unsafe_allow_html=True)
-
-            if not p_cmj.empty and j_col:
-                p_cmj["Jump_Height_Clean"] = pd.to_numeric(
-                    p_cmj[j_col]
-                    .astype(str)
-                    .str.replace(r"[^0-9.]", "", regex=True),
-                    errors="coerce",
-                )
-
-                fig_jump_trend = go.Figure()
-
-                fig_jump_trend.add_trace(
-                    go.Scatter(
-                        x=p_cmj["Date"],
-                        y=p_cmj["Jump_Height_Clean"],
-                        name="Jump Height",
-                        mode="lines+markers",
-                        connectgaps=True,
-                        yaxis="y",
-                        line=dict(color="#FF8200", width=4),
-                        marker=dict(size=8, color="#FF8200"),
-                    )
-                )
-
-                if rsi_col:
-                    p_cmj["RSI_Clean"] = pd.to_numeric(
-                        p_cmj[rsi_col]
-                        .astype(str)
-                        .str.replace(r"[^0-9.]", "", regex=True),
-                        errors="coerce",
-                    )
-                    fig_jump_trend.add_trace(
-                        go.Scatter(
-                            x=p_cmj["Date"],
-                            y=p_cmj["RSI_Clean"],
-                            name="RSI Modified",
-                            mode="lines+markers",
-                            connectgaps=True,
-                            yaxis="y2",
-                            line=dict(color="#38BDF8", width=3, dash="dot"),
-                            marker=dict(size=8, color="#38BDF8"),
-                        )
-                    )
-
-                fig_jump_trend.update_layout(
-                    height=320,
-                    margin=dict(l=40, r=40, t=50, b=40),
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    legend=dict(
-                        orientation="h",
-                        yanchor="bottom",
-                        y=1.08,
-                        xanchor="left",
-                        x=0.01,
-                        font=dict(size=13, color="#0F172A"),
-                    ),
-                    xaxis=dict(
-                        title=None,
-                        type="date",
-                        tickformat="%b %d\n%Y",
-                        showgrid=False,
-                        showline=True,
-                        linewidth=1.5,
-                        linecolor="#0F172A",
-                        tickfont=dict(color="#64748B", size=12),
-                    ),
-                    yaxis=dict(
-                        showgrid=False,
-                        showline=True,
-                        linewidth=1.5,
-                        linecolor="#0F172A",
-                        tickfont=dict(color="#64748B", size=12),
-                        side="left",
-                    ),
-                    yaxis2=dict(
-                        showgrid=False,
-                        showline=True,
-                        linewidth=1.5,
-                        linecolor="#0F172A",
-                        tickfont=dict(color="#64748B", size=12),
-                        overlaying="y",
-                        side="right",
-                        anchor="x",
-                    ),
-                )
-
-                st.plotly_chart(fig_jump_trend, use_container_width=True)
-
-        # SUB-TAB 2: INTAKE ASSESSMENT
+        # SUB-TAB 1: INTAKE ASSESSMENT
         with testing_tab_intake:
             st.markdown(
                 "<h3 style='color:#1D1D1F; font-weight:900;"
@@ -1839,6 +1710,136 @@ with active_season:
                     st.markdown(render_vball_table(calf_ath[disp_ankle]), unsafe_allow_html=True)
                 else:
                     st.info(f"No Ankle Assessment records for {selected_intake_athlete}.")
+
+        # SUB-TAB 2: CMJ HISTORY
+        with testing_tab_cmj:
+            st.markdown(
+                '<div class="vball-section-title">CMJ History</div>',
+                unsafe_allow_html=True,
+            )
+
+            c_filter, _ = st.columns([1, 2])
+            with c_filter:
+                selected_player_t = st.selectbox(
+                    "Select Athlete:", roster_players, key="cmj_player_select"
+                )
+
+            p_cmj = (
+                cmj_raw[cmj_raw["Name"] == selected_player_t]
+                .sort_values("Date")
+                .copy()
+                if not cmj_raw.empty
+                else pd.DataFrame()
+            )
+
+            jump_cols = [
+                c
+                for c in p_cmj.columns
+                if "jump" in c.lower() or "height" in c.lower()
+            ]
+            j_col = jump_cols[0] if jump_cols else None
+
+            rsi_cols = [c for c in p_cmj.columns if "rsi" in c.lower()]
+            rsi_col = rsi_cols[0] if rsi_cols else None
+
+            display_cols = [
+                c for c in p_cmj.columns if c not in ["Name", "Date_Str"]
+            ]
+            st.markdown(f"### Jump History for {selected_player_t}")
+            st.markdown(
+                render_vball_table(p_cmj[display_cols]), unsafe_allow_html=True
+            )
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            if not p_cmj.empty and j_col:
+                p_cmj["Jump_Height_Clean"] = pd.to_numeric(
+                    p_cmj[j_col]
+                    .astype(str)
+                    .str.replace(r"[^0-9.]", "", regex=True),
+                    errors="coerce",
+                )
+
+                fig_jump_trend = go.Figure()
+
+                fig_jump_trend.add_trace(
+                    go.Scatter(
+                        x=p_cmj["Date"],
+                        y=p_cmj["Jump_Height_Clean"],
+                        name="Jump Height",
+                        mode="lines+markers",
+                        connectgaps=True,
+                        yaxis="y",
+                        line=dict(color="#FF8200", width=4),
+                        marker=dict(size=8, color="#FF8200"),
+                    )
+                )
+
+                if rsi_col:
+                    p_cmj["RSI_Clean"] = pd.to_numeric(
+                        p_cmj[rsi_col]
+                        .astype(str)
+                        .str.replace(r"[^0-9.]", "", regex=True),
+                        errors="coerce",
+                    )
+                    fig_jump_trend.add_trace(
+                        go.Scatter(
+                            x=p_cmj["Date"],
+                            y=p_cmj["RSI_Clean"],
+                            name="RSI Modified",
+                            mode="lines+markers",
+                            connectgaps=True,
+                            yaxis="y2",
+                            line=dict(color="#38BDF8", width=3, dash="dot"),
+                            marker=dict(size=8, color="#38BDF8"),
+                        )
+                    )
+
+                fig_jump_trend.update_layout(
+                    height=320,
+                    margin=dict(l=40, r=40, t=50, b=40),
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    legend=dict(
+                        orientation="h",
+                        yanchor="bottom",
+                        y=1.08,
+                        xanchor="left",
+                        x=0.01,
+                        font=dict(size=13, color="#0F172A"),
+                    ),
+                    xaxis=dict(
+                        title=None,
+                        type="date",
+                        tickformat="%b %d\n%Y",
+                        showgrid=False,
+                        showline=True,
+                        linewidth=1.5,
+                        linecolor="#0F172A",
+                        tickfont=dict(color="#64748B", size=12),
+                    ),
+                    yaxis=dict(
+                        showgrid=False,
+                        showline=True,
+                        linewidth=1.5,
+                        linecolor="#0F172A",
+                        tickfont=dict(color="#64748B", size=12),
+                        side="left",
+                    ),
+                    yaxis2=dict(
+                        showgrid=False,
+                        showline=True,
+                        linewidth=1.5,
+                        linecolor="#0F172A",
+                        tickfont=dict(color="#64748B", size=12),
+                        overlaying="y",
+                        side="right",
+                        anchor="x",
+                    ),
+                )
+
+                st.plotly_chart(fig_jump_trend, use_container_width=True)
+
 
         # SUB-TAB 3: NORDBORD (SPLIT BY TEST TYPES: ISO 30, ISO 60, NORDIC)
         with testing_tab_nordic:
