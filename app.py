@@ -9,12 +9,12 @@ import streamlit.components.v1 as components
 import requests
 
 
-def save_to_secret_sheet(athlete, metric, count_val):
+def save_to_secret_sheet(athlete, metric, count_val, week_starting="", day_selected=""):
     sheet_url = st.secrets.get("Live Track") or st.secrets.get("sheets", {}).get("live_track_url")
     
     if not sheet_url:
         print("Sync Error: No URL found in st.secrets")
-        return
+        return False
 
     payload = {
         "Week_Starting": str(week_starting),
@@ -27,8 +27,10 @@ def save_to_secret_sheet(athlete, metric, count_val):
     try:
         response = requests.post(sheet_url, json=payload, timeout=5)
         print(f"Sync Response: {response.status_code}")
+        return response.status_code == 200
     except Exception as e:
         print(f"Sync error: {e}")
+        return False
 
 # -----------------------------------------------------------------------------
 # 1. PAGE CONFIGURATION & STYLING
@@ -115,6 +117,16 @@ st.markdown(
         .compliance-metric-label { font-size: 0.68rem; font-weight: 700; color: #64748B; text-transform: uppercase; margin-bottom: 2px; }
         .compliance-metric-value { font-size: 1.05rem; font-weight: 800; color: #0F172A; }
         .compliance-metric-sub { font-size: 0.68rem; color: #94A3B8; margin-top: 2px; }
+
+        .recovery-card {
+            background: #FFFFFF;
+            border: 1px solid #E2E8F0;
+            border-radius: 12px;
+            padding: 18px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+            text-align: center;
+            margin-bottom: 15px;
+        }
     </style>
 """,
     unsafe_allow_html=True,
@@ -466,7 +478,8 @@ main_tab = st.sidebar.radio(
         "Practice Score",
         "Compliance",
         "Weekly Data",
-        "Testing"
+        "Testing",
+        "Recovery"
     ],
     index=0,
 )
@@ -1551,3 +1564,67 @@ with active_season:
 
             else:
                 st.info(f"No Intake Assessment records found for {selected_intake_athlete}.")
+
+    # =========================================================================
+    # TAB 6: RECOVERY DASHBOARD & SYNC LOG
+    # =========================================================================
+    elif main_tab == "Recovery":
+        st.markdown(
+            '<div class="vball-section-title">Athlete Recovery Tracker</div>',
+            unsafe_allow_html=True,
+        )
+
+        r_col1, r_col2, r_col3 = st.columns(3)
+        with r_col1:
+            rec_athlete = st.selectbox("Select Athlete:", roster_players, key="rec_ath_select")
+        with r_col2:
+            rec_week = st.date_input("Week Starting:", key="rec_week_select")
+        with r_col3:
+            rec_day = st.selectbox("Day Selected:", ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"], key="rec_day_select")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        recovery_metrics = [f"1", f"2", f"3", f"4", f"5", f"6"]
+
+        counts = {}
+        cols = st.columns(3)
+
+        for i, metric in enumerate(recovery_metrics):
+            with cols[i % 3]:
+                st.markdown(
+                    f"""
+                    <div class="recovery-card">
+                        <div style="font-weight:800; color:#0F172A; font-size:1.1rem; margin-bottom:8px;">Recovery {metric}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                counts[metric] = st.number_input(
+                    f"Count for Recovery {metric}",
+                    min_value=0,
+                    value=0,
+                    step=1,
+                    key=f"rec_count_{metric}",
+                )
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        if st.button("Save Recovery Data to Secret Sheet", type="primary"):
+            success_count = 0
+            for metric, val in counts.items():
+                if val > 0:
+                    metric_label = f"Recovery {metric}"
+                    ok = save_to_secret_sheet(
+                        athlete=rec_athlete,
+                        metric=metric_label,
+                        count_val=val,
+                        week_starting=rec_week,
+                        day_selected=rec_day
+                    )
+                    if ok:
+                        success_count += 1
+
+            if success_count > 0:
+                st.success(f"Successfully saved {success_count} recovery entries to Live Track Sheet!")
+            else:
+                st.info("No non-zero counts selected or sync URL missing.")
