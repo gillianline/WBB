@@ -1352,7 +1352,7 @@ with active_season:
     # =========================================================================
     elif main_tab == "Testing":
         testing_tab_cmj, testing_tab_intake, testing_tab_nordic, testing_tab_bs, testing_tab_overall = st.tabs(
-            ["CMJ History", "Intake Assessment", "NordBord", "Harness Belt Squat", "Overall Profile"]
+            ["Intake Assessment", "CMJ", "NordBord", "Harness Belt Squat", "Overall Profile"]
         )
 
         # SUB-TAB 1: CMJ HISTORY
