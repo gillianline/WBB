@@ -13,11 +13,14 @@ import requests
 
 EASTERN_TZ = ZoneInfo("America/New_York")
 
+
 def get_eastern_time_str():
     return datetime.datetime.now(EASTERN_TZ).strftime("%H:%M:%S")
 
+
 def get_eastern_now():
     return datetime.datetime.now(EASTERN_TZ)
+
 
 # -----------------------------------------------------------------------------
 # 1. PAGE CONFIGURATION & STYLING
@@ -172,13 +175,23 @@ def load_sheet_data():
         weekly_df = fetch_csv("weekly_url")
         cmj_df = fetch_csv("cmj_url")
         roster_df = fetch_csv("roster_url")
-        
+
         nordic_df = fetch_csv("nordic_url")
         ankle_df = fetch_csv("ankle_url")
         knee_df = fetch_csv("knee_url")
         hip_df = fetch_csv("hip_url")
 
-        for df in [vol_df, int_df, comp_df, weekly_df, cmj_df, nordic_df, ankle_df, knee_df, hip_df]:
+        for df in [
+            vol_df,
+            int_df,
+            comp_df,
+            weekly_df,
+            cmj_df,
+            nordic_df,
+            ankle_df,
+            knee_df,
+            hip_df,
+        ]:
             if df.empty:
                 continue
             date_col = [c for c in df.columns if "date" in c.lower()]
@@ -187,8 +200,16 @@ def load_sheet_data():
                 df["Date_Str"] = df["Date"].dt.strftime("%Y-%m-%d")
 
         return (
-            vol_df, int_df, comp_df, weekly_df, cmj_df, roster_df,
-            nordic_df, ankle_df, knee_df, hip_df
+            vol_df,
+            int_df,
+            comp_df,
+            weekly_df,
+            cmj_df,
+            roster_df,
+            nordic_df,
+            ankle_df,
+            knee_df,
+            hip_df,
         )
     except Exception as e:
         st.error(f"Error loading data from Google Sheets secrets: {e}")
@@ -196,33 +217,52 @@ def load_sheet_data():
 
 
 (
-    vol_raw, int_raw, comp_raw, weekly_raw, cmj_raw, roster_raw,
-    nordic_raw, ankle_raw, knee_raw, hip_raw
+    vol_raw,
+    int_raw,
+    comp_raw,
+    weekly_raw,
+    cmj_raw,
+    roster_raw,
+    nordic_raw,
+    ankle_raw,
+    knee_raw,
+    hip_raw,
 ) = load_sheet_data()
 
 
 def fetch_live_recovery_sheet():
     try:
         sheet_base_url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-        # Cache buster ensures every page refresh pulls the freshest data from Google Sheets
         cache_buster = f"&cache={datetime.datetime.now().timestamp()}"
-        csv_url = sheet_base_url.replace("/edit", f"/gviz/tq?tqx=out:csv&sheet=Logs{cache_buster}")
-        
-        df = pd.read_csv(csv_url)
+        csv_url = sheet_base_url.replace(
+            "/edit", f"/gviz/tq?tqx=out:csv&sheet=Logs{cache_buster}"
+        )
+
+        req = urllib.request.Request(
+            csv_url,
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
+        )
+        with urllib.request.urlopen(req, timeout=8) as response:
+            content = response.read().decode("utf-8")
+            df = pd.read_csv(io.StringIO(content))
+
         if not df.empty:
-            # Clean and normalize strings for robust matching
             for col in ["Week_Starting", "Athlete", "Station", "Day"]:
                 if col in df.columns:
                     df[col] = df[col].astype(str).str.strip()
         return df
     except Exception as e:
         print(f"Error fetching live recovery sheet: {e}")
-        return pd.DataFrame(columns=["Week_Starting", "Athlete", "Lift_Group", "Station", "Day", "Timestamp"])
-
-
-# Load live recovery state into session state
-if "recovery_logs_df" not in st.session_state:
-    st.session_state.recovery_logs_df = fetch_live_recovery_sheet()
+        return pd.DataFrame(
+            columns=[
+                "Week_Starting",
+                "Athlete",
+                "Lift_Group",
+                "Station",
+                "Day",
+                "Timestamp",
+            ]
+        )
 
 
 # -----------------------------------------------------------------------------
@@ -241,7 +281,9 @@ def get_vball_color(score):
 
 def render_vball_table(df):
     if df.empty:
-        return "<p style='color:#64748B; font-style:italic;'>No data available.</p>"
+        return (
+            "<p style='color:#64748B; font-style:italic;'>No data available.</p>"
+        )
     html = '<table class="vball-table"><thead><tr>'
     for col in df.columns:
         html += f"<th>{col}</th>"
@@ -287,9 +329,17 @@ def compute_practice_tables(player_name, session_date_str):
         & (int_raw["Date_Str"] == str(session_date_str))
     ]
 
-    v_all = vol_raw[vol_raw["Player"] == player_name].sort_values("Date")
-    i_all = int_raw[int_raw["Player"] == player_name].sort_values("Date")
-    
+    v_all = (
+        vol_raw[vol_raw["Player"] == player_name].sort_values("Date")
+        if not vol_raw.empty
+        else pd.DataFrame()
+    )
+    i_all = (
+        int_raw[int_raw["Player"] == player_name].sort_values("Date")
+        if not int_raw.empty
+        else pd.DataFrame()
+    )
+
     if not v_all.empty and "Date" in v_all.columns and v_all["Date"].notna().any():
         start_date_v = v_all["Date"].min()
         v_base = v_all[v_all["Date"] <= start_date_v + pd.Timedelta(days=14)]
@@ -325,19 +375,27 @@ def compute_practice_tables(player_name, session_date_str):
 
     for m in vol_metrics:
         curr = (
-            v_player[m].values[0] if not v_player.empty and m in v_player else 0.0
+            v_player[m].values[0]
+            if not v_player.empty and m in v_player
+            else 0.0
         )
         mx = v_base[m].max() if not v_base.empty and m in v_base else curr
         grade = round((curr / mx * 100), 0) if mx > 0 else 0
-        vol_rows.append({"Metric": m, "Current": curr, "Max": mx, "Grade": grade})
+        vol_rows.append(
+            {"Metric": m, "Current": curr, "Max": mx, "Grade": grade}
+        )
 
     for m in int_metrics:
         curr = (
-            i_player[m].values[0] if not i_player.empty and m in i_player else 0.0
+            i_player[m].values[0]
+            if not i_player.empty and m in i_player
+            else 0.0
         )
         mx = i_base[m].max() if not i_base.empty and m in i_base else curr
         grade = round((curr / mx * 100), 0) if mx > 0 else 0
-        int_rows.append({"Metric": m, "Current": curr, "Max": mx, "Grade": grade})
+        int_rows.append(
+            {"Metric": m, "Current": curr, "Max": mx, "Grade": grade}
+        )
 
     vol_df_out = pd.DataFrame(vol_rows)
     int_df_out = pd.DataFrame(int_rows)
@@ -373,7 +431,12 @@ def compute_practice_tables(player_name, session_date_str):
 
 
 def create_team_bar_athlete_line_chart(
-    weeks, team_avg_vals, athlete_vals, title_text, athlete_name, bar_color="#38BDF8"
+    weeks,
+    team_avg_vals,
+    athlete_vals,
+    title_text,
+    athlete_name,
+    bar_color="#38BDF8",
 ):
     fig = go.Figure()
     fig.add_trace(
@@ -432,15 +495,21 @@ def render_metric_subcard_html(p_comp, col_name, title_name, unit):
         if all_time_max > 0
         else "-- %"
     )
-    days_since = (
-        pd.to_datetime("today") - pd.to_datetime(max_date)
-    ).days
+    days_since = (pd.to_datetime("today") - pd.to_datetime(max_date)).days
 
     badge_bg = "#BBF7D0" if days_since <= 7 else "#FFD6D6"
     badge_fg = "#166534" if days_since <= 7 else "#991B1B"
 
-    val_str = f"{recent_val:.1f} {unit}" if isinstance(recent_val, (int, float)) else str(recent_val)
-    max_str = f"{all_time_max:.1f} {unit}" if isinstance(all_time_max, (int, float)) else str(all_time_max)
+    val_str = (
+        f"{recent_val:.1f} {unit}"
+        if isinstance(recent_val, (int, float))
+        else str(recent_val)
+    )
+    max_str = (
+        f"{all_time_max:.1f} {unit}"
+        if isinstance(all_time_max, (int, float))
+        else str(all_time_max)
+    )
 
     return f"""
     <div class="compliance-subcard">
@@ -489,7 +558,7 @@ main_tab = st.sidebar.radio(
         "Compliance",
         "Weekly Data",
         "Testing",
-        "Recovery"
+        "Recovery",
     ],
     index=0,
 )
@@ -499,7 +568,8 @@ st.sidebar.markdown("### DATA MANAGEMENT")
 
 if st.sidebar.button("Refresh Google Sheets Data"):
     st.cache_data.clear()
-    st.session_state.recovery_logs_df = fetch_live_recovery_sheet()
+    if "recovery_logs_df" in st.session_state:
+        del st.session_state["recovery_logs_df"]
     st.sidebar.success("Data reloaded!")
     st.rerun()
 
@@ -528,7 +598,7 @@ with active_season:
     roster_players = (
         roster_raw["Name"].tolist()
         if not roster_raw.empty
-        else vol_raw["Player"].unique().tolist()
+        else (vol_raw["Player"].unique().tolist() if not vol_raw.empty else [])
     )
 
     compliance_metrics = [
@@ -548,9 +618,15 @@ with active_season:
     if main_tab == "Individual Profile":
         c_sel, _ = st.columns([1, 2])
         with c_sel:
-            selected_player = st.selectbox("Select Athlete Profile:", roster_players)
+            selected_player = st.selectbox(
+                "Select Athlete Profile:", roster_players
+            )
 
-        p_row = roster_raw[roster_raw["Name"] == selected_player] if not roster_raw.empty else pd.DataFrame()
+        p_row = (
+            roster_raw[roster_raw["Name"] == selected_player]
+            if not roster_raw.empty
+            else pd.DataFrame()
+        )
         p_pos = (
             p_row["Position"].values[0]
             if not p_row.empty
@@ -579,8 +655,12 @@ with active_season:
             '<div class="vball-section-title">1. Workload Exposure & Compliance Grid</div>',
             unsafe_allow_html=True,
         )
-        
-        p_comp = comp_raw[comp_raw["Player"] == selected_player].sort_values("Date") if not comp_raw.empty else pd.DataFrame()
+
+        p_comp = (
+            comp_raw[comp_raw["Player"] == selected_player].sort_values("Date")
+            if not comp_raw.empty
+            else pd.DataFrame()
+        )
 
         for row_idx in range(0, len(compliance_metrics), 2):
             col1, col2 = st.columns(2)
@@ -588,8 +668,12 @@ with active_season:
             for j in range(2):
                 metric_idx = row_idx + j
                 if metric_idx < len(compliance_metrics):
-                    col_name, display_title, unit = compliance_metrics[metric_idx]
-                    subcard_html = render_metric_subcard_html(p_comp, col_name, display_title, unit)
+                    col_name, display_title, unit = compliance_metrics[
+                        metric_idx
+                    ]
+                    subcard_html = render_metric_subcard_html(
+                        p_comp, col_name, display_title, unit
+                    )
                     with cols[j]:
                         st.markdown(subcard_html, unsafe_allow_html=True)
 
@@ -603,7 +687,13 @@ with active_season:
 
         with col_g1:
             st.markdown("#### Practice Score History")
-            v_p = vol_raw[vol_raw["Player"] == selected_player].sort_values("Date") if not vol_raw.empty else pd.DataFrame()
+            v_p = (
+                vol_raw[vol_raw["Player"] == selected_player].sort_values(
+                    "Date"
+                )
+                if not vol_raw.empty
+                else pd.DataFrame()
+            )
 
             if not v_p.empty:
                 score_history = []
@@ -612,7 +702,11 @@ with active_season:
                         selected_player, d_str
                     )
                     score_history.append(
-                        {"Date": d_str, "Volume Score": v_sc, "Intensity Score": i_sc}
+                        {
+                            "Date": d_str,
+                            "Volume Score": v_sc,
+                            "Intensity Score": i_sc,
+                        }
                     )
 
                 df_score_trend = pd.DataFrame(score_history)
@@ -640,9 +734,11 @@ with active_season:
                 )
                 st.plotly_chart(fig1, use_container_width=True)
 
-        latest_date_str = vol_raw[vol_raw["Player"] == selected_player][
-            "Date_Str"
-        ].max() if not vol_raw.empty else None
+        latest_date_str = (
+            vol_raw[vol_raw["Player"] == selected_player]["Date_Str"].max()
+            if not vol_raw.empty
+            else None
+        )
 
         if pd.notna(latest_date_str):
             vol_df, int_df, vol_score, int_score, mins, wk, dy = (
@@ -653,7 +749,9 @@ with active_season:
             dy_str = str(dy).replace("Day ", "")
 
             with col_g2:
-                st.markdown(f"#### Latest Practice Metrics ({latest_date_str})")
+                st.markdown(
+                    f"#### Latest Practice Metrics ({latest_date_str})"
+                )
                 st.markdown(
                     f"""
                         <div style="margin-bottom: 12px; display: flex; gap: 10px;">
@@ -711,15 +809,25 @@ with active_season:
             unsafe_allow_html=True,
         )
 
-        p_cmj_ind = cmj_raw[cmj_raw["Name"] == selected_player].sort_values("Date").copy() if not cmj_raw.empty else pd.DataFrame()
-        jump_cols_ind = [c for c in p_cmj_ind.columns if "jump" in c.lower() or "height" in c.lower()]
+        p_cmj_ind = (
+            cmj_raw[cmj_raw["Name"] == selected_player].sort_values("Date").copy()
+            if not cmj_raw.empty
+            else pd.DataFrame()
+        )
+        jump_cols_ind = [
+            c
+            for c in p_cmj_ind.columns
+            if "jump" in c.lower() or "height" in c.lower()
+        ]
         j_col_ind = jump_cols_ind[0] if jump_cols_ind else None
         rsi_cols_ind = [c for c in p_cmj_ind.columns if "rsi" in c.lower()]
         rsi_col_ind = rsi_cols_ind[0] if rsi_cols_ind else None
 
         if not p_cmj_ind.empty and j_col_ind:
             p_cmj_ind["Jump_Height_Clean"] = pd.to_numeric(
-                p_cmj_ind[j_col_ind].astype(str).str.replace(r"[^0-9.]", "", regex=True),
+                p_cmj_ind[j_col_ind]
+                .astype(str)
+                .str.replace(r"[^0-9.]", "", regex=True),
                 errors="coerce",
             )
 
@@ -739,7 +847,9 @@ with active_season:
 
             if rsi_col_ind:
                 p_cmj_ind["RSI_Clean"] = pd.to_numeric(
-                    p_cmj_ind[rsi_col_ind].astype(str).str.replace(r"[^0-9.]", "", regex=True),
+                    p_cmj_ind[rsi_col_ind]
+                    .astype(str)
+                    .str.replace(r"[^0-9.]", "", regex=True),
                     errors="coerce",
                 )
                 fig_jump_trend.add_trace(
@@ -800,8 +910,21 @@ with active_season:
             st.plotly_chart(fig_jump_trend, use_container_width=True)
 
             with st.expander(f"View Raw CMJ Data Log for {selected_player}"):
-                display_cols_ind = [c for c in p_cmj_ind.columns if c not in ["Name", "Date_Str", "Jump_Height_Clean", "RSI_Clean"]]
-                st.markdown(render_vball_table(p_cmj_ind[display_cols_ind]), unsafe_allow_html=True)
+                display_cols_ind = [
+                    c
+                    for c in p_cmj_ind.columns
+                    if c
+                    not in [
+                        "Name",
+                        "Date_Str",
+                        "Jump_Height_Clean",
+                        "RSI_Clean",
+                    ]
+                ]
+                st.markdown(
+                    render_vball_table(p_cmj_ind[display_cols_ind]),
+                    unsafe_allow_html=True,
+                )
 
         st.divider()
 
@@ -810,17 +933,33 @@ with active_season:
             unsafe_allow_html=True,
         )
 
-        p_weekly = weekly_raw[weekly_raw["Player"] == selected_player] if not weekly_raw.empty else pd.DataFrame()
+        p_weekly = (
+            weekly_raw[weekly_raw["Player"] == selected_player]
+            if not weekly_raw.empty
+            else pd.DataFrame()
+        )
         t_weekly_avg = (
-            weekly_raw.groupby("Week")
-            .agg({
-                "Distance (mi)": "mean",
-                "Distance (speed | High Speed) (mi)": "mean",
-                "Accumulated Acceleration Load": "mean",
-                "Decels Load": "mean",
-            })
-            .reset_index()
-        ) if not weekly_raw.empty else pd.DataFrame(columns=["Week", "Distance (mi)", "Distance (speed | High Speed) (mi)", "Accumulated Acceleration Load", "Decels Load"])
+            (
+                weekly_raw.groupby("Week")
+                .agg({
+                    "Distance (mi)": "mean",
+                    "Distance (speed | High Speed) (mi)": "mean",
+                    "Accumulated Acceleration Load": "mean",
+                    "Decels Load": "mean",
+                })
+                .reset_index()
+            )
+            if not weekly_raw.empty
+            else pd.DataFrame(
+                columns=[
+                    "Week",
+                    "Distance (mi)",
+                    "Distance (speed | High Speed) (mi)",
+                    "Accumulated Acceleration Load",
+                    "Decels Load",
+                ]
+            )
+        )
 
         all_weeks = t_weekly_avg["Week"].tolist() if not t_weekly_avg.empty else []
 
@@ -875,15 +1014,23 @@ with active_season:
         with c_d:
             available_dates = (
                 vol_raw["Date_Str"].sort_values(ascending=False).unique()
-            ) if not vol_raw.empty else []
+                if not vol_raw.empty
+                else []
+            )
             session_date = st.selectbox("Select Session Date:", available_dates)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
         for player_name in roster_players:
-            p_row = roster_raw[roster_raw["Name"] == player_name] if not roster_raw.empty else pd.DataFrame()
+            p_row = (
+                roster_raw[roster_raw["Name"] == player_name]
+                if not roster_raw.empty
+                else pd.DataFrame()
+            )
             p_pos = (
-                p_row["Position"].values[0] if not p_row.empty else "Guard / Forward"
+                p_row["Position"].values[0]
+                if not p_row.empty
+                else "Guard / Forward"
             )
             p_img = (
                 p_row["Picture"].values[0]
@@ -952,13 +1099,33 @@ with active_season:
             unsafe_allow_html=True,
         )
 
-        selected_player_comp = st.selectbox("Select Athlete Compliance Overview:", roster_players)
+        selected_player_comp = st.selectbox(
+            "Select Athlete Compliance Overview:", roster_players
+        )
 
-        p_row = roster_raw[roster_raw["Name"] == selected_player_comp] if not roster_raw.empty else pd.DataFrame()
-        p_pos = p_row["Position"].values[0] if not p_row.empty else "Guard / Forward | #00"
-        p_img = p_row["Picture"].values[0] if not p_row.empty else "https://via.placeholder.com/60"
+        p_row = (
+            roster_raw[roster_raw["Name"] == selected_player_comp]
+            if not roster_raw.empty
+            else pd.DataFrame()
+        )
+        p_pos = (
+            p_row["Position"].values[0]
+            if not p_row.empty
+            else "Guard / Forward | #00"
+        )
+        p_img = (
+            p_row["Picture"].values[0]
+            if not p_row.empty
+            else "https://via.placeholder.com/60"
+        )
 
-        p_comp = comp_raw[comp_raw["Player"] == selected_player_comp].sort_values("Date") if not comp_raw.empty else pd.DataFrame()
+        p_comp = (
+            comp_raw[comp_raw["Player"] == selected_player_comp].sort_values(
+                "Date"
+            )
+            if not comp_raw.empty
+            else pd.DataFrame()
+        )
 
         st.markdown(
             f"""
@@ -979,8 +1146,12 @@ with active_season:
             for j in range(2):
                 metric_idx = row_idx + j
                 if metric_idx < len(compliance_metrics):
-                    col_name, display_title, unit = compliance_metrics[metric_idx]
-                    subcard_html = render_metric_subcard_html(p_comp, col_name, display_title, unit)
+                    col_name, display_title, unit = compliance_metrics[
+                        metric_idx
+                    ]
+                    subcard_html = render_metric_subcard_html(
+                        p_comp, col_name, display_title, unit
+                    )
                     with cols[j]:
                         st.markdown(subcard_html, unsafe_allow_html=True)
 
@@ -994,22 +1165,37 @@ with active_season:
         )
 
         weekly_agg = (
-            weekly_raw.groupby("Week")
-            .agg({
-                "Distance (mi)": "sum",
-                "Distance (speed | High Speed) (mi)": "sum",
-                "Accumulated Acceleration Load": "sum",
-                "Decels Load": "sum",
-            })
-            .reset_index()
-        ) if not weekly_raw.empty else pd.DataFrame(columns=["Week", "Distance (mi)", "Distance (speed | High Speed) (mi)", "Accumulated Acceleration Load", "Decels Load"])
+            (
+                weekly_raw.groupby("Week")
+                .agg({
+                    "Distance (mi)": "sum",
+                    "Distance (speed | High Speed) (mi)": "sum",
+                    "Accumulated Acceleration Load": "sum",
+                    "Decels Load": "sum",
+                })
+                .reset_index()
+            )
+            if not weekly_raw.empty
+            else pd.DataFrame(
+                columns=[
+                    "Week",
+                    "Distance (mi)",
+                    "Distance (speed | High Speed) (mi)",
+                    "Accumulated Acceleration Load",
+                    "Decels Load",
+                ]
+            )
+        )
 
         weeks = weekly_agg["Week"].tolist() if not weekly_agg.empty else []
 
         w1, w2 = st.columns(2)
         with w1:
             fig_td = create_clean_bar_chart(
-                weeks, weekly_agg.get("Distance (mi)", []), "Total Distance (mi)", "#38BDF8"
+                weeks,
+                weekly_agg.get("Distance (mi)", []),
+                "Total Distance (mi)",
+                "#38BDF8",
             )
             st.plotly_chart(fig_td, use_container_width=True)
 
@@ -1031,7 +1217,10 @@ with active_season:
             st.plotly_chart(fig_hsd, use_container_width=True)
 
             fig_dl = create_clean_bar_chart(
-                weeks, weekly_agg.get("Decels Load", []), "Deceleration Load", "#FF8200"
+                weeks,
+                weekly_agg.get("Decels Load", []),
+                "Deceleration Load",
+                "#FF8200",
             )
             st.plotly_chart(fig_dl, use_container_width=True)
 
@@ -1043,17 +1232,33 @@ with active_season:
         )
         selected_player_w = st.selectbox("Select Athlete:", roster_players)
 
-        p_weekly = weekly_raw[weekly_raw["Player"] == selected_player_w] if not weekly_raw.empty else pd.DataFrame()
+        p_weekly = (
+            weekly_raw[weekly_raw["Player"] == selected_player_w]
+            if not weekly_raw.empty
+            else pd.DataFrame()
+        )
         t_weekly_avg = (
-            weekly_raw.groupby("Week")
-            .agg({
-                "Distance (mi)": "mean",
-                "Distance (speed | High Speed) (mi)": "mean",
-                "Accumulated Acceleration Load": "mean",
-                "Decels Load": "mean",
-            })
-            .reset_index()
-        ) if not weekly_raw.empty else pd.DataFrame(columns=["Week", "Distance (mi)", "Distance (speed | High Speed) (mi)", "Accumulated Acceleration Load", "Decels Load"])
+            (
+                weekly_raw.groupby("Week")
+                .agg({
+                    "Distance (mi)": "mean",
+                    "Distance (speed | High Speed) (mi)": "mean",
+                    "Accumulated Acceleration Load": "mean",
+                    "Decels Load": "mean",
+                })
+                .reset_index()
+            )
+            if not weekly_raw.empty
+            else pd.DataFrame(
+                columns=[
+                    "Week",
+                    "Distance (mi)",
+                    "Distance (speed | High Speed) (mi)",
+                    "Accumulated Acceleration Load",
+                    "Decels Load",
+                ]
+            )
+        )
 
         all_weeks = t_weekly_avg["Week"].tolist() if not t_weekly_avg.empty else []
 
@@ -1104,7 +1309,9 @@ with active_season:
     # TAB 5: TESTING (SUB-TABS FOR CMJ HISTORY & INTAKE TESTING)
     # =========================================================================
     elif main_tab == "Testing":
-        testing_tab_cmj, testing_tab_intake = st.tabs(["CMJ History", "Intake Assessment"])
+        testing_tab_cmj, testing_tab_intake = st.tabs(
+            ["CMJ History", "Intake Assessment"]
+        )
 
         # SUB-TAB 1: CMJ HISTORY
         with testing_tab_cmj:
@@ -1115,25 +1322,43 @@ with active_season:
 
             c_filter, _ = st.columns([1, 2])
             with c_filter:
-                selected_player_t = st.selectbox("Select Athlete:", roster_players, key="cmj_player_select")
+                selected_player_t = st.selectbox(
+                    "Select Athlete:", roster_players, key="cmj_player_select"
+                )
 
-            p_cmj = cmj_raw[cmj_raw["Name"] == selected_player_t].sort_values("Date").copy() if not cmj_raw.empty else pd.DataFrame()
+            p_cmj = (
+                cmj_raw[cmj_raw["Name"] == selected_player_t]
+                .sort_values("Date")
+                .copy()
+                if not cmj_raw.empty
+                else pd.DataFrame()
+            )
 
-            jump_cols = [c for c in p_cmj.columns if "jump" in c.lower() or "height" in c.lower()]
+            jump_cols = [
+                c
+                for c in p_cmj.columns
+                if "jump" in c.lower() or "height" in c.lower()
+            ]
             j_col = jump_cols[0] if jump_cols else None
 
             rsi_cols = [c for c in p_cmj.columns if "rsi" in c.lower()]
             rsi_col = rsi_cols[0] if rsi_cols else None
 
-            display_cols = [c for c in p_cmj.columns if c not in ["Name", "Date_Str"]]
+            display_cols = [
+                c for c in p_cmj.columns if c not in ["Name", "Date_Str"]
+            ]
             st.markdown(f"### Jump History for {selected_player_t}")
-            st.markdown(render_vball_table(p_cmj[display_cols]), unsafe_allow_html=True)
+            st.markdown(
+                render_vball_table(p_cmj[display_cols]), unsafe_allow_html=True
+            )
 
             st.markdown("<br>", unsafe_allow_html=True)
 
             if not p_cmj.empty and j_col:
                 p_cmj["Jump_Height_Clean"] = pd.to_numeric(
-                    p_cmj[j_col].astype(str).str.replace(r"[^0-9.]", "", regex=True),
+                    p_cmj[j_col]
+                    .astype(str)
+                    .str.replace(r"[^0-9.]", "", regex=True),
                     errors="coerce",
                 )
 
@@ -1154,7 +1379,9 @@ with active_season:
 
                 if rsi_col:
                     p_cmj["RSI_Clean"] = pd.to_numeric(
-                        p_cmj[rsi_col].astype(str).str.replace(r"[^0-9.]", "", regex=True),
+                        p_cmj[rsi_col]
+                        .astype(str)
+                        .str.replace(r"[^0-9.]", "", regex=True),
                         errors="coerce",
                     )
                     fig_jump_trend.add_trace(
@@ -1217,20 +1444,60 @@ with active_season:
 
         # SUB-TAB 2: INTAKE ASSESSMENT (ANATOMY MAP + ASSESSMENT DETAILS)
         with testing_tab_intake:
-            st.markdown("<h3 style='color:#1D1D1F; font-weight:900; text-transform:uppercase;'>Athlete Intake Assessment</h3>", unsafe_allow_html=True)
+            st.markdown(
+                "<h3 style='color:#1D1D1F; font-weight:900;"
+                " text-transform:uppercase;'>Athlete Intake Assessment</h3>",
+                unsafe_allow_html=True,
+            )
             c_int_ath, _ = st.columns([2, 2])
             with c_int_ath:
-                selected_intake_athlete = st.selectbox("Select Athlete for Intake Assessment", roster_players, key="intake_ath_select")
+                selected_intake_athlete = st.selectbox(
+                    "Select Athlete for Intake Assessment",
+                    roster_players,
+                    key="intake_ath_select",
+                )
 
-            calf_ath = ankle_raw[ankle_raw['Name'] == selected_intake_athlete].sort_values('Date') if not ankle_raw.empty else pd.DataFrame()
-            hip_ath = hip_raw[hip_raw['Name'] == selected_intake_athlete].sort_values('Date') if not hip_raw.empty else pd.DataFrame()
-            sh_ath = knee_raw[knee_raw['Name'] == selected_intake_athlete].sort_values('Date') if not knee_raw.empty else pd.DataFrame()
-            isoy_ath = nordic_raw[nordic_raw['Name'] == selected_intake_athlete].sort_values('Date') if not nordic_raw.empty else pd.DataFrame()
+            calf_ath = (
+                ankle_raw[ankle_raw["Name"] == selected_intake_athlete].sort_values(
+                    "Date"
+                )
+                if not ankle_raw.empty
+                else pd.DataFrame()
+            )
+            hip_ath = (
+                hip_raw[hip_raw["Name"] == selected_intake_athlete].sort_values(
+                    "Date"
+                )
+                if not hip_raw.empty
+                else pd.DataFrame()
+            )
+            sh_ath = (
+                knee_raw[knee_raw["Name"] == selected_intake_athlete].sort_values(
+                    "Date"
+                )
+                if not knee_raw.empty
+                else pd.DataFrame()
+            )
+            isoy_ath = (
+                nordic_raw[
+                    nordic_raw["Name"] == selected_intake_athlete
+                ].sort_values("Date")
+                if not nordic_raw.empty
+                else pd.DataFrame()
+            )
 
-            has_data = not (calf_ath.empty and hip_ath.empty and sh_ath.empty and isoy_ath.empty)
+            has_data = not (
+                calf_ath.empty
+                and hip_ath.empty
+                and sh_ath.empty
+                and isoy_ath.empty
+            )
 
             if has_data:
-                def render_val_with_arrow(current, initial, fmt="{:.1f}", unit=""):
+
+                def render_val_with_arrow(
+                    current, initial, fmt="{:.1f}", unit=""
+                ):
                     if initial == 0:
                         return f"{fmt.format(current)}{unit}"
                     diff = current - initial
@@ -1241,7 +1508,7 @@ with active_season:
 
                 hud_col1, hud_col2 = st.columns([1.2, 1.8])
 
-                # --- LEFT PANEL: REALISTIC PROPORTIONAL ATHLETIC ANATOMY MAP ---
+                # --- LEFT PANEL: ANATOMY MAP ---
                 with hud_col1:
                     hud_svg_html = """
                     <div style="background:#FFFFFF; border-radius:16px; padding:16px; border:1px solid #E5E5E7; box-shadow:0 4px 12px rgba(0,0,0,0.03);">
@@ -1258,42 +1525,24 @@ with active_season:
                                     </linearGradient>
                                 </defs>
 
-                                <!-- DROP SHADOW AT BASE -->
                                 <ellipse cx="68" cy="214" rx="20" ry="3.5" fill="#000000" opacity="0.12" />
 
-                                <!-- REALISTIC PROPORTIONAL HUMAN MANNEQUIN -->
                                 <g stroke="#2C3036" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
-                                    
-                                    <!-- Head & Neck -->
                                     <ellipse cx="68" cy="17" rx="7" ry="9" fill="url(#anatomicalBodyGrad)" />
                                     <path d="M 65 25 L 63 33 M 71 25 L 73 33" stroke-width="1.2" />
-
-                                    <!-- Shoulders -->
                                     <path d="M 63 33 C 58 33, 48 36, 42 40 C 37 43, 36 50, 39 56 L 43 56 C 47 52, 49 46, 52 44 M 73 33 C 78 33, 88 36, 94 40 C 99 43, 100 50, 97 56 L 93 56 C 89 52, 87 46, 84 44" fill="url(#anatomicalBodyGrad)" />
-
-                                    <!-- Left Arm -->
                                     <path d="M 42 40 C 37 43, 35 52, 33 64 C 31 74, 29 82, 27 92 C 25 96, 23 100, 22 104 C 21 106, 23 107, 25 106 C 27 104, 28 98, 30 92 C 33 82, 36 74, 38 64 C 40 54, 42 48, 43 56 Z" fill="url(#anatomicalBodyGrad)" />
                                     <path d="M 22 104 C 20 106, 18 108, 17 110 M 23 105 C 21 108, 20 110, 19 112 M 24 105 C 23 108, 22 110, 21 112 M 25 104 C 25 107, 24 109, 23 111" fill="none" stroke-width="0.8" />
-                                    
-                                    <!-- Right Arm -->
                                     <path d="M 94 40 C 99 43, 101 52, 103 64 C 105 74, 107 82, 109 92 C 111 96, 113 100, 114 104 C 115 106, 113 107, 111 106 C 109 104, 108 98, 106 92 C 103 82, 100 74, 98 64 C 96 54, 94 48, 93 56 Z" fill="url(#anatomicalBodyGrad)" />
                                     <path d="M 114 104 C 116 106, 118 108, 119 110 M 113 105 C 115 108, 116 110, 117 112 M 112 105 C 113 108, 114 110, 115 112 M 111 104 C 111 107, 112 109, 113 111" fill="none" stroke-width="0.8" />
-
-                                    <!-- Torso & Waist -->
                                     <path d="M 52 44 L 54 75 L 52 92 L 68 106 L 84 92 L 82 75 L 84 44 Z" fill="url(#anatomicalBodyGrad)" />
-
-                                    <!-- Lower Body -->
                                     <path d="M 52 92 C 50 105, 49 122, 53 138 C 55 144, 55 152, 54 162 C 52 175, 52 192, 54 205 L 48 210 L 58 210 L 59 203 C 60 190, 60 175, 60 162 C 60 152, 60 144, 62 138 C 66 122, 66 105, 68 106 Z" fill="url(#anatomicalBodyGrad)" />
                                     <path d="M 84 92 C 86 105, 87 122, 83 138 C 81 144, 81 152, 82 162 C 84 175, 84 192, 82 205 L 88 210 L 78 210 L 77 203 C 76 190, 76 175, 76 162 C 76 152, 76 144, 74 138 C 70 122, 70 105, 68 106 Z" fill="url(#anatomicalBodyGrad)" />
 
-                                    <!-- ORANGE PLUMB LINE -->
                                     <line x1="68" y1="8" x2="68" y2="211" stroke="#FF8200" stroke-width="1.3" />
-
-                                    <!-- RED HORIZONTAL GUIDELINES -->
                                     <line x1="51" y1="116" x2="85" y2="116" stroke="#D32F2F" stroke-width="1.1" />
                                     <line x1="55" y1="168" x2="81" y2="168" stroke="#D32F2F" stroke-width="1.1" />
 
-                                    <!-- ANATOMICAL DEFINITION LINES -->
                                     <g stroke="#3A3F46" stroke-width="0.9" fill="none">
                                         <path d="M 68 35 C 60 34, 52 37, 46 40 M 68 35 C 76 34, 84 37, 90 40" stroke-width="1" />
                                         <path d="M 52 44 C 60 43, 67 47, 68 54 C 60 56, 52 52, 52 44 Z" fill="#E2E7EC" opacity="0.6" />
@@ -1313,32 +1562,26 @@ with active_season:
                                     </g>
                                 </g>
 
-                                <!-- NODES & CORRECT ANATOMICAL CALLOUT TARGETS -->
-                                <!-- Node 1: Knee Extension / Flexion (Targeting Knee Joint / Patella) -->
                                 <circle cx="57" cy="140" r="3.5" fill="#FF8200" stroke="#FFFFFF" stroke-width="1" />
                                 <line x1="57" y1="140" x2="22" y2="140" stroke="#FF8200" stroke-width="1.8" stroke-dasharray="2,2" />
                                 <rect x="14" y="133" width="14" height="14" rx="3" fill="#FF8200" />
                                 <text x="21" y="144" font-size="9" font-weight="900" fill="#FFFFFF" text-anchor="middle">1</text>
 
-                                <!-- Node 2: Nordic Hamstring (Targeting Posterior Thigh) -->
                                 <circle cx="58" cy="115" r="3.5" fill="#FF8200" stroke="#FFFFFF" stroke-width="1" />
                                 <line x1="58" y1="115" x2="118" y2="115" stroke="#FF8200" stroke-width="1.8" stroke-dasharray="2,2" />
                                 <rect x="112" y="108" width="14" height="14" rx="3" fill="#FF8200" />
                                 <text x="119" y="119" font-size="9" font-weight="900" fill="#FFFFFF" text-anchor="middle">2</text>
 
-                                <!-- Node 3: Hip Adduction (Targeting Inner Thigh / Groin) -->
                                 <circle cx="64" cy="112" r="3.5" fill="#4895DB" stroke="#FFFFFF" stroke-width="1" />
                                 <line x1="64" y1="112" x2="118" y2="92" stroke="#4895DB" stroke-width="1.8" stroke-dasharray="2,2" />
                                 <rect x="112" y="85" width="14" height="14" rx="3" fill="#4895DB" />
                                 <text x="119" y="96" font-size="9" font-weight="900" fill="#FFFFFF" text-anchor="middle">3</text>
 
-                                <!-- Node 4: Hip Abduction (Targeting Outer Hip / Glute Medius) -->
                                 <circle cx="49" cy="98" r="3.5" fill="#4895DB" stroke="#FFFFFF" stroke-width="1" />
                                 <line x1="49" y1="98" x2="22" y2="98" stroke="#4895DB" stroke-width="1.8" stroke-dasharray="2,2" />
                                 <rect x="14" y="91" width="14" height="14" rx="3" fill="#4895DB" />
                                 <text x="21" y="102" font-size="9" font-weight="900" fill="#FFFFFF" text-anchor="middle">4</text>
 
-                                <!-- Node 5: Single Leg Calf Raise (Targeting Lower Calf / Achilles) -->
                                 <circle cx="56" cy="175" r="3.5" fill="#4895DB" stroke="#FFFFFF" stroke-width="1" />
                                 <line x1="56" y1="175" x2="118" y2="175" stroke="#4895DB" stroke-width="1.8" stroke-dasharray="2,2" />
                                 <rect x="112" y="168" width="14" height="14" rx="3" fill="#4895DB" />
@@ -1349,7 +1592,7 @@ with active_season:
                     """
                     components.html(hud_svg_html, height=450)
 
-                # --- RIGHT PANEL: LIGHT DETAILS CARDS ---
+                # --- RIGHT PANEL: DETAILS CARDS ---
                 with hud_col2:
                     st.markdown(
                         """
@@ -1428,22 +1671,69 @@ with active_season:
 
                     # NODE 1: KNEE EXTENSION & FLEXION
                     if not sh_ath.empty:
-                        knee_ext = sh_ath[sh_ath['TestDirection'].str.contains('Extension', case=False, na=False)] if 'TestDirection' in sh_ath.columns else sh_ath
-                        knee_flx = sh_ath[sh_ath['TestDirection'].str.contains('Flexion', case=False, na=False)] if 'TestDirection' in sh_ath.columns else sh_ath
+                        knee_ext = (
+                            sh_ath[
+                                sh_ath["TestDirection"].str.contains(
+                                    "Extension", case=False, na=False
+                                )
+                            ]
+                            if "TestDirection" in sh_ath.columns
+                            else sh_ath
+                        )
+                        knee_flx = (
+                            sh_ath[
+                                sh_ath["TestDirection"].str.contains(
+                                    "Flexion", case=False, na=False
+                                )
+                            ]
+                            if "TestDirection" in sh_ath.columns
+                            else sh_ath
+                        )
 
-                        ke_b = knee_ext.iloc[0] if not knee_ext.empty else pd.Series()
-                        ke_l = knee_ext.iloc[-1] if not knee_ext.empty else pd.Series()
-                        kf_b = knee_flx.iloc[0] if not knee_flx.empty else pd.Series()
-                        kf_l = knee_flx.iloc[-1] if not knee_flx.empty else pd.Series()
+                        ke_b = (
+                            knee_ext.iloc[0]
+                            if not knee_ext.empty
+                            else pd.Series()
+                        )
+                        ke_l = (
+                            knee_ext.iloc[-1]
+                            if not knee_ext.empty
+                            else pd.Series()
+                        )
+                        kf_b = (
+                            knee_flx.iloc[0]
+                            if not knee_flx.empty
+                            else pd.Series()
+                        )
+                        kf_l = (
+                            knee_flx.iloc[-1]
+                            if not knee_flx.empty
+                            else pd.Series()
+                        )
 
-                        ke_bL, ke_bR = ke_b.get('L Max Force (N)', 0.0), ke_b.get('R Max Force (N)', 0.0)
-                        ke_lL, ke_lR = ke_l.get('L Max Force (N)', 0.0), ke_l.get('R Max Force (N)', 0.0)
-                        kf_bL, kf_bR = kf_b.get('L Max Force (N)', 0.0), kf_b.get('R Max Force (N)', 0.0)
-                        kf_lL, kf_lR = kf_l.get('L Max Force (N)', 0.0), kf_l.get('R Max Force (N)', 0.0)
+                        ke_bL, ke_bR = ke_b.get(
+                            "L Max Force (N)", 0.0
+                        ), ke_b.get("R Max Force (N)", 0.0)
+                        ke_lL, ke_lR = ke_l.get(
+                            "L Max Force (N)", 0.0
+                        ), ke_l.get("R Max Force (N)", 0.0)
+                        kf_bL, kf_bR = kf_b.get(
+                            "L Max Force (N)", 0.0
+                        ), kf_b.get("R Max Force (N)", 0.0)
+                        kf_lL, kf_lR = kf_l.get(
+                            "L Max Force (N)", 0.0
+                        ), kf_l.get("R Max Force (N)", 0.0)
 
-                        latest_date_str = ke_l.get('Date', pd.Timestamp.now()).strftime('%m/%d/%Y') if pd.notna(ke_l.get('Date')) else "N/A"
+                        latest_date_str = (
+                            ke_l.get("Date", pd.Timestamp.now()).strftime(
+                                "%m/%d/%Y"
+                            )
+                            if pd.notna(ke_l.get("Date"))
+                            else "N/A"
+                        )
 
-                        st.markdown(f"""
+                        st.markdown(
+                            f"""
                             <div class="hud-metric-row-light">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                                     <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-orange">1</span>KNEE EXTENSION & FLEXION</span>
@@ -1454,48 +1744,77 @@ with active_season:
                                     <b>Flexion:</b> Initial L {kf_bL:.1f}N | R {kf_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(kf_lL, kf_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(kf_lR, kf_bR, '{:.1f}', 'N')}
                                 </div>
                             </div>
-                        """, unsafe_allow_html=True)
+                        """,
+                            unsafe_allow_html=True,
+                        )
 
-                    # NODE 2: NORDIC HAMSTRING & ISO VARIATIONS (EXACT COLUMN: 'Test')
+                    # NODE 2: NORDIC HAMSTRING & ISO VARIATIONS
                     if not isoy_ath.empty:
                         metrics_rows_html = ""
                         latest_dates = []
 
-                        test_col = next((c for c in isoy_ath.columns if c.lower() == 'test'), None)
+                        test_col = next(
+                            (c for c in isoy_ath.columns if c.lower() == "test"),
+                            None,
+                        )
 
                         if test_col:
                             unique_tests = isoy_ath[test_col].dropna().unique()
 
                             for test_name in unique_tests:
-                                df_test = isoy_ath[isoy_ath[test_col] == test_name].sort_values('Date')
+                                df_test = isoy_ath[
+                                    isoy_ath[test_col] == test_name
+                                ].sort_values("Date")
                                 if not df_test.empty:
-                                    b_row, l_row = df_test.iloc[0], df_test.iloc[-1]
-                                    bL, bR = b_row.get('L Max Force (N)', 0.0), b_row.get('R Max Force (N)', 0.0)
-                                    lL, lR = l_row.get('L Max Force (N)', 0.0), l_row.get('R Max Force (N)', 0.0)
+                                    b_row, l_row = (
+                                        df_test.iloc[0],
+                                        df_test.iloc[-1],
+                                    )
+                                    bL, bR = b_row.get(
+                                        "L Max Force (N)", 0.0
+                                    ), b_row.get("R Max Force (N)", 0.0)
+                                    lL, lR = l_row.get(
+                                        "L Max Force (N)", 0.0
+                                    ), l_row.get("R Max Force (N)", 0.0)
 
-                                    if pd.notna(l_row.get('Date')):
-                                        latest_dates.append(l_row['Date'])
+                                    if pd.notna(l_row.get("Date")):
+                                        latest_dates.append(l_row["Date"])
 
                                     metrics_rows_html += (
-                                        f"<b>{test_name}:</b> Initial L {bL:.1f}N | R {bR:.1f}N &nbsp;→&nbsp; "
-                                        f"<b>Latest:</b> L {render_val_with_arrow(lL, bL, '{:.1f}', 'N')} | "
-                                        f"R {render_val_with_arrow(lR, bR, '{:.1f}', 'N')}<br>"
+                                        f"<b>{test_name}:</b> Initial L"
+                                        f" {bL:.1f}N | R {bR:.1f}N"
+                                        " &nbsp;→&nbsp; <b>Latest:</b> L"
+                                        f" {render_val_with_arrow(lL, bL, '{:.1f}', 'N')}"
+                                        " | R"
+                                        f" {render_val_with_arrow(lR, bR, '{:.1f}', 'N')}<br>"
                                     )
                         else:
                             b_n, l_n = isoy_ath.iloc[0], isoy_ath.iloc[-1]
-                            bnL, bnR = b_n.get('L Max Force (N)', 0.0), b_n.get('R Max Force (N)', 0.0)
-                            lnL, lnR = l_n.get('L Max Force (N)', 0.0), l_n.get('R Max Force (N)', 0.0)
-                            if pd.notna(l_n.get('Date')):
-                                latest_dates.append(l_n['Date'])
+                            bnL, bnR = b_n.get(
+                                "L Max Force (N)", 0.0
+                            ), b_n.get("R Max Force (N)", 0.0)
+                            lnL, lnR = l_n.get(
+                                "L Max Force (N)", 0.0
+                            ), l_n.get("R Max Force (N)", 0.0)
+                            if pd.notna(l_n.get("Date")):
+                                latest_dates.append(l_n["Date"])
                             metrics_rows_html = (
-                                f"<b>Hamstring Test:</b> Initial L {bnL:.1f}N | R {bnR:.1f}N &nbsp;→&nbsp; "
-                                f"<b>Latest:</b> L {render_val_with_arrow(lnL, bnL, '{:.1f}', 'N')} | "
-                                f"R {render_val_with_arrow(lnR, bnR, '{:.1f}', 'N')}"
+                                "<b>Hamstring Test:</b> Initial L"
+                                f" {bnL:.1f}N | R {bnR:.1f}N &nbsp;→&nbsp;"
+                                " <b>Latest:</b> L"
+                                f" {render_val_with_arrow(lnL, bnL, '{:.1f}', 'N')}"
+                                " | R"
+                                f" {render_val_with_arrow(lnR, bnR, '{:.1f}', 'N')}"
                             )
 
-                        latest_date_str = max(latest_dates).strftime('%m/%d/%Y') if latest_dates else "N/A"
+                        latest_date_str = (
+                            max(latest_dates).strftime("%m/%d/%Y")
+                            if latest_dates
+                            else "N/A"
+                        )
 
-                        st.markdown(f"""
+                        st.markdown(
+                            f"""
                             <div class="hud-metric-row-light">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                                     <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-orange">2</span>HAMSTRING & ISO STRENGTH TESTS</span>
@@ -1505,20 +1824,47 @@ with active_season:
                                     {metrics_rows_html}
                                 </div>
                             </div>
-                        """, unsafe_allow_html=True)
+                        """,
+                            unsafe_allow_html=True,
+                        )
 
                     # NODE 3 & 4: HIP AD/AB
                     if not hip_ath.empty:
-                        hip_ad = hip_ath[hip_ath['TestDirection'].str.contains('AD|Adduction', case=False, na=False)] if 'TestDirection' in hip_ath.columns else hip_ath
-                        hip_ab = hip_ath[hip_ath['TestDirection'].str.contains('AB|Abduction', case=False, na=False)] if 'TestDirection' in hip_ath.columns else hip_ath
+                        hip_ad = (
+                            hip_ath[
+                                hip_ath["TestDirection"].str.contains(
+                                    "AD|Adduction", case=False, na=False
+                                )
+                            ]
+                            if "TestDirection" in hip_ath.columns
+                            else hip_ath
+                        )
+                        hip_ab = (
+                            hip_ath[
+                                hip_ath["TestDirection"].str.contains(
+                                    "AB|Abduction", case=False, na=False
+                                )
+                            ]
+                            if "TestDirection" in hip_ath.columns
+                            else hip_ath
+                        )
 
                         if not hip_ad.empty:
                             ad_b, ad_l = hip_ad.iloc[0], hip_ad.iloc[-1]
-                            ad_bL, ad_bR = ad_b.get('L Max Force (N)', 0.0), ad_b.get('R Max Force (N)', 0.0)
-                            ad_lL, ad_lR = ad_l.get('L Max Force (N)', 0.0), ad_l.get('R Max Force (N)', 0.0)
-                            date_str = ad_l['Date'].strftime('%m/%d/%Y') if pd.notna(ad_l.get('Date')) else "N/A"
+                            ad_bL, ad_bR = ad_b.get(
+                                "L Max Force (N)", 0.0
+                            ), ad_b.get("R Max Force (N)", 0.0)
+                            ad_lL, ad_lR = ad_l.get(
+                                "L Max Force (N)", 0.0
+                            ), ad_l.get("R Max Force (N)", 0.0)
+                            date_str = (
+                                ad_l["Date"].strftime("%m/%d/%Y")
+                                if pd.notna(ad_l.get("Date"))
+                                else "N/A"
+                            )
 
-                            st.markdown(f"""
+                            st.markdown(
+                                f"""
                                 <div class="hud-metric-row-light-blue">
                                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                                         <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">3</span>HIP ADDUCTION (AD)</span>
@@ -1528,15 +1874,26 @@ with active_season:
                                         <b>Initial Force:</b> L {ad_bL:.1f}N | R {ad_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(ad_lL, ad_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(ad_lR, ad_bR, '{:.1f}', 'N')}
                                     </div>
                                 </div>
-                            """, unsafe_allow_html=True)
+                            """,
+                                unsafe_allow_html=True,
+                            )
 
                         if not hip_ab.empty:
                             ab_b, ab_l = hip_ab.iloc[0], hip_ab.iloc[-1]
-                            ab_bL, ab_bR = ab_b.get('L Max Force (N)', 0.0), ab_b.get('R Max Force (N)', 0.0)
-                            ab_lL, ab_lR = ab_l.get('L Max Force (N)', 0.0), ab_l.get('R Max Force (N)', 0.0)
-                            date_str = ab_l['Date'].strftime('%m/%d/%Y') if pd.notna(ab_l.get('Date')) else "N/A"
+                            ab_bL, ab_bR = ab_b.get(
+                                "L Max Force (N)", 0.0
+                            ), ab_b.get("R Max Force (N)", 0.0)
+                            ab_lL, ab_lR = ab_l.get(
+                                "L Max Force (N)", 0.0
+                            ), ab_l.get("R Max Force (N)", 0.0)
+                            date_str = (
+                                ab_l["Date"].strftime("%m/%d/%Y")
+                                if pd.notna(ab_l.get("Date"))
+                                else "N/A"
+                            )
 
-                            st.markdown(f"""
+                            st.markdown(
+                                f"""
                                 <div class="hud-metric-row-light-blue">
                                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                                         <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">4</span>HIP ABDUCTION (AB)</span>
@@ -1546,16 +1903,27 @@ with active_season:
                                         <b>Initial Force:</b> L {ab_bL:.1f}N | R {ab_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(ab_lL, ab_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(ab_lR, ab_bR, '{:.1f}', 'N')}
                                     </div>
                                 </div>
-                            """, unsafe_allow_html=True)
+                            """,
+                                unsafe_allow_html=True,
+                            )
 
                     # NODE 5: ANKLE PLANTAR FLEXION
                     if not calf_ath.empty:
                         b_a, l_a = calf_ath.iloc[0], calf_ath.iloc[-1]
-                        baL, baR = b_a.get('L Max Force (N)', 0.0), b_a.get('R Max Force (N)', 0.0)
-                        laL, laR = l_a.get('L Max Force (N)', 0.0), l_a.get('R Max Force (N)', 0.0)
-                        date_str = l_a['Date'].strftime('%m/%d/%Y') if pd.notna(l_a.get('Date')) else "N/A"
+                        baL, baR = b_a.get(
+                            "L Max Force (N)", 0.0
+                        ), b_a.get("R Max Force (N)", 0.0)
+                        laL, laR = l_a.get(
+                            "L Max Force (N)", 0.0
+                        ), l_a.get("R Max Force (N)", 0.0)
+                        date_str = (
+                            l_a["Date"].strftime("%m/%d/%Y")
+                            if pd.notna(l_a.get("Date"))
+                            else "N/A"
+                        )
 
-                        st.markdown(f"""
+                        st.markdown(
+                            f"""
                             <div class="hud-metric-row-light-blue">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                                     <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">5</span>ANKLE PLANTAR FLEXION</span>
@@ -1565,29 +1933,37 @@ with active_season:
                                     <b>Initial Force:</b> L {baL:.1f}N | R {baR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(laL, baL, '{:.1f}', 'N')} | R {render_val_with_arrow(laR, baR, '{:.1f}', 'N')}
                                 </div>
                             </div>
-                        """, unsafe_allow_html=True)
+                        """,
+                            unsafe_allow_html=True,
+                        )
 
-                    st.markdown('</div>', unsafe_allow_html=True)
+                    st.markdown("</div>", unsafe_allow_html=True)
 
             else:
-                st.info(f"No Intake Assessment records found for {selected_intake_athlete}.")
+                st.info(
+                    f"No Intake Assessment records found for {selected_intake_athlete}."
+                )
 
     # =========================================================================
-    # TAB 6: RECOVERY (2-PERSON GRID WITH PERSISTENT REFRESH CHECKBOXES)
+    # TAB 6: RECOVERY (2-PERSON GRID WITH FULLY PERSISTENT REFRESH CHECKBOXES)
     # =========================================================================
     elif main_tab == "Recovery":
-        rec_tab_tracker, rec_tab_summary = st.tabs(["Live Recovery Tracker", "Team Recovery Summary"])
+        rec_tab_tracker, rec_tab_summary = st.tabs(
+            ["Live Recovery Tracker", "Team Recovery Summary"]
+        )
 
         local_now = get_eastern_now()
         today = local_now.date()
         current_monday = today - datetime.timedelta(days=today.weekday())
 
-        # ALWAYS fetch fresh Google Sheet data on page load/refresh
+        # Pull fresh Logs dataframe from Google Sheets
         live_rec_df = fetch_live_recovery_sheet()
         st.session_state.recovery_logs_df = live_rec_df
 
-        # Helper callback function to fire POST payload to Google Apps Script
-        def handle_recovery_check_change(ath_name, stn_label, key_name, wk_s, dy_s):
+        # Callback function firing POST webhook and directly mutating Session State
+        def handle_recovery_check_change(
+            ath_name, stn_label, key_name, wk_s, dy_s
+        ):
             is_checked = st.session_state[key_name]
             action_val = "add" if is_checked else "remove"
             time_val = get_eastern_time_str() if is_checked else ""
@@ -1595,38 +1971,59 @@ with active_season:
             payload = {
                 "Week_Starting": str(wk_s).strip(),
                 "Athlete": str(ath_name).strip(),
+                "Lift_Group": "",
                 "Station": str(stn_label).strip(),
                 "Day": str(dy_s).strip(),
                 "Timestamp": time_val,
                 "Action": action_val,
             }
 
-            # Update local session state dataframe immediately for snappy UI feel
+            # Immediate local state mutation for snappy UI response
             df_curr = st.session_state.recovery_logs_df
             if is_checked:
-                new_entry = pd.DataFrame([{
-                    "Week_Starting": str(wk_s).strip(),
-                    "Athlete": str(ath_name).strip(),
-                    "Lift_Group": "",
-                    "Station": str(stn_label).strip(),
-                    "Day": str(dy_s).strip(),
-                    "Timestamp": time_val,
-                }])
-                st.session_state.recovery_logs_df = pd.concat([df_curr, new_entry], ignore_index=True)
+                new_entry = pd.DataFrame([
+                    {
+                        "Week_Starting": str(wk_s).strip(),
+                        "Athlete": str(ath_name).strip(),
+                        "Lift_Group": "",
+                        "Station": str(stn_label).strip(),
+                        "Day": str(dy_s).strip(),
+                        "Timestamp": time_val,
+                    }
+                ])
+                st.session_state.recovery_logs_df = pd.concat(
+                    [df_curr, new_entry], ignore_index=True
+                )
             else:
                 st.session_state.recovery_logs_df = df_curr[
                     ~(
-                        (df_curr["Week_Starting"].astype(str).str.strip() == str(wk_s).strip())
-                        & (df_curr["Athlete"].astype(str).str.strip() == str(ath_name).strip())
-                        & (df_curr["Station"].astype(str).str.strip() == str(stn_label).strip())
-                        & (df_curr["Day"].astype(str).str.strip() == str(dy_s).strip())
+                        (
+                            df_curr["Week_Starting"].astype(str).str.strip()
+                            == str(wk_s).strip()
+                        )
+                        & (
+                            df_curr["Athlete"].astype(str).str.strip()
+                            == str(ath_name).strip()
+                        )
+                        & (
+                            df_curr["Station"].astype(str).str.strip()
+                            == str(stn_label).strip()
+                        )
+                        & (
+                            df_curr["Day"].astype(str).str.strip()
+                            == str(dy_s).strip()
+                        )
                     )
                 ]
 
             try:
-                macro_url = st.secrets.get("MACRO_URL") or st.secrets.get("Live Track") or st.secrets.get("sheets", {}).get("live_track_url")
+                macro_url = (
+                    st.secrets.get("MACRO_URL")
+                    or st.secrets.get("Live Track")
+                    or st.secrets.get("sheets", {}).get("live_track_url")
+                )
                 if macro_url:
-                    requests.post(macro_url, json=payload, timeout=4)
+                    requests.post(macro_url, json=payload, timeout=5)
             except Exception as ex:
                 print(f"Recovery webhook POST failed: {ex}")
 
@@ -1639,33 +2036,63 @@ with active_season:
 
             c_rec1, c_rec2 = st.columns(2)
             with c_rec1:
-                selected_rec_monday = st.date_input("Select Week Starting (Monday):", value=current_monday, key="rec_week_picker")
+                selected_rec_monday = st.date_input(
+                    "Select Week Starting (Monday):",
+                    value=current_monday,
+                    key="rec_week_picker",
+                )
                 if selected_rec_monday.weekday() != 0:
-                    selected_rec_monday = selected_rec_monday - datetime.timedelta(days=selected_rec_monday.weekday())
+                    selected_rec_monday = (
+                        selected_rec_monday
+                        - datetime.timedelta(days=selected_rec_monday.weekday())
+                    )
                 week_str = selected_rec_monday.strftime("%Y-%m-%d")
 
             with c_rec2:
                 days_options = [
-                    (selected_rec_monday + datetime.timedelta(days=i)).strftime("%A (%m/%d)")
+                    (selected_rec_monday + datetime.timedelta(days=i)).strftime(
+                        "%A (%m/%d)"
+                    )
                     for i in range(7)
                 ]
                 current_day_str = local_now.strftime("%A (%m/%d)")
-                default_idx = days_options.index(current_day_str) if current_day_str in days_options else 0
-                selected_rec_day = st.selectbox("Select Day:", days_options, index=default_idx, key="rec_day_picker")
+                default_idx = (
+                    days_options.index(current_day_str)
+                    if current_day_str in days_options
+                    else 0
+                )
+                selected_rec_day = st.selectbox(
+                    "Select Day:",
+                    days_options,
+                    index=default_idx,
+                    key="rec_day_picker",
+                )
 
             st.markdown("<br>", unsafe_allow_html=True)
 
             stations = [f"Recovery {i}" for i in range(1, 7)]
 
-            # Loop through roster in 2-person grid format
+            # Render 2-person grid layout
             for i in range(0, len(roster_players), 2):
                 grid_cols = st.columns(2)
                 for j in range(2):
                     if i + j < len(roster_players):
                         player = roster_players[i + j]
-                        p_row = roster_raw[roster_raw["Name"] == player] if not roster_raw.empty else pd.DataFrame()
-                        p_pos = p_row["Position"].values[0] if not p_row.empty else "Athlete"
-                        p_img = p_row["Picture"].values[0] if not p_row.empty else "https://via.placeholder.com/70"
+                        p_row = (
+                            roster_raw[roster_raw["Name"] == player]
+                            if not roster_raw.empty
+                            else pd.DataFrame()
+                        )
+                        p_pos = (
+                            p_row["Position"].values[0]
+                            if not p_row.empty
+                            else "Athlete"
+                        )
+                        p_img = (
+                            p_row["Picture"].values[0]
+                            if not p_row.empty
+                            else "https://via.placeholder.com/70"
+                        )
 
                         with grid_cols[j]:
                             st.markdown(
@@ -1683,33 +2110,62 @@ with active_season:
                                 unsafe_allow_html=True,
                             )
 
-                            # 6 Checkboxes for stations underneath
+                            # 6 Checkboxes for stations
                             chk_cols = st.columns(3)
                             for s_idx, station_label in enumerate(stations):
-                                # Determine saved state directly from fresh Google Sheet DataFrame
+                                # Determine matching state directly from fresh Google Sheet DataFrame
                                 is_checked = False
-                                if not live_rec_df.empty and {"Week_Starting", "Athlete", "Station", "Day"}.issubset(live_rec_df.columns):
+                                if not live_rec_df.empty and {
+                                    "Week_Starting",
+                                    "Athlete",
+                                    "Station",
+                                    "Day",
+                                }.issubset(live_rec_df.columns):
                                     matched = live_rec_df[
-                                        (live_rec_df["Week_Starting"].astype(str).str.strip() == str(week_str).strip()) &
-                                        (live_rec_df["Athlete"].astype(str).str.strip() == str(player).strip()) &
-                                        (live_rec_df["Station"].astype(str).str.strip() == str(station_label).strip()) &
-                                        (live_rec_df["Day"].astype(str).str.strip() == str(selected_rec_day).strip())
+                                        (
+                                            live_rec_df["Week_Starting"]
+                                            .astype(str)
+                                            .str.strip()
+                                            == str(week_str).strip()
+                                        )
+                                        & (
+                                            live_rec_df["Athlete"]
+                                            .astype(str)
+                                            .str.strip()
+                                            == str(player).strip()
+                                        )
+                                        & (
+                                            live_rec_df["Station"]
+                                            .astype(str)
+                                            .str.strip()
+                                            == str(station_label).strip()
+                                        )
+                                        & (
+                                            live_rec_df["Day"]
+                                            .astype(str)
+                                            .str.strip()
+                                            == str(selected_rec_day).strip()
+                                        )
                                     ]
                                     is_checked = not matched.empty
 
                                 cb_key = f"rec_cb_{player.replace(' ', '_').replace(',', '')}_{station_label.replace(' ', '_')}_{week_str}_{selected_rec_day.replace(' ', '_')}"
-                                
-                                # Set session_state key prior to rendering checkbox to ensure persistence
-                                if cb_key not in st.session_state:
-                                    st.session_state[cb_key] = is_checked
+
+                                # Ensure session state is synchronized to fresh sheet data prior to checkbox initialization
+                                st.session_state[cb_key] = is_checked
 
                                 with chk_cols[s_idx % 3]:
                                     st.checkbox(
                                         f"{station_label}",
-                                        value=st.session_state[cb_key],
                                         key=cb_key,
                                         on_change=handle_recovery_check_change,
-                                        args=(player, station_label, cb_key, week_str, selected_rec_day),
+                                        args=(
+                                            player,
+                                            station_label,
+                                            cb_key,
+                                            week_str,
+                                            selected_rec_day,
+                                        ),
                                     )
                             st.markdown("<br>", unsafe_allow_html=True)
 
@@ -1725,10 +2181,23 @@ with active_season:
                 with s1:
                     st.metric("Total Stations Completed", len(live_rec_df))
                 with s2:
-                    st.metric("Active Athletes Logged", live_rec_df["Athlete"].nunique() if "Athlete" in live_rec_df.columns else 0)
+                    st.metric(
+                        "Active Athletes Logged",
+                        (
+                            live_rec_df["Athlete"].nunique()
+                            if "Athlete" in live_rec_df.columns
+                            else 0
+                        ),
+                    )
                 with s3:
-                    station_counts = live_rec_df["Station"].dropna().value_counts()
-                    top_station = station_counts.idxmax() if not station_counts.empty else "N/A"
+                    station_counts = (
+                        live_rec_df["Station"].dropna().value_counts()
+                    )
+                    top_station = (
+                        station_counts.idxmax()
+                        if not station_counts.empty
+                        else "N/A"
+                    )
                     st.metric("Most Popular Station", f"{top_station}")
 
                 st.markdown("<br>", unsafe_allow_html=True)
@@ -1737,9 +2206,16 @@ with active_season:
 
                 with col_sum1:
                     st.markdown("#### Completions by Station")
-                    station_counts_df = live_rec_df["Station"].dropna().value_counts().reset_index()
+                    station_counts_df = (
+                        live_rec_df["Station"]
+                        .dropna()
+                        .value_counts()
+                        .reset_index()
+                    )
                     station_counts_df.columns = ["Station", "Count"]
-                    station_counts_df["Station"] = station_counts_df["Station"].astype(str)
+                    station_counts_df["Station"] = station_counts_df[
+                        "Station"
+                    ].astype(str)
 
                     fig_rec_bar = px.bar(
                         station_counts_df,
@@ -1747,13 +2223,13 @@ with active_season:
                         y="Count",
                         color="Station",
                         color_discrete_sequence=px.colors.qualitative.Bold,
-                        text="Count"
+                        text="Count",
                     )
                     fig_rec_bar.update_layout(
-                        showlegend=False, 
-                        height=320, 
-                        plot_bgcolor="rgba(0,0,0,0)", 
-                        paper_bgcolor="rgba(0,0,0,0)"
+                        showlegend=False,
+                        height=320,
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        paper_bgcolor="rgba(0,0,0,0)",
                     )
                     st.plotly_chart(fig_rec_bar, use_container_width=True)
 
@@ -1767,7 +2243,7 @@ with active_season:
                             columns="Station",
                             values="Value",
                             aggfunc="sum",
-                            fill_value=0
+                            fill_value=0,
                         )
                         st.dataframe(pivot_summary, use_container_width=True)
 
