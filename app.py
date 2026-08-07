@@ -244,9 +244,14 @@ def fetch_live_recovery_sheet():
         )
         with urllib.request.urlopen(req, timeout=8) as response:
             content = response.read().decode("utf-8")
-            df = pd.read_csv(io.StringIO(content))
+            df = pd.read_csv(io.StringIO(content), keep_default_na=False)
 
+        # Handle 6-column format where Lift_Group might be empty
         if not df.empty:
+            # If the CSV came back with 6 columns
+            if len(df.columns) == 6:
+                df.columns = ["Week_Starting", "Athlete", "Lift_Group", "Station", "Day", "Timestamp"]
+            # Clean string values
             for col in ["Week_Starting", "Athlete", "Station", "Day"]:
                 if col in df.columns:
                     df[col] = df[col].astype(str).str.strip()
