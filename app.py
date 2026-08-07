@@ -1,15 +1,23 @@
-import json
-import requests
+import io
+import urllib.request
+import numpy as np
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
+import streamlit.components.v1 as components
+import requests
 
+# -----------------------------------------------------------------------------
+# GOOGLE SHEETS REAL-TIME CHECKBOX SYNC
+# -----------------------------------------------------------------------------
 TARGET_GID = "1922017148"
 
 def sync_recovery_checkbox(athlete, station, is_checked, week_starting, day_selected):
     sheet_url = st.secrets.get("Live Track") or st.secrets.get("sheets", {}).get("live_track_url")
     
     if not sheet_url:
-        st.error("Sync Error: live_track_url missing in st.secrets")
+        st.error("Sync Error: URL missing in st.secrets")
         return False
 
     payload = {
@@ -22,13 +30,13 @@ def sync_recovery_checkbox(athlete, station, is_checked, week_starting, day_sele
     }
 
     try:
-        # Use data=json.dumps() with explicit headers to ensure payload survives Google's 302 redirects
+        # POST with redirect handling for Google Apps Script
         response = requests.post(
             sheet_url,
-            data=json.dumps(payload),
-            headers={"Content-Type": "text/plain;charset=utf-8"},
+            json=payload,
+            headers={"Content-Type": "application/json"},
             allow_redirects=True,
-            timeout=10
+            timeout=8
         )
         st.cache_data.clear()
         return response.status_code in [200, 302]
@@ -43,7 +51,7 @@ def fetch_live_recovery_sheet():
         return pd.DataFrame()
     try:
         url = f"{sheet_url}?gid={TARGET_GID}" if "?" not in sheet_url else f"{sheet_url}&gid={TARGET_GID}"
-        response = requests.get(url, allow_redirects=True, timeout=10)
+        response = requests.get(url, allow_redirects=True, timeout=8)
         if response.status_code == 200:
             data = response.json()
             if isinstance(data, list) and len(data) > 0:
