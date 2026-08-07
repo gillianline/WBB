@@ -1059,26 +1059,31 @@ with active_season:
 
         ind_records = []
 
-        # Helper to safely pull peak force across L/R columns
-        def get_max_force_row(df_sub):
+        # Helper to extract peak row and separate L/R forces
+        def get_assessment_forces(df_sub):
             if df_sub.empty:
-                return None
+                return None, None, None
+            
             l_col = next((c for c in df_sub.columns if "l max force" in c.lower() or "left max" in c.lower()), None)
             r_col = next((c for c in df_sub.columns if "r max force" in c.lower() or "right max" in c.lower()), None)
             
             if l_col and r_col:
                 df_sub["Peak_Val"] = df_sub[[l_col, r_col]].apply(pd.to_numeric, errors="coerce").max(axis=1)
-            elif l_col:
-                df_sub["Peak_Val"] = pd.to_numeric(df_sub[l_col], errors="coerce")
-            elif r_col:
-                df_sub["Peak_Val"] = pd.to_numeric(df_sub[r_col], errors="coerce")
-            else:
-                return None
+                valid_rows = df_sub.dropna(subset=["Peak_Val"])
+                if valid_rows.empty:
+                    return None, None, None
                 
-            valid_rows = df_sub.dropna(subset=["Peak_Val"])
-            if valid_rows.empty:
-                return None
-            return valid_rows.sort_values("Peak_Val", ascending=False).iloc[0]
+                best_row = valid_rows.sort_values("Peak_Val", ascending=False).iloc[0]
+                l_val = pd.to_numeric(best_row[l_col], errors="coerce")
+                r_val = pd.to_numeric(best_row[r_col], errors="coerce")
+                
+                l_str = f"{l_val:.1f} N" if pd.notna(l_val) else "N/A"
+                r_str = f"{r_val:.1f} N" if pd.notna(r_val) else "N/A"
+                date_str = format_date_clean(best_row.get("Date"))
+                
+                return l_str, r_str, date_str
+            else:
+                return None, None, None
 
         # 1. Knee Extension & Flexion
         p_knee_ind = knee_raw[knee_raw["Name"] == selected_player].copy() if not knee_raw.empty and "Name" in knee_raw.columns else pd.DataFrame()
@@ -1091,20 +1096,22 @@ with active_season:
             else:
                 ke_df, kf_df = p_knee_ind, pd.DataFrame()
 
-            best_ke = get_max_force_row(ke_df)
-            if best_ke is not None:
+            ke_l, ke_r, ke_date = get_assessment_forces(ke_df)
+            if ke_l or ke_r:
                 ind_records.append({
                     "Assessment": "Knee Extension",
-                    "Peak Value": f"{best_ke['Peak_Val']:.1f} N",
-                    "Date": format_date_clean(best_ke.get("Date"))
+                    "Left Peak": ke_l,
+                    "Right Peak": ke_r,
+                    "Date": ke_date
                 })
 
-            best_kf = get_max_force_row(kf_df)
-            if best_kf is not None:
+            kf_l, kf_r, kf_date = get_assessment_forces(kf_df)
+            if kf_l or kf_r:
                 ind_records.append({
                     "Assessment": "Knee Flexion",
-                    "Peak Value": f"{best_kf['Peak_Val']:.1f} N",
-                    "Date": format_date_clean(best_kf.get("Date"))
+                    "Left Peak": kf_l,
+                    "Right Peak": kf_r,
+                    "Date": kf_date
                 })
 
         # 2. Hip Adduction & Abduction
@@ -1118,20 +1125,22 @@ with active_season:
             else:
                 ad_df, ab_df = p_hip_ind, pd.DataFrame()
 
-            best_ad = get_max_force_row(ad_df)
-            if best_ad is not None:
+            ad_l, ad_r, ad_date = get_assessment_forces(ad_df)
+            if ad_l or ad_r:
                 ind_records.append({
                     "Assessment": "Hip Adduction",
-                    "Peak Value": f"{best_ad['Peak_Val']:.1f} N",
-                    "Date": format_date_clean(best_ad.get("Date"))
+                    "Left Peak": ad_l,
+                    "Right Peak": ad_r,
+                    "Date": ad_date
                 })
 
-            best_ab = get_max_force_row(ab_df)
-            if best_ab is not None:
+            ab_l, ab_r, ab_date = get_assessment_forces(ab_df)
+            if ab_l or ab_r:
                 ind_records.append({
                     "Assessment": "Hip Abduction",
-                    "Peak Value": f"{best_ab['Peak_Val']:.1f} N",
-                    "Date": format_date_clean(best_ab.get("Date"))
+                    "Left Peak": ab_l,
+                    "Right Peak": ab_r,
+                    "Date": ab_date
                 })
 
         # 3. NordBord Best Peaks per Test Type
@@ -1141,23 +1150,37 @@ with active_season:
             if t_c:
                 for test_type_val in p_nord_ind[t_c].dropna().unique():
                     sub_df = p_nord_ind[p_nord_ind[t_c] == test_type_val]
-                    best_nord_sub = get_max_force_row(sub_df)
-                    if best_nord_sub is not None:
+                    nb_l, nb_r, nb_date = get_assessment_forces(sub_df)
+                    if nb_l or nb_r:
                         ind_records.append({
                             "Assessment": f"NordBord ({test_type_val})",
-                            "Peak Value": f"{best_nord_sub['Peak_Val']:.1f} N",
-                            "Date": format_date_clean(best_nord_sub.get("Date"))
+                            "Left Peak": nb_l,
+                            "Right Peak": nb_r,
+                            "Date": nb_date
                         })
             else:
-                best_nord = get_max_force_row(p_nord_ind)
-                if best_nord is not None:
+                nb_l, nb_r, nb_date = get_assessment_forces(p_nord_ind)
+                if nb_l or nb_r:
                     ind_records.append({
                         "Assessment": "NordBord Hamstring",
-                        "Peak Value": f"{best_nord['Peak_Val']:.1f} N",
-                        "Date": format_date_clean(best_nord.get("Date"))
+                        "Left Peak": nb_l,
+                        "Right Peak": nb_r,
+                        "Date": nb_date
                     })
 
-        # 4. Harness Belt Squat
+        # 4. Ankle Plantar Flexion
+        p_ank_ind = ankle_raw[ankle_raw["Name"] == selected_player].copy() if not ankle_raw.empty and "Name" in ankle_raw.columns else pd.DataFrame()
+        if not p_ank_ind.empty:
+            ank_l, ank_r, ank_date = get_assessment_forces(p_ank_ind)
+            if ank_l or ank_r:
+                ind_records.append({
+                    "Assessment": "Ankle Plantar Flexion",
+                    "Left Peak": ank_l,
+                    "Right Peak": ank_r,
+                    "Date": ank_date
+                })
+
+        # 5. Harness Belt Squat (Bilateral / Total Only)
         p_bs_ind = belt_squat_raw[belt_squat_raw["Name"] == selected_player].copy() if not belt_squat_raw.empty and "Name" in belt_squat_raw.columns else pd.DataFrame()
         if not p_bs_ind.empty:
             f_c = next((c for c in p_bs_ind.columns if "peak vertical force" in c.lower() or "force" in c.lower()), None)
@@ -1166,22 +1189,13 @@ with active_season:
                 valid_bs = p_bs_ind.dropna(subset=["PVF"])
                 if not valid_bs.empty:
                     best_bs = valid_bs.sort_values("PVF", ascending=False).iloc[0]
+                    bs_val = f"{best_bs['PVF']:.1f} N"
                     ind_records.append({
                         "Assessment": "Harness Belt Squat",
-                        "Peak Value": f"{best_bs['PVF']:.1f} N",
+                        "Left Peak": bs_val,
+                        "Right Peak": bs_val,
                         "Date": format_date_clean(best_bs.get("Date"))
                     })
-
-        # 5. Ankle Plantar Flexion
-        p_ank_ind = ankle_raw[ankle_raw["Name"] == selected_player].copy() if not ankle_raw.empty and "Name" in ankle_raw.columns else pd.DataFrame()
-        if not p_ank_ind.empty:
-            best_ank = get_max_force_row(p_ank_ind)
-            if best_ank is not None:
-                ind_records.append({
-                    "Assessment": "Ankle Plantar Flexion",
-                    "Peak Value": f"{best_ank['Peak_Val']:.1f} N",
-                    "Date": format_date_clean(best_ank.get("Date"))
-                })
 
         # Display Summary Table
         if ind_records:
