@@ -440,6 +440,7 @@ def compute_practice_tables(player_name, session_date_str):
 
     vol_score = int(vol_df_out["Grade"].mean()) if not vol_df_out.empty else 0
     int_score = int(int_df_out["Grade"].mean()) if not int_df_out.empty else 0
+    comb_score = int(round((vol_score + int_score) / 2))
 
     minutes = (
         v_player["Minutes"].values[0]
@@ -462,6 +463,7 @@ def compute_practice_tables(player_name, session_date_str):
         int_df_out,
         vol_score,
         int_score,
+        comb_score,
         minutes,
         week_num,
         day_num,
@@ -738,7 +740,7 @@ with active_season:
             if not v_p.empty:
                 score_history = []
                 for d_str in v_p["Date_Str"].unique():
-                    _, _, v_sc, i_sc, _, _, _ = compute_practice_tables(
+                    _, _, v_sc, i_sc, c_sc, _, _, _ = compute_practice_tables(
                         selected_player, d_str
                     )
                     score_history.append(
@@ -746,6 +748,7 @@ with active_season:
                             "Date": format_date_clean(d_str),
                             "Volume Score": v_sc,
                             "Intensity Score": i_sc,
+                            "Combined Score": c_sc,
                         }
                     )
 
@@ -754,9 +757,9 @@ with active_season:
                 fig1 = px.line(
                     df_score_trend,
                     x="Date",
-                    y=["Volume Score", "Intensity Score"],
+                    y=["Volume Score", "Intensity Score", "Combined Score"],
                     markers=True,
-                    color_discrete_sequence=["#FF8200", "#38BDF8"],
+                    color_discrete_sequence=["#FF8200", "#38BDF8", "#58595B"],
                 )
                 fig1.update_layout(
                     margin=dict(l=0, r=0, t=10, b=0),
@@ -781,7 +784,7 @@ with active_season:
         )
 
         if pd.notna(latest_date_str):
-            vol_df, int_df, vol_score, int_score, mins, wk, dy = (
+            vol_df, int_df, vol_score, int_score, comb_score, mins, wk, dy = (
                 compute_practice_tables(selected_player, latest_date_str)
             )
 
@@ -804,9 +807,10 @@ with active_season:
                     unsafe_allow_html=True,
                 )
 
-                col_v_sc, col_i_sc = st.columns(2)
+                col_v_sc, col_i_sc, col_c_sc = st.columns(3)
                 v_bg, v_fg = get_vball_color(vol_score)
                 i_bg, i_fg = get_vball_color(int_score)
+                c_bg, c_fg = get_vball_color(comb_score)
 
                 with col_v_sc:
                     st.markdown(
@@ -824,6 +828,16 @@ with active_season:
                             <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:10px; text-align:center;">
                                 <div style="font-weight: 700; color: #64748B; font-size: 0.85rem;">INTENSITY SCORE</div>
                                 <div style="font-size: 1.8rem; font-weight: 800; padding: 4px 0; border-radius: 6px; background-color: {i_bg}; color: {i_fg}; margin-top: 4px;">{int_score}</div>
+                            </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                with col_c_sc:
+                    st.markdown(
+                        f"""
+                            <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:10px; text-align:center;">
+                                <div style="font-weight: 700; color: #58595B; font-size: 0.85rem;">COMBINED SCORE</div>
+                                <div style="font-size: 1.8rem; font-weight: 800; padding: 4px 0; border-radius: 6px; background-color: {c_bg}; color: {c_fg}; margin-top: 4px;">{comb_score}</div>
                             </div>
                         """,
                         unsafe_allow_html=True,
@@ -1188,7 +1202,7 @@ with active_season:
                 else "https://via.placeholder.com/70"
             )
 
-            vol_df, int_df, vol_score, int_score, mins, wk, dy = (
+            vol_df, int_df, vol_score, int_score, comb_score, mins, wk, dy = (
                 compute_practice_tables(player_name, str(session_date))
             )
 
@@ -1197,6 +1211,7 @@ with active_season:
 
             v_bg, v_fg = get_vball_color(vol_score)
             i_bg, i_fg = get_vball_color(int_score)
+            c_bg, c_fg = get_vball_color(comb_score)
 
             wk_str = str(wk).replace("Week ", "")
             dy_str = str(dy).replace("Day ", "")
@@ -1234,6 +1249,10 @@ with active_season:
                             <div style="font-size:2rem; font-weight:800; padding:6px 0; border-radius:6px; background-color:{i_bg}; color:{i_fg}; margin-top:4px;">{int_score}</div>
                         </div>
                     </div>
+                </div>
+                <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:10px; text-align:center; margin-top:16px;">
+                    <div style="font-weight:700; color:#58595B; font-size:0.85rem;">COMBINED PRACTICE SCORE</div>
+                    <div style="font-size:2rem; font-weight:800; padding:6px 0; border-radius:6px; background-color:{c_bg}; color:{c_fg}; margin-top:4px; max-width: 300px; margin-left: auto; margin-right: auto;">{comb_score}</div>
                 </div>
             </div>
             """
