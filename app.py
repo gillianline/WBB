@@ -1732,24 +1732,26 @@ with active_season:
                             unsafe_allow_html=True,
                         )
 
-                    # NODE 2: HIP AD & AB
+                    # NODE 2: HIP ADDUCTION & ABDUCTION
                     if not hip_ath.empty:
+                        dir_col = next((c for c in hip_ath.columns if "direction" in c.lower() or "test" in c.lower()), None)
+                        
                         hip_ad = (
                             hip_ath[
-                                hip_ath["TestDirection"].str.contains(
+                                hip_ath[dir_col].astype(str).str.contains(
                                     "AD|Adduction", case=False, na=False
                                 )
                             ]
-                            if "TestDirection" in hip_ath.columns
+                            if dir_col
                             else hip_ath
                         )
                         hip_ab = (
                             hip_ath[
-                                hip_ath["TestDirection"].str.contains(
+                                hip_ath[dir_col].astype(str).str.contains(
                                     "AB|Abduction", case=False, na=False
                                 )
                             ]
-                            if "TestDirection" in hip_ath.columns
+                            if dir_col
                             else hip_ath
                         )
 
@@ -1771,8 +1773,8 @@ with active_season:
                                     <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
                                 </div>
                                 <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
-                                    <b>Adduction (AD):</b> Initial L {ad_bL:.1f}N | R {ad_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(ad_lL, ad_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(ad_lR, ad_bR, '{:.1f}', 'N')}<br>
-                                    <b>Abduction (AB):</b> Initial L {ab_bL:.1f}N | R {ab_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(ab_lL, ab_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(ab_lR, ab_bR, '{:.1f}', 'N')}
+                                    <b>Hip Adduction:</b> Initial L {ad_bL:.1f}N | R {ad_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(ad_lL, ad_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(ad_lR, ad_bR, '{:.1f}', 'N')}<br>
+                                    <b>Hip Abduction:</b> Initial L {ab_bL:.1f}N | R {ab_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(ab_lL, ab_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(ab_lR, ab_bR, '{:.1f}', 'N')}
                                 </div>
                             </div>
                         """,
@@ -1826,8 +1828,31 @@ with active_season:
 
             with st.expander("Hip Adduction / Abduction Log", expanded=False):
                 if not hip_ath.empty:
-                    disp_hip = [c for c in hip_ath.columns if c not in ["Name", "Date_Str"]]
-                    st.markdown(render_vball_table(hip_ath[disp_hip]), unsafe_allow_html=True)
+                    hip_display_df = hip_ath.copy()
+                    dir_col = next((c for c in hip_display_df.columns if "direction" in c.lower() or "test" in c.lower()), None)
+                    test_col = next((c for c in hip_display_df.columns if c.lower() == "test"), None)
+
+                    # Normalize Test Column to single 'Test' with full name
+                    if dir_col:
+                        hip_display_df["Test"] = hip_display_df[dir_col].apply(
+                            lambda x: "Hip Adduction" if "AD" in str(x) or "Adduction" in str(x) else ("Hip Abduction" if "AB" in str(x) or "Abduction" in str(x) else str(x))
+                        )
+                    
+                    # Columns to omit so we don't have redundant Test/Direction columns
+                    omit_cols = ["Name", "Date_Str"]
+                    if dir_col and dir_col != "Test":
+                        omit_cols.append(dir_col)
+                    if test_col and test_col != "Test":
+                        omit_cols.append(test_col)
+
+                    disp_hip = [c for c in hip_display_df.columns if c not in omit_cols]
+                    
+                    # Ensure 'Test' is placed nicely upfront if present
+                    if "Test" in disp_hip:
+                        disp_hip.remove("Test")
+                        disp_hip.insert(0, "Test")
+
+                    st.markdown(render_vball_table(hip_display_df[disp_hip]), unsafe_allow_html=True)
                 else:
                     st.info(f"No Hip Assessment records for {selected_intake_athlete}.")
 
