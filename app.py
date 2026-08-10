@@ -393,7 +393,7 @@ def compute_practice_tables(player_name, session_date_str):
     vol_metrics = [
         "Distance (mi)",
         "Accumulated Acceleration Load",
-        "Decels",
+        "Decels Load",
         "FCTs",
         "Physio Load",
         "Mechanical Load",
@@ -644,7 +644,7 @@ with active_season:
         ("Distance (mi)", "Distance", "mi"),
         ("High Metabolic Power Distance (m)", "High Metabolic Power", "m"),
         ("Accumulated Acceleration Load", "AAL", "load"),
-        ("Decels", "Decels", "load"),
+        ("Decels Load", "Decels Load", "load"),
         ("Sprints", "Sprints", "cnt"),
         ("MCTs", "MCTs", "cnt"),
         ("FCTs", "FCTs", "cnt"),
@@ -986,7 +986,7 @@ with active_season:
                     "Distance (mi)": "mean",
                     "Distance (speed | High Speed) (mi)": "mean",
                     "Accumulated Acceleration Load": "mean",
-                    "Decels": "mean",
+                    "Decels Load": "mean",
                 })
                 .reset_index()
             )
@@ -997,7 +997,7 @@ with active_season:
                     "Distance (mi)",
                     "Distance (speed | High Speed) (mi)",
                     "Accumulated Acceleration Load",
-                    "Decels",
+                    "Decels Load",
                 ]
             )
         )
@@ -1039,8 +1039,8 @@ with active_season:
 
             fig_ind_dl = create_team_bar_athlete_line_chart(
                 all_weeks,
-                t_weekly_avg.get("Decels", []),
-                p_weekly.get("Decels", []),
+                t_weekly_avg.get("Decels Load", []),
+                p_weekly.get("Decels Load", []),
                 f"Deceleration Load — {selected_player}",
                 selected_player,
                 "#38BDF8",
@@ -1321,7 +1321,7 @@ with active_season:
                     "Distance (mi)": "sum",
                     "Distance (speed | High Speed) (mi)": "sum",
                     "Accumulated Acceleration Load": "sum",
-                    "Decels": "sum",
+                    "Decels Load": "sum",
                 })
                 .reset_index()
             )
@@ -1332,7 +1332,7 @@ with active_season:
                     "Distance (mi)",
                     "Distance (speed | High Speed) (mi)",
                     "Accumulated Acceleration Load",
-                    "Decels",
+                    "Decels Load",
                 ]
             )
         )
@@ -1368,7 +1368,7 @@ with active_season:
 
             fig_dl = create_clean_bar_chart(
                 weeks,
-                weekly_agg.get("Decels", []),
+                weekly_agg.get("Decels Load", []),
                 "Deceleration Load",
                 "#FF8200",
             )
@@ -1394,7 +1394,7 @@ with active_season:
                     "Distance (mi)": "mean",
                     "Distance (speed | High Speed) (mi)": "mean",
                     "Accumulated Acceleration Load": "mean",
-                    "Decels": "mean",
+                    "Decels Load": "mean",
                 })
                 .reset_index()
             )
@@ -1405,7 +1405,7 @@ with active_season:
                     "Distance (mi)",
                     "Distance (speed | High Speed) (mi)",
                     "Accumulated Acceleration Load",
-                    "Decels",
+                    "Decels Load",
                 ]
             )
         )
@@ -1447,8 +1447,8 @@ with active_season:
 
             fig_ind_dl = create_team_bar_athlete_line_chart(
                 all_weeks,
-                t_weekly_avg.get("Decels", []),
-                p_weekly.get("Decels", []),
+                t_weekly_avg.get("Decels Load", []),
+                p_weekly.get("Decels Load", []),
                 f"Deceleration Load — {selected_player_w}",
                 selected_player_w,
                 "#38BDF8",
