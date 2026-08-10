@@ -1536,6 +1536,33 @@ with active_season:
                 color = "#28a745" if diff >= 0 else "#dc3545"
                 return f"{fmt.format(current)}{unit} <span style='color:{color}; font-size:11px; font-weight:bold;'>({arrow}{abs(pct):.1f}%)</span>"
 
+            def get_peak_and_recent_row(df_sub, l_col, r_col):
+                if df_sub.empty or not l_col or not r_col:
+                    return (0.0, 0.0), (0.0, 0.0), (0.0, 0.0)
+                
+                df_calc = df_sub.copy()
+                df_calc["L_Val"] = pd.to_numeric(df_calc[l_col], errors="coerce").fillna(0.0)
+                df_calc["R_Val"] = pd.to_numeric(df_calc[r_col], errors="coerce").fillna(0.0)
+                df_calc["Max_Val"] = df_calc[["L_Val", "R_Val"]].max(axis=1)
+                
+                valid_rows = df_calc[df_calc["Max_Val"] > 0]
+                if valid_rows.empty:
+                    return (0.0, 0.0), (0.0, 0.0), (0.0, 0.0)
+                
+                # All-Time Peak Row
+                peak_row = valid_rows.sort_values("Max_Val", ascending=False).iloc[0]
+                max_L, max_R = peak_row["L_Val"], peak_row["R_Val"]
+                
+                # Most Recent Row
+                recent_row = valid_rows.sort_values("Date", ascending=True).iloc[-1]
+                rec_L, rec_R = recent_row["L_Val"], recent_row["R_Val"]
+                
+                # Initial Baseline Row
+                init_row = valid_rows.sort_values("Date", ascending=True).iloc[0]
+                init_L, init_R = init_row["L_Val"], init_row["R_Val"]
+                
+                return (max_L, max_R), (rec_L, rec_R), (init_L, init_R)
+
             hud_col1, hud_col2 = st.columns([1.2, 1.8])
 
             with hud_col1:
@@ -1661,60 +1688,17 @@ with active_season:
                 if has_data:
                     # NODE 1: KNEE EXTENSION & FLEXION
                     if not sh_ath.empty:
-                        knee_ext = (
-                            sh_ath[
-                                sh_ath["TestDirection"].str.contains(
-                                    "Extension", case=False, na=False
-                                )
-                            ]
-                            if "TestDirection" in sh_ath.columns
-                            else sh_ath
-                        )
-                        knee_flx = (
-                            sh_ath[
-                                sh_ath["TestDirection"].str.contains(
-                                    "Flexion", case=False, na=False
-                                )
-                            ]
-                            if "TestDirection" in sh_ath.columns
-                            else sh_ath
-                        )
+                        l_col = next((c for c in sh_ath.columns if "l max force" in c.lower() or "left max" in c.lower()), None)
+                        r_col = next((c for c in sh_ath.columns if "r max force" in c.lower() or "right max" in c.lower()), None)
 
-                        ke_b = (
-                            knee_ext.iloc[0]
-                            if not knee_ext.empty
-                            else pd.Series()
-                        )
-                        ke_l = (
-                            knee_ext.iloc[-1]
-                            if not knee_ext.empty
-                            else pd.Series()
-                        )
-                        kf_b = (
-                            knee_flx.iloc[0]
-                            if not knee_flx.empty
-                            else pd.Series()
-                        )
-                        kf_l = (
-                            knee_flx.iloc[-1]
-                            if not knee_flx.empty
-                            else pd.Series()
-                        )
+                        dir_c = next((c for c in sh_ath.columns if "direction" in c.lower() or "test" in c.lower()), None)
+                        knee_ext = sh_ath[sh_ath[dir_c].astype(str).str.contains("Extension", case=False, na=False)] if dir_c else sh_ath
+                        knee_flx = sh_ath[sh_ath[dir_c].astype(str).str.contains("Flexion", case=False, na=False)] if dir_c else sh_ath
 
-                        ke_bL, ke_bR = ke_b.get(
-                            "L Max Force (N)", 0.0
-                        ), ke_b.get("R Max Force (N)", 0.0)
-                        ke_lL, ke_lR = ke_l.get(
-                            "L Max Force (N)", 0.0
-                        ), ke_l.get("R Max Force (N)", 0.0)
-                        kf_bL, kf_bR = kf_b.get(
-                            "L Max Force (N)", 0.0
-                        ), kf_b.get("R Max Force (N)", 0.0)
-                        kf_lL, kf_lR = kf_l.get(
-                            "L Max Force (N)", 0.0
-                        ), kf_l.get("R Max Force (N)", 0.0)
+                        (ke_maxL, ke_maxR), (ke_recL, ke_recR), (ke_initL, ke_initR) = get_peak_and_recent_row(knee_ext, l_col, r_col)
+                        (kf_maxL, kf_maxR), (kf_recL, kf_recR), (kf_initL, kf_initR) = get_peak_and_recent_row(knee_flx, l_col, r_col)
 
-                        latest_date_str = format_date_clean(ke_l.get("Date"))
+                        latest_date_str = format_date_clean(knee_ext.sort_values("Date").iloc[-1].get("Date")) if not knee_ext.empty else "N/A"
 
                         st.markdown(
                             f"""
@@ -1724,8 +1708,8 @@ with active_season:
                                     <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {latest_date_str}</span>
                                 </div>
                                 <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
-                                    <b>Extension:</b> Initial L {ke_bL:.1f}N | R {ke_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(ke_lL, ke_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(ke_lR, ke_bR, '{:.1f}', 'N')}<br>
-                                    <b>Flexion:</b> Initial L {kf_bL:.1f}N | R {kf_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(kf_lL, kf_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(kf_lR, kf_bR, '{:.1f}', 'N')}
+                                    <b>Extension:</b> Max L {ke_maxL:.1f}N | R {ke_maxR:.1f}N &nbsp;→&nbsp; <b>Recent:</b> L {render_val_with_arrow(ke_recL, ke_initL, '{:.1f}', 'N')} | R {render_val_with_arrow(ke_recR, ke_initR, '{:.1f}', 'N')}<br>
+                                    <b>Flexion:</b> Max L {kf_maxL:.1f}N | R {kf_maxR:.1f}N &nbsp;→&nbsp; <b>Recent:</b> L {render_val_with_arrow(kf_recL, kf_initL, '{:.1f}', 'N')} | R {render_val_with_arrow(kf_recR, kf_initR, '{:.1f}', 'N')}
                                 </div>
                             </div>
                         """,
@@ -1734,36 +1718,17 @@ with active_season:
 
                     # NODE 2: HIP ADDUCTION & ABDUCTION
                     if not hip_ath.empty:
+                        l_col = next((c for c in hip_ath.columns if "l max force" in c.lower() or "left max" in c.lower()), None)
+                        r_col = next((c for c in hip_ath.columns if "r max force" in c.lower() or "right max" in c.lower()), None)
+
                         dir_col = next((c for c in hip_ath.columns if "direction" in c.lower() or "test" in c.lower()), None)
-                        
-                        hip_ad = (
-                            hip_ath[
-                                hip_ath[dir_col].astype(str).str.contains(
-                                    "AD|Adduction", case=False, na=False
-                                )
-                            ]
-                            if dir_col
-                            else hip_ath
-                        )
-                        hip_ab = (
-                            hip_ath[
-                                hip_ath[dir_col].astype(str).str.contains(
-                                    "AB|Abduction", case=False, na=False
-                                )
-                            ]
-                            if dir_col
-                            else hip_ath
-                        )
+                        hip_ad = hip_ath[hip_ath[dir_col].astype(str).str.contains("AD|Adduction", case=False, na=False)] if dir_col else hip_ath
+                        hip_ab = hip_ath[hip_ath[dir_col].astype(str).str.contains("AB|Abduction", case=False, na=False)] if dir_col else hip_ath
 
-                        ad_b, ad_l = hip_ad.iloc[0] if not hip_ad.empty else pd.Series(), hip_ad.iloc[-1] if not hip_ad.empty else pd.Series()
-                        ab_b, ab_l = hip_ab.iloc[0] if not hip_ab.empty else pd.Series(), hip_ab.iloc[-1] if not hip_ab.empty else pd.Series()
+                        (ad_maxL, ad_maxR), (ad_recL, ad_recR), (ad_initL, ad_initR) = get_peak_and_recent_row(hip_ad, l_col, r_col)
+                        (ab_maxL, ab_maxR), (ab_recL, ab_recR), (ab_initL, ab_initR) = get_peak_and_recent_row(hip_ab, l_col, r_col)
 
-                        ad_bL, ad_bR = ad_b.get("L Max Force (N)", 0.0), ad_b.get("R Max Force (N)", 0.0)
-                        ad_lL, ad_lR = ad_l.get("L Max Force (N)", 0.0), ad_l.get("R Max Force (N)", 0.0)
-                        ab_bL, ab_bR = ab_b.get("L Max Force (N)", 0.0), ab_b.get("R Max Force (N)", 0.0)
-                        ab_lL, ab_lR = ab_l.get("L Max Force (N)", 0.0), ab_l.get("R Max Force (N)", 0.0)
-
-                        date_str = format_date_clean(ad_l.get("Date") if not ad_l.empty else ab_l.get("Date"))
+                        date_str = format_date_clean(hip_ath.sort_values("Date").iloc[-1].get("Date")) if not hip_ath.empty else "N/A"
 
                         st.markdown(
                             f"""
@@ -1773,8 +1738,8 @@ with active_season:
                                     <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
                                 </div>
                                 <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
-                                    <b>Hip Adduction:</b> Initial L {ad_bL:.1f}N | R {ad_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(ad_lL, ad_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(ad_lR, ad_bR, '{:.1f}', 'N')}<br>
-                                    <b>Hip Abduction:</b> Initial L {ab_bL:.1f}N | R {ab_bR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(ab_lL, ab_bL, '{:.1f}', 'N')} | R {render_val_with_arrow(ab_lR, ab_bR, '{:.1f}', 'N')}
+                                    <b>Hip Adduction:</b> Max L {ad_maxL:.1f}N | R {ad_maxR:.1f}N &nbsp;→&nbsp; <b>Recent:</b> L {render_val_with_arrow(ad_recL, ad_initL, '{:.1f}', 'N')} | R {render_val_with_arrow(ad_recR, ad_initR, '{:.1f}', 'N')}<br>
+                                    <b>Hip Abduction:</b> Max L {ab_maxL:.1f}N | R {ab_maxR:.1f}N &nbsp;→&nbsp; <b>Recent:</b> L {render_val_with_arrow(ab_recL, ab_initL, '{:.1f}', 'N')} | R {render_val_with_arrow(ab_recR, ab_initR, '{:.1f}', 'N')}
                                 </div>
                             </div>
                         """,
@@ -1783,14 +1748,11 @@ with active_season:
 
                     # NODE 3: ANKLE PLANTAR FLEXION
                     if not calf_ath.empty:
-                        b_a, l_a = calf_ath.iloc[0], calf_ath.iloc[-1]
-                        baL, baR = b_a.get(
-                            "L Max Force (N)", 0.0
-                        ), b_a.get("R Max Force (N)", 0.0)
-                        laL, laR = l_a.get(
-                            "L Max Force (N)", 0.0
-                        ), l_a.get("R Max Force (N)", 0.0)
-                        date_str = format_date_clean(l_a.get("Date"))
+                        l_col = next((c for c in calf_ath.columns if "l max force" in c.lower() or "left max" in c.lower()), None)
+                        r_col = next((c for c in calf_ath.columns if "r max force" in c.lower() or "right max" in c.lower()), None)
+
+                        (ank_maxL, ank_maxR), (ank_recL, ank_recR), (ank_initL, ank_initR) = get_peak_and_recent_row(calf_ath, l_col, r_col)
+                        date_str = format_date_clean(calf_ath.sort_values("Date").iloc[-1].get("Date")) if not calf_ath.empty else "N/A"
 
                         st.markdown(
                             f"""
@@ -1800,7 +1762,7 @@ with active_season:
                                     <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
                                 </div>
                                 <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
-                                    <b>Initial Force:</b> L {baL:.1f}N | R {baR:.1f}N &nbsp;→&nbsp; <b>Latest:</b> L {render_val_with_arrow(laL, baL, '{:.1f}', 'N')} | R {render_val_with_arrow(laR, baR, '{:.1f}', 'N')}
+                                    <b>Max Force:</b> L {ank_maxL:.1f}N | R {ank_maxR:.1f}N &nbsp;→&nbsp; <b>Recent:</b> L {render_val_with_arrow(ank_recL, ank_initL, '{:.1f}', 'N')} | R {render_val_with_arrow(ank_recR, ank_initR, '{:.1f}', 'N')}
                                 </div>
                             </div>
                         """,
