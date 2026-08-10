@@ -1832,27 +1832,30 @@ with active_season:
                     dir_col = next((c for c in hip_display_df.columns if "direction" in c.lower() or "test" in c.lower()), None)
                     test_col = next((c for c in hip_display_df.columns if c.lower() == "test"), None)
 
-                    # Normalize Test Column to single 'Test' with full name
                     if dir_col:
                         hip_display_df["Test"] = hip_display_df[dir_col].apply(
                             lambda x: "Hip Adduction" if "AD" in str(x) or "Adduction" in str(x) else ("Hip Abduction" if "AB" in str(x) or "Abduction" in str(x) else str(x))
                         )
                     
-                    # Columns to omit so we don't have redundant Test/Direction columns
                     omit_cols = ["Name", "Date_Str"]
                     if dir_col and dir_col != "Test":
                         omit_cols.append(dir_col)
                     if test_col and test_col != "Test":
                         omit_cols.append(test_col)
 
-                    disp_hip = [c for c in hip_display_df.columns if c not in omit_cols]
+                    # Build explicit ordered list starting with Date and Test
+                    all_cols = [c for c in hip_display_df.columns if c not in omit_cols]
                     
-                    # Ensure 'Test' is placed nicely upfront if present
-                    if "Test" in disp_hip:
-                        disp_hip.remove("Test")
-                        disp_hip.insert(0, "Test")
+                    final_cols = []
+                    if "Date" in all_cols:
+                        final_cols.append("Date")
+                        all_cols.remove("Date")
+                    if "Test" in all_cols:
+                        final_cols.append("Test")
+                        all_cols.remove("Test")
+                    final_cols.extend(all_cols)
 
-                    st.markdown(render_vball_table(hip_display_df[disp_hip]), unsafe_allow_html=True)
+                    st.markdown(render_vball_table(hip_display_df[final_cols]), unsafe_allow_html=True)
                 else:
                     st.info(f"No Hip Assessment records for {selected_intake_athlete}.")
 
