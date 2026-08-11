@@ -299,6 +299,26 @@ def fetch_live_recovery_sheet():
         )
 
 
+def fetch_live_tracking_sheet():
+    macro_url = (
+        st.secrets.get("MACRO_URL")
+        or st.secrets.get("Live Track")
+        or st.secrets.get("sheets", {}).get("live_track_url")
+    )
+
+    if macro_url:
+        try:
+            res = requests.get(f"{macro_url}?sheet=Tracking_Logs", timeout=5)
+            if res.status_code == 200:
+                data = res.json()
+                if isinstance(data, list) and len(data) > 0:
+                    return pd.DataFrame(data)
+        except Exception as e:
+            print(f"Error fetching live tracking sheet: {e}")
+
+    return pd.DataFrame()
+
+
 # -----------------------------------------------------------------------------
 # 4. HELPER FUNCTIONS
 # -----------------------------------------------------------------------------
@@ -611,6 +631,8 @@ if st.sidebar.button("Refresh Google Sheets Data"):
     st.cache_data.clear()
     if "recovery_local_state" in st.session_state:
         del st.session_state["recovery_local_state"]
+    if "tracking_loaded_from_sheet" in st.session_state:
+        del st.session_state["tracking_loaded_from_sheet"]
     st.sidebar.success("Data reloaded!")
     st.rerun()
 
@@ -2493,7 +2515,7 @@ with active_season:
                 st.info("No recovery data currently recorded.")
 
     # =========================================================================
-    # TAB 7: TRACKING (LIVE PRACTICE STATS & SUMMARY)
+    # TAB 7: TRACKING (LIVE PRACTICE STATS & SUMMARY WITH PERSISTENCE)
     # =========================================================================
     elif main_tab == "Tracking":
         track_tab_live, track_tab_summary = st.tabs(
@@ -2504,9 +2526,25 @@ with active_season:
         today = local_now.date()
         current_monday = today - datetime.timedelta(days=today.weekday())
 
-        # Initialize tracking session state dictionary
+        # Initialize local counter state
         if "tracking_data" not in st.session_state:
             st.session_state.tracking_data = {}
+
+        # Fetch synced data from Google Sheets into session state
+        if "tracking_loaded_from_sheet" not in st.session_state:
+            live_track_df = fetch_live_tracking_sheet()
+            if not live_track_df.empty:
+                for _, row in live_track_df.iterrows():
+                    wk = str(row.get("Week_Starting", "")).strip()
+                    dt = str(row.get("Date", "")).strip()
+                    ath = str(row.get("Athlete", "")).strip()
+                    met = str(row.get("Metric", "")).strip()
+                    cnt = pd.to_numeric(row.get("Count", 0), errors="coerce")
+                    
+                    if wk and dt and ath and met and pd.notna(cnt):
+                        key = f"{wk}|{dt}|{ath}|{met}"
+                        st.session_state.tracking_data[key] = int(cnt)
+            st.session_state.tracking_loaded_from_sheet = True
 
         with track_tab_live:
             st.markdown(
@@ -2631,7 +2669,7 @@ with active_season:
 
             st.divider()
 
-            # Webhook Save to Google Sheet
+            # Webhook Sync Button
             if st.button("💾 Sync Tracking Data to Google Sheet", use_container_width=True):
                 payload_list = []
                 for k, v in st.session_state.tracking_data.items():
@@ -2675,7 +2713,6 @@ with active_season:
                 unsafe_allow_html=True,
             )
 
-            # Build DataFrame from session state tracking data
             t_rows = []
             for k, v in st.session_state.tracking_data.items():
                 parts = k.split("|")
@@ -2693,7 +2730,6 @@ with active_season:
             if not track_df.empty:
                 filtered_wk_df = track_df[track_df["Week_Starting"] == track_week_str]
 
-                # Top Metrics
                 s1, s2, s3 = st.columns(3)
                 with s1:
                     to_cnt = filtered_wk_df[filtered_wk_df["Metric"] == "Turnover"]["Count"].sum()
