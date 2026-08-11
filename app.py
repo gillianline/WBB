@@ -2649,7 +2649,7 @@ with active_season:
             st.divider()
 
             # Webhook Sync Button
-            if st.button("💾 Sync Tracking Data to Google Sheet", use_container_width=True):
+            if st.button("Sync Tracking Data to Google Sheet", use_container_width=True):
                 payload_list = []
                 for k, v in st.session_state.tracking_data.items():
                     parts = k.split("|")
