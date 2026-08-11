@@ -599,6 +599,7 @@ main_tab = st.sidebar.radio(
         "Weekly Data",
         "Testing",
         "Recovery",
+        "Tracking",
     ],
     index=0,
 )
@@ -2490,3 +2491,251 @@ with active_season:
                         st.dataframe(pivot_summary, use_container_width=True)
             else:
                 st.info("No recovery data currently recorded.")
+
+    # =========================================================================
+    # TAB 7: TRACKING (LIVE PRACTICE STATS & SUMMARY)
+    # =========================================================================
+    elif main_tab == "Tracking":
+        track_tab_live, track_tab_summary = st.tabs(
+            ["Practice Live Tracker", "Weekly & Daily Summary"]
+        )
+
+        local_now = get_eastern_now()
+        today = local_now.date()
+        current_monday = today - datetime.timedelta(days=today.weekday())
+
+        # Initialize tracking session state dictionary
+        if "tracking_data" not in st.session_state:
+            st.session_state.tracking_data = {}
+
+        with track_tab_live:
+            st.markdown(
+                '<div class="vball-section-title">In-Practice Performance Stat Tracker</div>',
+                unsafe_allow_html=True,
+            )
+
+            col_tr1, col_tr2 = st.columns(2)
+            with col_tr1:
+                selected_track_monday = st.date_input(
+                    "Select Week Starting (Monday):",
+                    value=current_monday,
+                    key="track_week_picker",
+                )
+                if selected_track_monday.weekday() != 0:
+                    selected_track_monday = (
+                        selected_track_monday
+                        - datetime.timedelta(days=selected_track_monday.weekday())
+                    )
+                track_week_str = selected_track_monday.strftime("%Y-%m-%d")
+
+            with col_tr2:
+                track_days_options = [
+                    (selected_track_monday + datetime.timedelta(days=i)).strftime(
+                        "%Y-%m-%d (%A)"
+                    )
+                    for i in range(7)
+                ]
+                current_day_str = local_now.strftime("%Y-%m-%d (%A)")
+                default_idx = (
+                    track_days_options.index(current_day_str)
+                    if current_day_str in track_days_options
+                    else 0
+                )
+                selected_track_day = st.selectbox(
+                    "Select Practice Date:",
+                    track_days_options,
+                    index=default_idx,
+                    key="track_day_picker",
+                )
+
+            session_date_val = selected_track_day.split(" ")[0]
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            def modify_counter(p_name, metric, delta):
+                key = f"{track_week_str}|{session_date_val}|{p_name}|{metric}"
+                curr = st.session_state.tracking_data.get(key, 0)
+                new_val = max(0, curr + delta)
+                st.session_state.tracking_data[key] = new_val
+
+            # Render 2-column grid of player cards
+            for i in range(0, len(roster_players), 2):
+                grid_cols = st.columns(2)
+                for j in range(2):
+                    if i + j < len(roster_players):
+                        player = roster_players[i + j]
+                        p_row = (
+                            roster_raw[roster_raw["Name"] == player]
+                            if not roster_raw.empty
+                            else pd.DataFrame()
+                        )
+                        p_pos = (
+                            p_row["Position"].values[0]
+                            if not p_row.empty
+                            else "Athlete"
+                        )
+                        p_img = (
+                            p_row["Picture"].values[0]
+                            if not p_row.empty
+                            else "https://via.placeholder.com/70"
+                        )
+
+                        with grid_cols[j]:
+                            st.markdown(
+                                f"""
+                                <div class="rec-grid-card">
+                                    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 8px;">
+                                        <img src="{p_img}" class="athlete-avatar" style="width: 55px; height: 55px;">
+                                        <div>
+                                            <h4 style="margin: 0; color: #0F172A; font-weight: 700;">{player}</h4>
+                                            <span style="color: #64748B; font-size: 0.85rem;">{p_pos}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
+
+                            m_cols = st.columns(3)
+                            metrics = ["Turnover", "Offensive Rebound", "Box Out"]
+                            for m_idx, metric_name in enumerate(metrics):
+                                key = f"{track_week_str}|{session_date_val}|{player}|{metric_name}"
+                                val = st.session_state.tracking_data.get(key, 0)
+                                with m_cols[m_idx]:
+                                    st.markdown(
+                                        f"<div style='text-align:center; font-weight:700; font-size:0.8rem; color:#475569;'>{metric_name}</div>",
+                                        unsafe_allow_html=True,
+                                    )
+                                    b_col1, b_col2, b_col3 = st.columns([1, 1.2, 1])
+                                    with b_col1:
+                                        st.button(
+                                            "−",
+                                            key=f"dec_{player}_{metric_name}_{session_date_val}",
+                                            on_click=modify_counter,
+                                            args=(player, metric_name, -1),
+                                        )
+                                    with b_col2:
+                                        st.markdown(
+                                            f"<div style='text-align:center; font-size:1.2rem; font-weight:800; padding-top:2px;'>{val}</div>",
+                                            unsafe_allow_html=True,
+                                        )
+                                    with b_col3:
+                                        st.button(
+                                            "+",
+                                            key=f"inc_{player}_{metric_name}_{session_date_val}",
+                                            on_click=modify_counter,
+                                            args=(player, metric_name, 1),
+                                        )
+
+                            st.markdown("<br>", unsafe_allow_html=True)
+
+            st.divider()
+
+            # Webhook Save to Google Sheet
+            if st.button("💾 Sync Tracking Data to Google Sheet", use_container_width=True):
+                payload_list = []
+                for k, v in st.session_state.tracking_data.items():
+                    parts = k.split("|")
+                    if len(parts) == 4 and v > 0:
+                        payload_list.append({
+                            "Week_Starting": parts[0],
+                            "Date": parts[1],
+                            "Athlete": parts[2],
+                            "Metric": parts[3],
+                            "Count": v,
+                            "Timestamp": get_eastern_time_str(),
+                        })
+
+                macro_url = (
+                    st.secrets.get("MACRO_URL")
+                    or st.secrets.get("Live Track")
+                    or st.secrets.get("sheets", {}).get("live_track_url")
+                )
+
+                if macro_url and payload_list:
+                    try:
+                        res = requests.post(
+                            macro_url,
+                            data=json.dumps({"tracking_logs": payload_list}),
+                            headers={"Content-Type": "text/plain;charset=utf-8"},
+                            allow_redirects=True,
+                            timeout=8
+                        )
+                        st.success("Successfully synchronized tracking stats to Google Sheet!")
+                    except Exception as ex:
+                        st.error(f"Error syncing to Google Sheet: {ex}")
+                elif not payload_list:
+                    st.info("No stats recorded yet for this session to sync.")
+                else:
+                    st.error("Google Sheet webhook URL not found in secrets.")
+
+        with track_tab_summary:
+            st.markdown(
+                '<div class="vball-section-title">Tracking Summary Dashboard</div>',
+                unsafe_allow_html=True,
+            )
+
+            # Build DataFrame from session state tracking data
+            t_rows = []
+            for k, v in st.session_state.tracking_data.items():
+                parts = k.split("|")
+                if len(parts) == 4 and v > 0:
+                    t_rows.append({
+                        "Week_Starting": parts[0],
+                        "Date": parts[1],
+                        "Athlete": parts[2],
+                        "Metric": parts[3],
+                        "Count": v
+                    })
+
+            track_df = pd.DataFrame(t_rows) if t_rows else pd.DataFrame(columns=["Week_Starting", "Date", "Athlete", "Metric", "Count"])
+
+            if not track_df.empty:
+                filtered_wk_df = track_df[track_df["Week_Starting"] == track_week_str]
+
+                # Top Metrics
+                s1, s2, s3 = st.columns(3)
+                with s1:
+                    to_cnt = filtered_wk_df[filtered_wk_df["Metric"] == "Turnover"]["Count"].sum()
+                    st.metric("Total Turnovers (Week)", int(to_cnt))
+                with s2:
+                    orb_cnt = filtered_wk_df[filtered_wk_df["Metric"] == "Offensive Rebound"]["Count"].sum()
+                    st.metric("Total Offensive Rebounds (Week)", int(orb_cnt))
+                with s3:
+                    bo_cnt = filtered_wk_df[filtered_wk_df["Metric"] == "Box Out"]["Count"].sum()
+                    st.metric("Total Box Outs (Week)", int(bo_cnt))
+
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                c_sum_d, c_sum_w = st.columns(2)
+
+                with c_sum_d:
+                    st.markdown(f"#### Daily Breakdown ({session_date_val})")
+                    daily_df = filtered_wk_df[filtered_wk_df["Date"] == session_date_val]
+                    if not daily_df.empty:
+                        pivot_daily = daily_df.pivot_table(
+                            index="Athlete",
+                            columns="Metric",
+                            values="Count",
+                            aggfunc="sum",
+                            fill_value=0
+                        )
+                        st.dataframe(pivot_daily, use_container_width=True)
+                    else:
+                        st.info("No stats recorded for the selected date.")
+
+                with c_sum_w:
+                    st.markdown(f"#### Weekly Total Summary (Week of {track_week_str})")
+                    if not filtered_wk_df.empty:
+                        pivot_weekly = filtered_wk_df.pivot_table(
+                            index="Athlete",
+                            columns="Metric",
+                            values="Count",
+                            aggfunc="sum",
+                            fill_value=0
+                        )
+                        st.dataframe(pivot_weekly, use_container_width=True)
+                    else:
+                        st.info("No stats recorded for this week.")
+            else:
+                st.info("No tracking metrics recorded yet.")
