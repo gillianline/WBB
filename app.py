@@ -252,7 +252,7 @@ def fetch_live_recovery_sheet():
 
     if macro_url:
         try:
-            res = requests.get(macro_url, timeout=5)
+            res = requests.get(f"{macro_url}?sheet=Logs", headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
             if res.status_code == 200:
                 data = res.json()
                 if isinstance(data, list) and len(data) > 0:
@@ -264,39 +264,15 @@ def fetch_live_recovery_sheet():
         except Exception as e:
             print(f"Apps Script GET fallback: {e}")
 
-    try:
-        sheet_base_url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-        cache_buster = f"&cache={datetime.datetime.now().timestamp()}"
-        csv_url = sheet_base_url.replace(
-            "/edit", f"/gviz/tq?tqx=out:csv&sheet=Logs{cache_buster}"
-        )
-
-        req = urllib.request.Request(
-            csv_url,
-            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
-        )
-        with urllib.request.urlopen(req, timeout=8) as response:
-            content = response.read().decode("utf-8")
-            df = pd.read_csv(io.StringIO(content), keep_default_na=False)
-
-        if not df.empty:
-            if len(df.columns) >= 5:
-                df.columns = ["Week_Starting", "Athlete", "Station", "Day", "Timestamp"][:len(df.columns)]
-            for col in ["Week_Starting", "Athlete", "Station", "Day"]:
-                if col in df.columns:
-                    df[col] = df[col].astype(str).str.strip()
-        return df
-    except Exception as e:
-        print(f"Error fetching live recovery sheet: {e}")
-        return pd.DataFrame(
-            columns=[
-                "Week_Starting",
-                "Athlete",
-                "Station",
-                "Day",
-                "Timestamp",
-            ]
-        )
+    return pd.DataFrame(
+        columns=[
+            "Week_Starting",
+            "Athlete",
+            "Station",
+            "Day",
+            "Timestamp",
+        ]
+    )
 
 
 def fetch_live_tracking_sheet():
@@ -308,11 +284,14 @@ def fetch_live_tracking_sheet():
 
     if macro_url:
         try:
-            res = requests.get(f"{macro_url}?sheet=Tracking_Logs", timeout=5)
-            if res.status_code == 200:
+            fetch_url = f"{macro_url}?sheet=Tracking_Logs&t={datetime.datetime.now().timestamp()}"
+            res = requests.get(fetch_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
+            if res.status_code == 200 and res.text.strip():
                 data = res.json()
                 if isinstance(data, list) and len(data) > 0:
-                    return pd.DataFrame(data)
+                    df = pd.DataFrame(data)
+                    df.columns = [str(c).strip() for c in df.columns]
+                    return df
         except Exception as e:
             print(f"Error fetching live tracking sheet: {e}")
 
