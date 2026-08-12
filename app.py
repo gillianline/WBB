@@ -401,7 +401,7 @@ def compute_practice_tables(player_name, session_date_str):
     int_metrics = [
         "Physio Intensity",
         "Acceleration Load (load | High AAL)",
-        "Distance (speed | High Speed) (mi)",
+        "High Speed Distance (mi)",
         "Speed (max.) (mph)",
         "Sprints",
         "Exertions",
@@ -1000,7 +1000,7 @@ with active_season:
                 weekly_raw.groupby("Week")
                 .agg({
                     "Distance (mi)": "mean",
-                    "Distance (speed | High Speed) (mi)": "mean",
+                    "High Speed Distance (mi)": "mean",
                     "Accumulated Acceleration Load": "mean",
                     "Decels": "mean",
                 })
@@ -1011,7 +1011,7 @@ with active_season:
                 columns=[
                     "Week",
                     "Distance (mi)",
-                    "Distance (speed | High Speed) (mi)",
+                    "High Speed Distance (mi)",
                     "Accumulated Acceleration Load",
                     "Decels",
                 ]
@@ -1045,8 +1045,8 @@ with active_season:
         with col_p2:
             fig_ind_hsd = create_team_bar_athlete_line_chart(
                 all_weeks,
-                t_weekly_avg.get("Distance (speed | High Speed) (mi)", []),
-                p_weekly.get("Distance (speed | High Speed) (mi)", []),
+                t_weekly_avg.get("High Speed Distance (mi)", []),
+                p_weekly.get("High Speed Distance (mi)", []),
                 f"High Speed Distance (mi) — {selected_player}",
                 selected_player,
                 "#FF8200",
@@ -1340,7 +1340,7 @@ with active_season:
                 weekly_raw.groupby("Week")
                 .agg({
                     "Distance (mi)": "sum",
-                    "Distance (speed | High Speed) (mi)": "sum",
+                    "High Speed Distance (mi)": "sum",
                     "Accumulated Acceleration Load": "sum",
                     "Decels": "sum",
                 })
@@ -1351,7 +1351,7 @@ with active_season:
                 columns=[
                     "Week",
                     "Distance (mi)",
-                    "Distance (speed | High Speed) (mi)",
+                    "High Speed Distance (mi)",
                     "Accumulated Acceleration Load",
                     "Decels",
                 ]
@@ -1381,7 +1381,7 @@ with active_season:
         with w2:
             fig_hsd = create_clean_bar_chart(
                 weeks,
-                weekly_agg.get("Distance (speed | High Speed) (mi)", []),
+                weekly_agg.get("High Speed Distance (mi)", []),
                 "High Speed Distance (mi)",
                 "#38BDF8",
             )
@@ -1413,7 +1413,7 @@ with active_season:
                 weekly_raw.groupby("Week")
                 .agg({
                     "Distance (mi)": "mean",
-                    "Distance (speed | High Speed) (mi)": "mean",
+                    "High Speed Distance (mi)": "mean",
                     "Accumulated Acceleration Load": "mean",
                     "Decels": "mean",
                 })
@@ -1424,7 +1424,7 @@ with active_season:
                 columns=[
                     "Week",
                     "Distance (mi)",
-                    "Distance (speed | High Speed) (mi)",
+                    "High Speed Distance (mi)",
                     "Accumulated Acceleration Load",
                     "Decels",
                 ]
@@ -1458,8 +1458,8 @@ with active_season:
         with col_p2:
             fig_ind_hsd = create_team_bar_athlete_line_chart(
                 all_weeks,
-                t_weekly_avg.get("Distance (speed | High Speed) (mi)", []),
-                p_weekly.get("Distance (speed | High Speed) (mi)", []),
+                t_weekly_avg.get("High Speed Distance (mi)", []),
+                p_weekly.get("High Speed Distance (mi)", []),
                 f"High Speed Distance (mi) — {selected_player_w}",
                 selected_player_w,
                 "#FF8200",
