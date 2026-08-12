@@ -284,7 +284,6 @@ def fetch_live_tracking_sheet():
 
     if macro_url:
         try:
-            # Timestamp parameter forces a fresh un-cached GET request from Google Sheets
             fetch_url = f"{macro_url}?sheet=Tracking_Logs&t={datetime.datetime.now().timestamp()}"
             res = requests.get(fetch_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
             if res.status_code == 200 and res.text.strip():
@@ -299,12 +298,12 @@ def fetch_live_tracking_sheet():
     return pd.DataFrame()
 
 
-# DYNAMIC HYDRATION: Always re-query Google Sheets when initializing tracking_data
+# POPULATE STATE FROM GOOGLE SHEET
 if "tracking_data" not in st.session_state or not st.session_state.get("tracking_data_initialized", False):
     st.session_state.tracking_data = {}
     live_track_df = fetch_live_tracking_sheet()
+    
     if not live_track_df.empty:
-        # Case-insensitive column helper
         cols_lower = {str(c).lower().strip(): c for c in live_track_df.columns}
         
         wk_col = cols_lower.get("week_starting", "Week_Starting")
@@ -2648,14 +2647,13 @@ with active_season:
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # Auto-sync callback trigger on button click
+            # Callback trigger on button click with HTTP feedback
             def modify_counter(p_name, metric, delta, wk_s, date_s):
                 key = f"{wk_s}|{date_s}|{p_name}|{metric}"
                 curr = st.session_state.tracking_data.get(key, 0)
                 new_val = max(0, curr + delta)
                 st.session_state.tracking_data[key] = new_val
 
-                # Send automatic POST update directly to Apps Script
                 macro_url = (
                     st.secrets.get("MACRO_URL")
                     or st.secrets.get("Live Track")
