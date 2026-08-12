@@ -400,7 +400,7 @@ def compute_practice_tables(player_name, session_date_str):
     ]
     int_metrics = [
         "Physio Intensity",
-        "Acceleration Load (load | High AAL)",
+        "High Acceleration",
         "High Speed Distance (mi)",
         "Speed (max.) (mph)",
         "Sprints",
