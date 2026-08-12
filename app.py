@@ -88,18 +88,36 @@ st.markdown(
             margin-bottom: 15px; text-transform: uppercase; letter-spacing: 0.5px;
         }
 
+        /* -------------------------------------------------------------------- */
+        /* CENTERED HTML TABLES (.vball-table)                                  */
+        /* -------------------------------------------------------------------- */
         .vball-table {
             width: 100%; border-collapse: collapse; background-color: #FFFFFF;
             border-radius: 8px; overflow: hidden; border: 1px solid #E2E8F0;
             font-size: 0.88rem; box-shadow: 0 1px 3px rgba(0,0,0,0.03); margin-bottom: 12px;
+            margin-left: auto; margin-right: auto;
         }
         .vball-table th {
-            background-color: #F1F5F9; color: #475569; font-weight: 700; text-align: left;
+            background-color: #F1F5F9; color: #475569; font-weight: 700; text-align: center !important;
             padding: 8px 12px; border-bottom: 2px solid #E2E8F0; text-transform: uppercase; font-size: 0.72rem;
         }
-        .vball-table td { padding: 8px 12px; border-bottom: 1px solid #F1F5F9; color: #0F172A; }
+        .vball-table td { 
+            padding: 8px 12px; border-bottom: 1px solid #F1F5F9; color: #0F172A; text-align: center !important; 
+        }
         .vball-table tr:last-child td { border-bottom: none; }
         .grade-badge { font-weight: 700; padding: 2px 8px; border-radius: 4px; display: inline-block; }
+
+        /* -------------------------------------------------------------------- */
+        /* CENTERED STREAMLIT DATAFRAMES (st.dataframe)                         */
+        /* -------------------------------------------------------------------- */
+        [data-testid="stDataFrame"] div[role="columnheader"] {
+            justify-content: center !important;
+            text-align: center !important;
+        }
+        [data-testid="stDataFrame"] div[role="gridcell"] {
+            justify-content: center !important;
+            text-align: center !important;
+        }
 
         .compliance-wrapper {
             background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px;
@@ -129,7 +147,6 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
-
 
 # -----------------------------------------------------------------------------
 # 2. PASSWORD PROTECTION
