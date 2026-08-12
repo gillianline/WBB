@@ -2849,9 +2849,8 @@ with active_season:
                             values="Count",
                             aggfunc="sum",
                             fill_value=0
-                        )
-                        st.dataframe(pivot_weekly, use_container_width=True)
+                        ).reset_index()
+
+                        st.markdown(render_vball_table(pivot_weekly), unsafe_allow_html=True)
                     else:
                         st.info("No stats recorded for this week.")
-            else:
-                st.info("No tracking metrics recorded yet.")
