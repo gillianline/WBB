@@ -214,7 +214,7 @@ def load_sheet_data():
             vol_df,
             int_df,
             comp_df,
-            weekly_df,
+            weekly_raw_out := fetch_csv("weekly_url"),
             cmj_df,
             roster_df,
             nordic_df,
@@ -298,32 +298,33 @@ def fetch_live_tracking_sheet():
     return pd.DataFrame()
 
 
-# POPULATE STATE FROM GOOGLE SHEET
-if "tracking_data" not in st.session_state or not st.session_state.get("tracking_data_initialized", False):
-    st.session_state.tracking_data = {}
-    live_track_df = fetch_live_tracking_sheet()
-    
-    if not live_track_df.empty:
-        cols_lower = {str(c).lower().strip(): c for c in live_track_df.columns}
-        
-        wk_col = cols_lower.get("week_starting", "Week_Starting")
-        dt_col = cols_lower.get("date", "Date")
-        ath_col = cols_lower.get("athlete", "Athlete")
-        met_col = cols_lower.get("metric", "Metric")
-        cnt_col = cols_lower.get("count", "Count")
+# DYNAMIC HYDRATION: Parse & format dates cleanly into YYYY-MM-DD keys
+live_track_df = fetch_live_tracking_sheet()
+st.session_state.tracking_data = {}
 
-        for _, row in live_track_df.iterrows():
-            wk = str(row.get(wk_col, "")).strip()
-            dt = str(row.get(dt_col, "")).strip()
-            ath = str(row.get(ath_col, "")).strip()
-            met = str(row.get(met_col, "")).strip()
-            cnt = pd.to_numeric(row.get(cnt_col, 0), errors="coerce")
-            
-            if wk and dt and ath and met and pd.notna(cnt):
-                key = f"{wk}|{dt}|{ath}|{met}"
-                st.session_state.tracking_data[key] = int(cnt)
-                
-    st.session_state.tracking_data_initialized = True
+if not live_track_df.empty:
+    cols_lower = {str(c).lower().strip(): c for c in live_track_df.columns}
+    
+    wk_col = cols_lower.get("week_starting", "Week_Starting")
+    dt_col = cols_lower.get("date", "Date")
+    ath_col = cols_lower.get("athlete", "Athlete")
+    met_col = cols_lower.get("metric", "Metric")
+    cnt_col = cols_lower.get("count", "Count")
+
+    for _, row in live_track_df.iterrows():
+        raw_wk = str(row.get(wk_col, "")).strip()
+        raw_dt = str(row.get(dt_col, "")).strip()
+        ath = str(row.get(ath_col, "")).strip()
+        met = str(row.get(met_col, "")).strip()
+        cnt = pd.to_numeric(row.get(cnt_col, 0), errors="coerce")
+        
+        # Strictly format dates as YYYY-MM-DD
+        wk_clean = format_date_clean(raw_wk)
+        dt_clean = format_date_clean(raw_dt)
+        
+        if wk_clean != "N/A" and dt_clean != "N/A" and ath and met and pd.notna(cnt):
+            key = f"{wk_clean}|{dt_clean}|{ath}|{met}"
+            st.session_state.tracking_data[key] = int(cnt)
 
 
 # -----------------------------------------------------------------------------
@@ -640,8 +641,6 @@ if st.sidebar.button("Refresh Google Sheets Data"):
         del st.session_state["recovery_local_state"]
     if "tracking_data" in st.session_state:
         del st.session_state["tracking_data"]
-    if "tracking_data_initialized" in st.session_state:
-        del st.session_state["tracking_data_initialized"]
     st.sidebar.success("Data reloaded!")
     st.rerun()
 
@@ -2647,9 +2646,11 @@ with active_season:
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # Callback trigger on button click with HTTP feedback
             def modify_counter(p_name, metric, delta, wk_s, date_s):
-                key = f"{wk_s}|{date_s}|{p_name}|{metric}"
+                wk_clean = format_date_clean(wk_s)
+                dt_clean = format_date_clean(date_s)
+                key = f"{wk_clean}|{dt_clean}|{p_name}|{metric}"
+                
                 curr = st.session_state.tracking_data.get(key, 0)
                 new_val = max(0, curr + delta)
                 st.session_state.tracking_data[key] = new_val
@@ -2664,8 +2665,8 @@ with active_season:
                     payload = {
                         "tracking_logs": [
                             {
-                                "Week_Starting": str(wk_s).strip(),
-                                "Date": str(date_s).strip(),
+                                "Week_Starting": wk_clean,
+                                "Date": dt_clean,
                                 "Athlete": str(p_name).strip(),
                                 "Metric": str(metric).strip(),
                                 "Count": new_val,
