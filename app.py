@@ -298,6 +298,26 @@ def fetch_live_tracking_sheet():
     return pd.DataFrame()
 
 
+# Global tracking preload logic
+if "tracking_data" not in st.session_state:
+    st.session_state.tracking_data = {}
+
+if "tracking_loaded_from_sheet" not in st.session_state:
+    live_track_df = fetch_live_tracking_sheet()
+    if not live_track_df.empty:
+        for _, row in live_track_df.iterrows():
+            wk = str(row.get("Week_Starting", "")).strip()
+            dt = str(row.get("Date", "")).strip()
+            ath = str(row.get("Athlete", "")).strip()
+            met = str(row.get("Metric", "")).strip()
+            cnt = pd.to_numeric(row.get("Count", 0), errors="coerce")
+            
+            if wk and dt and ath and met and pd.notna(cnt):
+                key = f"{wk}|{dt}|{ath}|{met}"
+                st.session_state.tracking_data[key] = int(cnt)
+    st.session_state.tracking_loaded_from_sheet = True
+
+
 # -----------------------------------------------------------------------------
 # 4. HELPER FUNCTIONS
 # -----------------------------------------------------------------------------
@@ -1066,10 +1086,80 @@ with active_season:
         st.divider()
 
         # =========================================================================
-        # 5. ADDITIONAL ASSESSMENT RECORDS
+        # 5. LIVE TRACKING STATS SUMMARY
         # =========================================================================
         st.markdown(
-            '<div class="vball-section-title">5. Additional Assessment Records</div>',
+            '<div class="vball-section-title">5. In-Practice Live Tracking Summary</div>',
+            unsafe_allow_html=True,
+        )
+
+        # Parse live tracking data from session state
+        ind_track_rows = []
+        for k, v in st.session_state.tracking_data.items():
+            parts = k.split("|")
+            if len(parts) == 4 and v > 0:
+                ind_track_rows.append({
+                    "Week_Starting": parts[0],
+                    "Date": parts[1],
+                    "Athlete": parts[2],
+                    "Metric": parts[3],
+                    "Count": v
+                })
+
+        ind_track_df = pd.DataFrame(ind_track_rows) if ind_track_rows else pd.DataFrame(columns=["Week_Starting", "Date", "Athlete", "Metric", "Count"])
+        p_ind_track = ind_track_df[ind_track_df["Athlete"] == selected_player] if not ind_track_df.empty else pd.DataFrame()
+
+        # Date controls for tracking week
+        local_now_ind = get_eastern_now()
+        today_ind = local_now_ind.date()
+        current_mon_ind = today_ind - datetime.timedelta(days=today_ind.weekday())
+
+        c_tr_wk, _ = st.columns([1, 2])
+        with c_tr_wk:
+            sel_ind_mon = st.date_input(
+                "Select Week Starting (Monday):",
+                value=current_mon_ind,
+                key="ind_prof_track_week_picker",
+            )
+            if sel_ind_mon.weekday() != 0:
+                sel_ind_mon = sel_ind_mon - datetime.timedelta(days=sel_ind_mon.weekday())
+            sel_ind_mon_str = sel_ind_mon.strftime("%Y-%m-%d")
+
+        p_ind_track_wk = p_ind_track[p_ind_track["Week_Starting"] == sel_ind_mon_str] if not p_ind_track.empty else pd.DataFrame()
+
+        t_col1, t_col2, t_col3 = st.columns(3)
+        to_total = p_ind_track_wk[p_ind_track_wk["Metric"] == "Turnover"]["Count"].sum() if not p_ind_track_wk.empty else 0
+        orb_total = p_ind_track_wk[p_ind_track_wk["Metric"] == "Offensive Rebound"]["Count"].sum() if not p_ind_track_wk.empty else 0
+        bo_total = p_ind_track_wk[p_ind_track_wk["Metric"] == "Box Out"]["Count"].sum() if not p_ind_track_wk.empty else 0
+
+        with t_col1:
+            st.metric("Turnovers (Week)", int(to_total))
+        with t_col2:
+            st.metric("Offensive Rebounds (Week)", int(orb_total))
+        with t_col3:
+            st.metric("Box Outs (Week)", int(bo_total))
+
+        if not p_ind_track_wk.empty:
+            st.markdown(f"#### Daily Breakdown for Week of {sel_ind_mon_str}")
+            pivot_ind_track = p_ind_track_wk.pivot_table(
+                index="Metric",
+                columns="Date",
+                values="Count",
+                aggfunc="sum",
+                fill_value=0
+            )
+            pivot_ind_track["Total"] = pivot_ind_track.sum(axis=1)
+            st.dataframe(pivot_ind_track, use_container_width=True)
+        else:
+            st.info(f"No in-practice tracking metrics logged for {selected_player} during the week of {sel_ind_mon_str}.")
+
+        st.divider()
+
+        # =========================================================================
+        # 6. ADDITIONAL ASSESSMENT RECORDS
+        # =========================================================================
+        st.markdown(
+            '<div class="vball-section-title">6. Additional Assessment Records</div>',
             unsafe_allow_html=True,
         )
 
@@ -2214,7 +2304,7 @@ with active_season:
 
                 val, dt = get_formatted_peak_overall(ab_df)
                 if val:
-                    records.append({"Category": "Hip Abduction (L/R)", "Best Test Value": val, "Date Achieved": dt})
+                    records.append({"Category": "Hip Abduction (L/R)", "Best Test Value": dt, "Date Achieved": dt})
 
             # 6. Ankle Plantar Flexion
             p_ank_ov = ankle_raw[ankle_raw["Name"] == selected_ov_athlete].copy() if not ankle_raw.empty and "Name" in ankle_raw.columns else pd.DataFrame()
@@ -2504,26 +2594,6 @@ with active_season:
         local_now = get_eastern_now()
         today = local_now.date()
         current_monday = today - datetime.timedelta(days=today.weekday())
-
-        # Initialize local counter state
-        if "tracking_data" not in st.session_state:
-            st.session_state.tracking_data = {}
-
-        # Fetch synced data from Google Sheets into session state
-        if "tracking_loaded_from_sheet" not in st.session_state:
-            live_track_df = fetch_live_tracking_sheet()
-            if not live_track_df.empty:
-                for _, row in live_track_df.iterrows():
-                    wk = str(row.get("Week_Starting", "")).strip()
-                    dt = str(row.get("Date", "")).strip()
-                    ath = str(row.get("Athlete", "")).strip()
-                    met = str(row.get("Metric", "")).strip()
-                    cnt = pd.to_numeric(row.get("Count", 0), errors="coerce")
-                    
-                    if wk and dt and ath and met and pd.notna(cnt):
-                        key = f"{wk}|{dt}|{ath}|{met}"
-                        st.session_state.tracking_data[key] = int(cnt)
-            st.session_state.tracking_loaded_from_sheet = True
 
         with track_tab_live:
             st.markdown(
