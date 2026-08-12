@@ -2851,6 +2851,12 @@ with active_season:
                             fill_value=0
                         ).reset_index()
 
-                        st.markdown(render_vball_table(pivot_weekly), unsafe_allow_html=True)
-                    else:
-                        st.info("No stats recorded for this week.")
+                        # Define alignment configuration for every column
+                        col_config = {
+                            col: st.column_config.Column(alignment="center")
+                            for col in pivot_weekly.columns
+                        }
+
+                        st.dataframe(
+                            pivot_weekly, column_config=col_config, use_container_width=True, hide_index=True
+                        )
