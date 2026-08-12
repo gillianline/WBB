@@ -160,7 +160,7 @@ if not check_password():
 
 
 # -----------------------------------------------------------------------------
-# 3. DATA LOADING VIA SECRETS & LIVE WEBHOOK FETCH
+# 3. DATA LOADING VIA SECRETS & DYNAMIC LIVE FETCH
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=300)
 def load_sheet_data():
@@ -252,7 +252,7 @@ def fetch_live_recovery_sheet():
 
     if macro_url:
         try:
-            res = requests.get(f"{macro_url}?sheet=Logs", headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
+            res = requests.get(f"{macro_url}?sheet=Logs&t={datetime.datetime.now().timestamp()}", headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
             if res.status_code == 200:
                 data = res.json()
                 if isinstance(data, list) and len(data) > 0:
@@ -284,6 +284,7 @@ def fetch_live_tracking_sheet():
 
     if macro_url:
         try:
+            # Timestamp parameter forces a fresh un-cached GET request from Google Sheets
             fetch_url = f"{macro_url}?sheet=Tracking_Logs&t={datetime.datetime.now().timestamp()}"
             res = requests.get(fetch_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
             if res.status_code == 200 and res.text.strip():
@@ -298,22 +299,32 @@ def fetch_live_tracking_sheet():
     return pd.DataFrame()
 
 
-# CRITICAL: Always populate st.session_state.tracking_data on initial load or refresh
-if "tracking_data" not in st.session_state or "tracking_loaded_from_sheet" not in st.session_state:
+# DYNAMIC HYDRATION: Always re-query Google Sheets when initializing tracking_data
+if "tracking_data" not in st.session_state or not st.session_state.get("tracking_data_initialized", False):
     st.session_state.tracking_data = {}
     live_track_df = fetch_live_tracking_sheet()
     if not live_track_df.empty:
+        # Case-insensitive column helper
+        cols_lower = {str(c).lower().strip(): c for c in live_track_df.columns}
+        
+        wk_col = cols_lower.get("week_starting", "Week_Starting")
+        dt_col = cols_lower.get("date", "Date")
+        ath_col = cols_lower.get("athlete", "Athlete")
+        met_col = cols_lower.get("metric", "Metric")
+        cnt_col = cols_lower.get("count", "Count")
+
         for _, row in live_track_df.iterrows():
-            wk = str(row.get("Week_Starting", "")).strip()
-            dt = str(row.get("Date", "")).strip()
-            ath = str(row.get("Athlete", "")).strip()
-            met = str(row.get("Metric", "")).strip()
-            cnt = pd.to_numeric(row.get("Count", 0), errors="coerce")
+            wk = str(row.get(wk_col, "")).strip()
+            dt = str(row.get(dt_col, "")).strip()
+            ath = str(row.get(ath_col, "")).strip()
+            met = str(row.get(met_col, "")).strip()
+            cnt = pd.to_numeric(row.get(cnt_col, 0), errors="coerce")
             
             if wk and dt and ath and met and pd.notna(cnt):
                 key = f"{wk}|{dt}|{ath}|{met}"
                 st.session_state.tracking_data[key] = int(cnt)
-    st.session_state.tracking_loaded_from_sheet = True
+                
+    st.session_state.tracking_data_initialized = True
 
 
 # -----------------------------------------------------------------------------
@@ -628,10 +639,10 @@ if st.sidebar.button("Refresh Google Sheets Data"):
     st.cache_data.clear()
     if "recovery_local_state" in st.session_state:
         del st.session_state["recovery_local_state"]
-    if "tracking_loaded_from_sheet" in st.session_state:
-        del st.session_state["tracking_loaded_from_sheet"]
     if "tracking_data" in st.session_state:
         del st.session_state["tracking_data"]
+    if "tracking_data_initialized" in st.session_state:
+        del st.session_state["tracking_data_initialized"]
     st.sidebar.success("Data reloaded!")
     st.rerun()
 
