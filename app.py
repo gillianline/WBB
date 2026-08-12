@@ -143,6 +143,20 @@ st.markdown(
             margin-bottom: 12px;
             box-shadow: 0 2px 6px rgba(0,0,0,0.03);
         }
+
+        /* Center all st.dataframe column headers and cell values */
+        [data-testid="stDataFrame"] div[role="columnheader"] {
+            justify-content: center !important;
+            text-align: center !important;
+        }
+        [data-testid="stDataFrame"] div[role="columnheader"] span {
+            text-align: center !important;
+            width: 100% !important;
+        }
+        [data-testid="stDataFrame"] div[role="gridcell"] {
+            justify-content: center !important;
+            text-align: center !important;
+        }
     </style>
 """,
     unsafe_allow_html=True,
