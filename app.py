@@ -453,7 +453,7 @@ def compute_practice_tables(player_name, session_date_str):
 
     vol_metrics = [
         "Distance (mi)",
-        "Acceleration",
+        "Accels",
         "Decels",
         "FCTs",
         "Physio Load",
@@ -711,7 +711,7 @@ with active_season:
         ("Speed (MPH)", "Max Speed", "mph"),
         ("Distance (mi)", "Distance", "mi"),
         ("High Metabolic Power Distance (m)", "High Metabolic Power", "m"),
-        ("Acceleration", "Acceleration", ""),
+        ("Accels", "Accels", ""),
         ("Decels", "Decels", ""),
         ("Sprints", "Sprints", "cnt"),
         ("MCTs", "MCTs", "cnt"),
@@ -1065,7 +1065,7 @@ with active_season:
                 .agg({
                     "Distance (mi)": "mean",
                     "High Speed Distance (mi)": "mean",
-                    "Acceleration": "mean",
+                    "Accels": "mean",
                     "Decels": "mean",
                 })
                 .reset_index()
@@ -1076,7 +1076,7 @@ with active_season:
                     "Week",
                     "Distance (mi)",
                     "High Speed Distance (mi)",
-                    "Acceleration",
+                    "Accels",
                     "Decels",
                 ]
             )
@@ -1098,8 +1098,8 @@ with active_season:
 
             fig_ind_aal = create_team_bar_athlete_line_chart(
                 all_weeks,
-                t_weekly_avg.get("Acceleration", []),
-                p_weekly.get("Acceleration", []),
+                t_weekly_avg.get("Accels", []),
+                p_weekly.get("Accels", []),
                 f"AAL — {selected_player}",
                 selected_player,
                 "#38BDF8",
@@ -1473,7 +1473,7 @@ with active_season:
                 .agg({
                     "Distance (mi)": "sum",
                     "High Speed Distance (mi)": "sum",
-                    "Acceleration": "sum",
+                    "Accels": "sum",
                     "Decels": "sum",
                 })
                 .reset_index()
@@ -1484,7 +1484,7 @@ with active_season:
                     "Week",
                     "Distance (mi)",
                     "High Speed Distance (mi)",
-                    "Acceleration",
+                    "Accels",
                     "Decels",
                 ]
             )
@@ -1504,8 +1504,8 @@ with active_season:
 
             fig_aal = create_clean_bar_chart(
                 weeks,
-                weekly_agg.get("Acceleration", []),
-                "Acceleration",
+                weekly_agg.get("Accels", []),
+                "Accels",
                 "#FF8200",
             )
             st.plotly_chart(fig_aal, use_container_width=True)
@@ -1546,7 +1546,7 @@ with active_season:
                 .agg({
                     "Distance (mi)": "mean",
                     "High Speed Distance (mi)": "mean",
-                    "Acceleration": "mean",
+                    "Accels": "mean",
                     "Decels": "mean",
                 })
                 .reset_index()
@@ -1557,7 +1557,7 @@ with active_season:
                     "Week",
                     "Distance (mi)",
                     "High Speed Distance (mi)",
-                    "Acceleration",
+                    "Accels",
                     "Decels",
                 ]
             )
@@ -1579,8 +1579,8 @@ with active_season:
 
             fig_ind_aal = create_team_bar_athlete_line_chart(
                 all_weeks,
-                t_weekly_avg.get("Acceleration", []),
-                p_weekly.get("Acceleration", []),
+                t_weekly_avg.get("Accels", []),
+                p_weekly.get("Accels", []),
                 f"AAL — {selected_player_w}",
                 selected_player_w,
                 "#38BDF8",
