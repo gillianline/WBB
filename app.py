@@ -2849,19 +2849,9 @@ with active_season:
                             values="Count",
                             aggfunc="sum",
                             fill_value=0
-                        ).reset_index()
-
-                        # Center all columns explicitly
-                        col_config_weekly = {
-                            col: st.column_config.Column(alignment="center")
-                            for col in pivot_weekly.columns
-                        }
-
-                        st.dataframe(
-                            pivot_weekly,
-                            column_config=col_config_weekly,
-                            use_container_width=True,
-                            hide_index=True
                         )
+                        st.dataframe(pivot_weekly, use_container_width=True)
                     else:
                         st.info("No stats recorded for this week.")
+            else:
+                st.info("No tracking metrics recorded yet.")
