@@ -2819,17 +2819,26 @@ with active_season:
                 with c_sum_d:
                     st.markdown(f"#### Daily Breakdown ({session_date_val})")
                     daily_df = filtered_wk_df[filtered_wk_df["Date"] == session_date_val]
+                    # For pivot tables in Tab 7 (Tracking Summary)
                     if not daily_df.empty:
                         pivot_daily = daily_df.pivot_table(
                             index="Athlete",
                             columns="Metric",
                             values="Count",
                             aggfunc="sum",
-                            fill_value=0
+                            fill_value=0,
+                        ).reset_index()
+
+                        # Define alignment configuration for every column
+                        col_config = {
+                            col: st.column_config.Column(alignment="center")
+                            for col in pivot_daily.columns
+                        }
+
+                        st.dataframe(
+                            pivot_daily, column_config=col_config, use_container_width=True, hide_index=True
                         )
-                        st.dataframe(pivot_daily, use_container_width=True)
-                    else:
-                        st.info("No stats recorded for the selected date.")
+                        
 
                 with c_sum_w:
                     st.markdown(f"#### Weekly Total Summary (Week of {track_week_str})")
