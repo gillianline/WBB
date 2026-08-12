@@ -160,7 +160,7 @@ if not check_password():
 
 
 # -----------------------------------------------------------------------------
-# 3. DATA LOADING VIA SECRETS
+# 3. DATA LOADING VIA SECRETS & LIVE WEBHOOK FETCH
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=300)
 def load_sheet_data():
@@ -298,11 +298,9 @@ def fetch_live_tracking_sheet():
     return pd.DataFrame()
 
 
-# Preload live tracking data into session state
-if "tracking_data" not in st.session_state:
+# CRITICAL: Always populate st.session_state.tracking_data on initial load or refresh
+if "tracking_data" not in st.session_state or "tracking_loaded_from_sheet" not in st.session_state:
     st.session_state.tracking_data = {}
-
-if "tracking_loaded_from_sheet" not in st.session_state:
     live_track_df = fetch_live_tracking_sheet()
     if not live_track_df.empty:
         for _, row in live_track_df.iterrows():
@@ -632,6 +630,8 @@ if st.sidebar.button("Refresh Google Sheets Data"):
         del st.session_state["recovery_local_state"]
     if "tracking_loaded_from_sheet" in st.session_state:
         del st.session_state["tracking_loaded_from_sheet"]
+    if "tracking_data" in st.session_state:
+        del st.session_state["tracking_data"]
     st.sidebar.success("Data reloaded!")
     st.rerun()
 
