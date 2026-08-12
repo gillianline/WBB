@@ -298,7 +298,7 @@ def fetch_live_tracking_sheet():
     return pd.DataFrame()
 
 
-# Global tracking preload logic
+# Preload live tracking data into session state
 if "tracking_data" not in st.session_state:
     st.session_state.tracking_data = {}
 
@@ -1093,7 +1093,6 @@ with active_season:
             unsafe_allow_html=True,
         )
 
-        # Parse live tracking data from session state
         ind_track_rows = []
         for k, v in st.session_state.tracking_data.items():
             parts = k.split("|")
@@ -1109,7 +1108,6 @@ with active_season:
         ind_track_df = pd.DataFrame(ind_track_rows) if ind_track_rows else pd.DataFrame(columns=["Week_Starting", "Date", "Athlete", "Metric", "Count"])
         p_ind_track = ind_track_df[ind_track_df["Athlete"] == selected_player] if not ind_track_df.empty else pd.DataFrame()
 
-        # Date controls for tracking week
         local_now_ind = get_eastern_now()
         today_ind = local_now_ind.date()
         current_mon_ind = today_ind - datetime.timedelta(days=today_ind.weekday())
@@ -2304,7 +2302,7 @@ with active_season:
 
                 val, dt = get_formatted_peak_overall(ab_df)
                 if val:
-                    records.append({"Category": "Hip Abduction (L/R)", "Best Test Value": dt, "Date Achieved": dt})
+                    records.append({"Category": "Hip Abduction (L/R)", "Best Test Value": val, "Date Achieved": dt})
 
             # 6. Ankle Plantar Flexion
             p_ank_ov = ankle_raw[ankle_raw["Name"] == selected_ov_athlete].copy() if not ankle_raw.empty and "Name" in ankle_raw.columns else pd.DataFrame()
@@ -2584,7 +2582,7 @@ with active_season:
                 st.info("No recovery data currently recorded.")
 
     # =========================================================================
-    # TAB 7: TRACKING (LIVE PRACTICE STATS & SUMMARY WITH PERSISTENCE)
+    # TAB 7: TRACKING (LIVE PRACTICE STATS & SUMMARY WITH AUTOMATIC WEBHOOK SYNC)
     # =========================================================================
     elif main_tab == "Tracking":
         track_tab_live, track_tab_summary = st.tabs(
@@ -2639,11 +2637,43 @@ with active_season:
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            def modify_counter(p_name, metric, delta):
-                key = f"{track_week_str}|{session_date_val}|{p_name}|{metric}"
+            # Auto-sync callback trigger on button click
+            def modify_counter(p_name, metric, delta, wk_s, date_s):
+                key = f"{wk_s}|{date_s}|{p_name}|{metric}"
                 curr = st.session_state.tracking_data.get(key, 0)
                 new_val = max(0, curr + delta)
                 st.session_state.tracking_data[key] = new_val
+
+                # Send automatic POST update directly to Apps Script
+                macro_url = (
+                    st.secrets.get("MACRO_URL")
+                    or st.secrets.get("Live Track")
+                    or st.secrets.get("sheets", {}).get("live_track_url")
+                )
+
+                if macro_url:
+                    payload = {
+                        "tracking_logs": [
+                            {
+                                "Week_Starting": str(wk_s).strip(),
+                                "Date": str(date_s).strip(),
+                                "Athlete": str(p_name).strip(),
+                                "Metric": str(metric).strip(),
+                                "Count": new_val,
+                                "Timestamp": get_eastern_time_str(),
+                            }
+                        ]
+                    }
+                    try:
+                        requests.post(
+                            macro_url,
+                            data=json.dumps(payload),
+                            headers={"Content-Type": "text/plain;charset=utf-8"},
+                            allow_redirects=True,
+                            timeout=8
+                        )
+                    except Exception as ex:
+                        print(f"Tracking auto-sync POST failed: {ex}")
 
             # Render 2-column grid of player cards
             for i in range(0, len(roster_players), 2):
@@ -2699,7 +2729,7 @@ with active_season:
                                             "−",
                                             key=f"dec_{player}_{metric_name}_{session_date_val}",
                                             on_click=modify_counter,
-                                            args=(player, metric_name, -1),
+                                            args=(player, metric_name, -1, track_week_str, session_date_val),
                                         )
                                     with b_col2:
                                         st.markdown(
@@ -2711,50 +2741,10 @@ with active_season:
                                             "+",
                                             key=f"inc_{player}_{metric_name}_{session_date_val}",
                                             on_click=modify_counter,
-                                            args=(player, metric_name, 1),
+                                            args=(player, metric_name, 1, track_week_str, session_date_val),
                                         )
 
                             st.markdown("<br>", unsafe_allow_html=True)
-
-            st.divider()
-
-            # Webhook Sync Button
-            if st.button("Sync Tracking Data to Google Sheet", use_container_width=True):
-                payload_list = []
-                for k, v in st.session_state.tracking_data.items():
-                    parts = k.split("|")
-                    if len(parts) == 4 and v > 0:
-                        payload_list.append({
-                            "Week_Starting": parts[0],
-                            "Date": parts[1],
-                            "Athlete": parts[2],
-                            "Metric": parts[3],
-                            "Count": v,
-                            "Timestamp": get_eastern_time_str(),
-                        })
-
-                macro_url = (
-                    st.secrets.get("MACRO_URL")
-                    or st.secrets.get("Live Track")
-                    or st.secrets.get("sheets", {}).get("live_track_url")
-                )
-
-                if macro_url and payload_list:
-                    try:
-                        res = requests.post(
-                            macro_url,
-                            data=json.dumps({"tracking_logs": payload_list}),
-                            headers={"Content-Type": "text/plain;charset=utf-8"},
-                            allow_redirects=True,
-                            timeout=8
-                        )
-                        st.success("Successfully synchronized tracking stats to Google Sheet!")
-                    except Exception as ex:
-                        st.error(f"Error syncing to Google Sheet: {ex}")
-                elif not payload_list:
-                    st.info("No stats recorded yet for this session to sync.")
-                else:
-                    st.error("Google Sheet webhook URL not found in secrets.")
 
         with track_tab_summary:
             st.markdown(
