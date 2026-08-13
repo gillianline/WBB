@@ -2558,9 +2558,10 @@ with active_season:
                 station_counts = summary_df["Station"].dropna().value_counts()
                 top_station = station_counts.idxmax() if not station_counts.empty else "N/A"
 
+                # 1. TOP SECTION: KPI Cards across full width
                 st.markdown(
                     f"""
-                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px;">
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">
                         <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #FF8200; border-radius: 10px; padding: 16px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
                             <div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Total Stations Utilized</div>
                             <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{total_completions}</div>
@@ -2578,77 +2579,81 @@ with active_season:
                     unsafe_allow_html=True,
                 )
 
-                col_sum1, col_sum2 = st.columns([1, 1.2], gap="large")
+                # 2. MIDDLE SECTION: Full-width bar chart
+                st.markdown("<h4 style='color:#0F172A; font-size:1.1rem; font-weight:700; margin-bottom:12px;'>Total Usage by Station</h4>", unsafe_allow_html=True)
+                station_counts_df = (
+                    summary_df["Station"]
+                    .dropna()
+                    .value_counts()
+                    .reset_index()
+                )
+                station_counts_df.columns = ["Station", "Count"]
+                station_counts_df["Station"] = station_counts_df["Station"].astype(str)
 
-                with col_sum1:
-                    st.markdown("<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Total Usage by Station</h4>", unsafe_allow_html=True)
-                    station_counts_df = (
-                        summary_df["Station"]
-                        .dropna()
-                        .value_counts()
-                        .reset_index()
-                    )
-                    station_counts_df.columns = ["Station", "Count"]
-                    station_counts_df["Station"] = station_counts_df["Station"].astype(str)
+                fig_rec_bar = px.bar(
+                    station_counts_df,
+                    x="Station",
+                    y="Count",
+                    text="Count",
+                )
+                fig_rec_bar.update_traces(
+                    marker_color="#FF8200",
+                    marker_line_color="#D96B00",
+                    marker_line_width=1.5,
+                    textposition="outside",
+                    hovertemplate="<b>%{x}</b><br>Total Logs: %{y}<extra></extra>"
+                )
+                fig_rec_bar.update_layout(
+                    showlegend=False,
+                    height=300,
+                    margin=dict(l=10, r=10, t=25, b=10),
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    xaxis=dict(
+                        title=None,
+                        showgrid=False,
+                        tickfont=dict(color="#475569", size=11, weight="bold"),
+                    ),
+                    yaxis=dict(
+                        title=None,
+                        showgrid=True,
+                        gridcolor="#F1F5F9",
+                        zeroline=False,
+                    ),
+                )
+                st.plotly_chart(fig_rec_bar, use_container_width=True)
 
-                    fig_rec_bar = px.bar(
-                        station_counts_df,
-                        x="Station",
-                        y="Count",
-                        text="Count",
-                    )
-                    fig_rec_bar.update_traces(
-                        marker_color="#FF8200",
-                        marker_line_color="#D96B00",
-                        marker_line_width=1.5,
-                        textposition="outside",
-                        hovertemplate="<b>%{x}</b><br>Total Logs: %{y}<extra></extra>"
-                    )
-                    fig_rec_bar.update_layout(
-                        showlegend=False,
-                        height=330,
-                        margin=dict(l=10, r=10, t=25, b=10),
-                        plot_bgcolor="rgba(0,0,0,0)",
-                        paper_bgcolor="rgba(0,0,0,0)",
-                        xaxis=dict(
-                            title=None,
-                            showgrid=False,
-                            tickfont=dict(color="#475569", size=11, weight="bold"),
-                        ),
-                        yaxis=dict(
-                            title=None,
-                            showgrid=True,
-                            gridcolor="#F1F5F9",
-                            zeroline=False,
-                        ),
-                    )
-                    st.plotly_chart(fig_rec_bar, use_container_width=True)
+                st.divider()
 
-                with col_sum2:
-                    st.markdown("<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Individual Athlete Log Search</h4>", unsafe_allow_html=True)
-                    if "Athlete" in summary_df.columns:
-                        athletes = sorted(summary_df["Athlete"].unique().tolist())
-                        selected_ath = st.selectbox("Select Athlete:", athletes, key="rec_summary_ath_dropdown")
-                        
-                        ath_logs = summary_df[summary_df["Athlete"] == selected_ath]
-                        
-                        with st.container(height=280):
-                            for _, row in ath_logs.iterrows():
-                                day_str = row.get("Day", "Session")
-                                station_str = row.get("Station", "")
-                                
-                                st.markdown(
-                                    f"""
-                                    <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-left:4px solid #FF8200; border-radius:6px; padding:10px 14px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
-                                        <span style="font-weight:700; color:#0F172A; font-size:0.9rem;">{station_str}</span>
-                                        <span style="font-size:0.8rem; color:#64748B; background:#F8FAFC; padding:2px 8px; border-radius:4px; border:1px solid #E2E8F0;">{day_str}</span>
-                                    </div>
-                                    """,
-                                    unsafe_allow_html=True
-                                )
-                                
+                # 3. BOTTOM SECTION: Full-width Option C list table
+                st.markdown("<h4 style='color:#0F172A; font-size:1.1rem; font-weight:700; margin-bottom:12px;'>Athlete Logging Overview</h4>", unsafe_allow_html=True)
+                if "Athlete" in summary_df.columns:
+                    list_df = summary_df.groupby("Athlete")["Station"].apply(lambda x: ", ".join(sorted(x.unique()))).reset_index()
+                    list_df.columns = ["Athlete", "Stations Logged"]
+                    
+                    # Add total logs count per athlete for added context
+                    log_counts = summary_df.groupby("Athlete")["Station"].count().reset_index()
+                    log_counts.columns = ["Athlete", "Total Sessions"]
+                    
+                    final_summary_table = pd.merge(list_df, log_counts, on="Athlete")
+                    final_summary_table = final_summary_table[["Athlete", "Total Sessions", "Stations Logged"]]
+
+                    # Column configuration for center alignment and full width
+                    table_config = {
+                        "Athlete": st.column_config.Column("Athlete", width="medium"),
+                        "Total Sessions": st.column_config.Column("Total Sessions", alignment="center", width="small"),
+                        "Stations Logged": st.column_config.Column("Stations Logged", width="large"),
+                    }
+
+                    st.dataframe(
+                        final_summary_table,
+                        column_config=table_config,
+                        use_container_width=True,
+                        hide_index=True,
+                    )
             else:
                 st.info("No recovery data currently recorded.")
+                
 
     # =========================================================================
     # TAB 7: TRACKING (LIVE PRACTICE STATS & SUMMARY WITH AUTOMATIC WEBHOOK SYNC)
