@@ -2625,35 +2625,37 @@ with active_season:
                     st.plotly_chart(fig_rec_bar, use_container_width=True)
 
                 with col_sum2:
-                    st.markdown("<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Athlete Recovery Choices</h4>", unsafe_allow_html=True)
+                    st.markdown("<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Athlete Active Logging</h4>", unsafe_allow_html=True)
                     if "Athlete" in summary_df.columns:
-                        # Group by athlete to get all logged stations
-                        ath_summary = summary_df.groupby("Athlete")["Station"].value_counts().unstack(fill_value=0)
+                        # Group logs by athlete
+                        ath_grouped = summary_df.groupby("Athlete")
                         
                         with st.container(height=340):
-                            for ath_name, row in ath_summary.iterrows():
-                                # Get active stations used by this athlete
-                                used_stations = [f"{stn} ({count}x)" if count > 1 else stn for stn, count in row.items() if count > 0]
-                                total_logs = row.sum()
-
-                                # Station Badges HTML
-                                badges_html = " ".join([
-                                    f'<span style="background:#F0F9FF; color:#0284C7; font-weight:700; font-size:0.75rem; padding:3px 10px; border-radius:12px; border:1px solid #BAE6FD;">{s}</span>' 
-                                    for s in used_stations
+                            for ath_name, group in ath_grouped:
+                                stations_used = group["Station"].tolist()
+                                total_entries = len(stations_used)
+                                
+                                # Format distinct stations with counts
+                                counts = pd.Series(stations_used).value_counts()
+                                pills_html = "".join([
+                                    f'<span style="background:#FFF7ED; color:#C2410C; border:1px solid #FFEDD5; font-weight:700; font-size:0.75rem; padding:4px 10px; border-radius:16px;">{stn} <span style="opacity:0.6;">×{cnt}</span></span>'
+                                    for stn, cnt in counts.items()
                                 ])
-
-                                card_html = f"""
-                                <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:10px; padding:12px 16px; margin-bottom:10px; box-shadow:0 1px 3px rgba(0,0,0,0.02);">
-                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                                        <span style="font-weight:800; color:#0F172A; font-size:0.95rem;">{ath_name}</span>
-                                        <span style="background:#F8FAFC; border:1px solid #E2E8F0; color:#64748B; font-weight:700; font-size:0.75rem; padding:2px 8px; border-radius:6px;">{total_logs} Session{'s' if total_logs > 1 else ''} Logged</span>
+                                
+                                st.markdown(
+                                    f"""
+                                    <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:10px; padding:14px; margin-bottom:10px;">
+                                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                                            <span style="font-weight:800; color:#0F172A; font-size:0.95rem;">{ath_name}</span>
+                                            <span style="font-size:0.75rem; color:#64748B; font-weight:600;">{total_entries} Active Log{'s' if total_entries > 1 else ''}</span>
+                                        </div>
+                                        <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                                            {pills_html}
+                                        </div>
                                     </div>
-                                    <div style="display:flex; flex-wrap:wrap; gap:6px;">
-                                        {badges_html}
-                                    </div>
-                                </div>
-                                """
-                                st.markdown(card_html, unsafe_allow_html=True)
+                                    """,
+                                    unsafe_allow_html=True
+                                )
             else:
                 st.info("No recovery data currently recorded.")
 
