@@ -2625,37 +2625,38 @@ with active_season:
                     st.plotly_chart(fig_rec_bar, use_container_width=True)
 
                 with col_sum2:
-                    st.markdown("<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Athlete Completion Matrix</h4>", unsafe_allow_html=True)
+                    st.markdown("<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Athlete Individual Progress</h4>", unsafe_allow_html=True)
                     if "Athlete" in summary_df.columns:
-                        p_df = summary_df.copy()
-                        p_df["Value"] = 1
-                        pivot_summary = p_df.pivot_table(
-                            index="Athlete",
-                            columns="Station",
-                            values="Value",
-                            aggfunc="sum",
-                            fill_value=0,
-                        ).reset_index()
-
-                        # Configure explicit center alignment & progress bar visuals per station column
-                        col_configs = {
-                            col: st.column_config.ProgressColumn(
-                                label=col,
-                                min_value=0,
-                                max_value=int(pivot_summary.iloc[:, 1:].max().max() or 1),
-                                format="%d",
-                            )
-                            for col in pivot_summary.columns if col != "Athlete"
-                        }
-                        col_configs["Athlete"] = st.column_config.Column(alignment="left")
-
-                        st.dataframe(
-                            pivot_summary,
-                            column_config=col_configs,
-                            use_container_width=True,
-                            hide_index=True,
-                            height=330,
-                        )
+                        # Group completions by athlete
+                        ath_grouped = summary_df.groupby("Athlete")["Station"].unique().reset_index()
+                        
+                        # Container for scrollable cards
+                        with st.container(height=340):
+                            for _, row in ath_grouped.iterrows():
+                                ath_name = row["Athlete"]
+                                completed_stations = list(row["Station"])
+                                count = len(completed_stations)
+                                pct = int((count / 6) * 100) # Assuming 6 total stations
+                                
+                                # Render individual athlete row card
+                                badges_html = " ".join([f'<span style="background:#EFF6FF; color:#1D4ED8; font-weight:600; font-size:0.72rem; padding:2px 8px; border-radius:4px; border:1px solid #BFDBFE;">{s}</span>' for s in completed_stations])
+                                
+                                card_html = f"""
+                                <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:12px; margin-bottom:10px; box-shadow:0 1px 2px rgba(0,0,0,0.02);">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                                        <span style="font-weight:700; color:#0F172A; font-size:0.9rem;">{ath_name}</span>
+                                        <span style="font-weight:800; color:#FF8200; font-size:0.85rem;">{count} / 6 Stations ({pct}%)</span>
+                                    </div>
+                                    <div style="background:#F1F5F9; border-radius:4px; height:6px; width:100%; margin-bottom:8px; overflow:hidden;">
+                                        <div style="background:#FF8200; width:{pct}%; height:100%; border-radius:4px;"></div>
+                                    </div>
+                                    <div style="display:flex; flex-wrap:wrap; gap:4px;">
+                                        {badges_html}
+                                    </div>
+                                </div>
+                                """
+                                st.markdown(card_html, unsafe_allow_html=True)
+                                
             else:
                 st.info("No recovery data currently recorded.")
 
