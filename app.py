@@ -2625,51 +2625,43 @@ with active_season:
 
                 st.divider()
 
-                # 3. BOTTOM SECTION: Monday-Sunday Row Grid per Athlete
+                # 3. BOTTOM SECTION: Monday–Sunday Weekly Grid per Athlete
                 st.markdown("<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Weekly Athlete Recovery Timeline</h4>", unsafe_allow_html=True)
                 if "Athlete" in summary_df.columns:
                     ath_grouped = summary_df.groupby("Athlete")
-
-                    # Order of days across the week
-                    days_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+                    days_order = [("Monday", "Mon"), ("Tuesday", "Tue"), ("Wednesday", "Wed"), ("Thursday", "Thu"), ("Friday", "Fri"), ("Saturday", "Sat"), ("Sunday", "Sun")]
 
                     for ath_name, group in ath_grouped:
-                        # Map stations under each day name
                         day_stations_map = {}
                         for _, row in group.iterrows():
                             raw_day = str(row.get("Day", ""))
                             stn = str(row.get("Station", ""))
                             
-                            # Extract standard day name (e.g. "Monday" from "Monday (08/10)")
-                            day_key = next((d for d in days_order if d in raw_day), raw_day)
-                            
+                            day_key = next((full for full, _ in days_order if full in raw_day), raw_day)
                             if day_key not in day_stations_map:
                                 day_stations_map[day_key] = []
                             day_stations_map[day_key].append(stn)
 
-                        # Generate 7 columns (Monday - Sunday) for this athlete
                         days_grid_html = ""
-                        for day_name in days_order:
-                            stations_list = day_stations_map.get(day_name, [])
+                        for full_day, short_day in days_order:
+                            stations_list = day_stations_map.get(full_day, [])
                             
                             if stations_list:
                                 stations_html = "".join([
                                     f'<div style="background:#FFFFFF; border:1px solid #E2E8F0; border-left:3px solid #FF8200; border-radius:4px; padding:4px 8px; margin-top:4px; font-weight:700; color:#0F172A; font-size:0.78rem; text-align:center;">{stn}</div>'
                                     for stn in stations_list
                                 ])
-                                card_bg = "#FFFFFF"
-                                border_color = "#CBD5E1"
-                                header_color = "#FF8200"
+                                card_style = 'background:#FFFFFF; border:1px solid #CBD5E1; border-radius:8px; padding:10px; flex:1; min-width:0;'
+                                header_color = '#FF8200'
                             else:
                                 stations_html = '<div style="color:#94A3B8; font-size:0.75rem; text-align:center; margin-top:8px; font-style:italic;">—</div>'
-                                card_bg = "#F8FAFC"
-                                border_color = "#E2E8F0"
-                                header_color = "#64748B"
+                                card_style = 'background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:10px; flex:1; min-width:0;'
+                                header_color = '#64748B'
 
                             days_grid_html += f"""
-                            <div style="background:{card_bg}; border:1px solid {border_color}; border-radius:8px; padding:10px; flex:1; min-width:0;">
+                            <div style="{card_style}">
                                 <div style="font-weight:700; color:{header_color}; font-size:0.8rem; text-align:center; border-bottom:1px solid #E2E8F0; padding-bottom:4px; text-transform:uppercase;">
-                                    {day_name[:3]}
+                                    {short_day}
                                 </div>
                                 {stations_html}
                             </div>
