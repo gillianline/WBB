@@ -2553,35 +2553,36 @@ with active_season:
             summary_df = pd.DataFrame(summary_rows) if summary_rows else pd.DataFrame(columns=["Week_Starting", "Athlete", "Station", "Day"])
 
             if not summary_df.empty and "Station" in summary_df.columns:
-                s1, s2, s3 = st.columns(3)
-                with s1:
-                    st.metric("Total Stations Completed", len(summary_df))
-                with s2:
-                    st.metric(
-                        "Active Athletes Logged",
-                        (
-                            summary_df["Athlete"].nunique()
-                            if "Athlete" in summary_df.columns
-                            else 0
-                        ),
-                    )
-                with s3:
-                    station_counts = (
-                        summary_df["Station"].dropna().value_counts()
-                    )
-                    top_station = (
-                        station_counts.idxmax()
-                        if not station_counts.empty
-                        else "N/A"
-                    )
-                    st.metric("Most Popular Station", f"{top_station}")
+                # Custom KPI Card Styling
+                total_completions = len(summary_df)
+                active_athletes = summary_df["Athlete"].nunique() if "Athlete" in summary_df.columns else 0
+                station_counts = summary_df["Station"].dropna().value_counts()
+                top_station = station_counts.idxmax() if not station_counts.empty else "N/A"
 
-                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown(
+                    f"""
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px;">
+                        <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #FF8200; border-radius: 10px; padding: 16px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+                            <div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Total Stations Completed</div>
+                            <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{total_completions}</div>
+                        </div>
+                        <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #38BDF8; border-radius: 10px; padding: 16px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+                            <div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Active Athletes Logged</div>
+                            <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{active_athletes}</div>
+                        </div>
+                        <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #58595B; border-radius: 10px; padding: 16px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+                            <div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Most Utilized Station</div>
+                            <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{top_station}</div>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
-                col_sum1, col_sum2 = st.columns(2)
+                col_sum1, col_sum2 = st.columns([1, 1.2], gap="large")
 
                 with col_sum1:
-                    st.markdown("#### Completions by Station")
+                    st.markdown("<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Completions by Station</h4>", unsafe_allow_html=True)
                     station_counts_df = (
                         summary_df["Station"]
                         .dropna()
@@ -2589,28 +2590,43 @@ with active_season:
                         .reset_index()
                     )
                     station_counts_df.columns = ["Station", "Count"]
-                    station_counts_df["Station"] = station_counts_df[
-                        "Station"
-                    ].astype(str)
+                    station_counts_df["Station"] = station_counts_df["Station"].astype(str)
 
                     fig_rec_bar = px.bar(
                         station_counts_df,
                         x="Station",
                         y="Count",
-                        color="Station",
-                        color_discrete_sequence=px.colors.qualitative.Bold,
                         text="Count",
+                    )
+                    fig_rec_bar.update_traces(
+                        marker_color="#FF8200",
+                        marker_line_color="#D96B00",
+                        marker_line_width=1.5,
+                        textposition="outside",
+                        hovertemplate="<b>%{x}</b><br>Completions: %{y}<extra></extra>"
                     )
                     fig_rec_bar.update_layout(
                         showlegend=False,
-                        height=320,
+                        height=330,
+                        margin=dict(l=10, r=10, t=25, b=10),
                         plot_bgcolor="rgba(0,0,0,0)",
                         paper_bgcolor="rgba(0,0,0,0)",
+                        xaxis=dict(
+                            title=None,
+                            showgrid=False,
+                            tickfont=dict(color="#475569", size=11, weight="bold"),
+                        ),
+                        yaxis=dict(
+                            title=None,
+                            showgrid=True,
+                            gridcolor="#F1F5F9",
+                            zeroline=False,
+                        ),
                     )
                     st.plotly_chart(fig_rec_bar, use_container_width=True)
 
                 with col_sum2:
-                    st.markdown("#### Athlete Station Completion Matrix")
+                    st.markdown("<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Athlete Completion Heatmap</h4>", unsafe_allow_html=True)
                     if "Athlete" in summary_df.columns:
                         p_df = summary_df.copy()
                         p_df["Value"] = 1
@@ -2621,7 +2637,19 @@ with active_season:
                             aggfunc="sum",
                             fill_value=0,
                         )
-                        st.dataframe(pivot_summary, use_container_width=True)
+
+                        # Styled heatmap-like gradient view
+                        styled_pivot = (
+                            pivot_summary.style
+                            .background_gradient(cmap="Oranges", low=0.0, high=0.8)
+                            .format("{:d}")
+                        )
+
+                        st.dataframe(
+                            styled_pivot,
+                            use_container_width=True,
+                            height=330,
+                        )
             else:
                 st.info("No recovery data currently recorded.")
 
