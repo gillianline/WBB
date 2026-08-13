@@ -2625,27 +2625,31 @@ with active_season:
 
                 st.divider()
 
-                # 3. BOTTOM SECTION: Styled Full-Width Cards View for Option C
-                st.markdown("<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Logged Activity List</h4>", unsafe_allow_html=True)
+                # 3. BOTTOM SECTION: Person-by-Person Activity Log with Days
+                st.markdown("<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Individual Athlete Recovery Timeline</h4>", unsafe_allow_html=True)
                 if "Athlete" in summary_df.columns:
-                    ath_grouped = summary_df.groupby("Athlete")["Station"].unique().reset_index()
+                    ath_grouped = summary_df.groupby("Athlete")
 
-                    # Full-width styled card container
-                    for _, row in ath_grouped.iterrows():
-                        ath_name = row["Athlete"]
-                        stations_list = list(row["Station"])
-                        
-                        # Render each station as a clean pill badge
-                        badges_html = " ".join([
-                            f'<span style="background:#F0F9FF; color:#0284C7; font-weight:700; font-size:0.78rem; padding:4px 12px; border-radius:12px; border:1px solid #BAE6FD;">{s}</span>' 
-                            for s in stations_list
-                        ])
+                    for ath_name, group in ath_grouped:
+                        # Build station + day badges for this athlete
+                        items_html = ""
+                        for _, row in group.iterrows():
+                            stn = row.get("Station", "")
+                            day = row.get("Day", "")
+                            items_html += f'''
+                            <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-left:3px solid #FF8200; border-radius:6px; padding:6px 12px; display:flex; align-items:center; gap:8px;">
+                                <span style="font-weight:700; color:#0F172A; font-size:0.82rem;">{stn}</span>
+                                <span style="color:#64748B; font-size:0.75rem;">• {day}</span>
+                            </div>
+                            '''
 
                         card_html = f"""
-                        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:10px; padding:12px 18px; margin-bottom:10px; box-shadow:0 1px 3px rgba(0,0,0,0.02); display:flex; align-items:center; justify-content:space-between; gap:20px;">
-                            <div style="font-weight:800; color:#0F172A; font-size:0.95rem; min-width:180px;">{ath_name}</div>
-                            <div style="display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end;">
-                                {badges_html}
+                        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:10px; padding:14px 18px; margin-bottom:12px; box-shadow:0 1px 3px rgba(0,0,0,0.02);">
+                            <div style="font-weight:800; color:#0F172A; font-size:0.95rem; margin-bottom:10px; border-bottom:1px solid #F1F5F9; padding-bottom:6px;">
+                                {ath_name}
+                            </div>
+                            <div style="display:flex; flex-wrap:wrap; gap:8px;">
+                                {items_html}
                             </div>
                         </div>
                         """
