@@ -2562,7 +2562,7 @@ with active_season:
                     f"""
                     <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px;">
                         <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #FF8200; border-radius: 10px; padding: 16px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-                            <div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Total Stations Completed</div>
+                            <div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Total Stations Utilized</div>
                             <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{total_completions}</div>
                         </div>
                         <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #38BDF8; border-radius: 10px; padding: 16px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
@@ -2570,7 +2570,7 @@ with active_season:
                             <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{active_athletes}</div>
                         </div>
                         <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #58595B; border-radius: 10px; padding: 16px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-                            <div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Most Utilized Station</div>
+                            <div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Most Popular Station</div>
                             <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{top_station}</div>
                         </div>
                     </div>
@@ -2581,7 +2581,7 @@ with active_season:
                 col_sum1, col_sum2 = st.columns([1, 1.2], gap="large")
 
                 with col_sum1:
-                    st.markdown("<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Completions by Station</h4>", unsafe_allow_html=True)
+                    st.markdown("<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Total Usage by Station</h4>", unsafe_allow_html=True)
                     station_counts_df = (
                         summary_df["Station"]
                         .dropna()
@@ -2602,7 +2602,7 @@ with active_season:
                         marker_line_color="#D96B00",
                         marker_line_width=1.5,
                         textposition="outside",
-                        hovertemplate="<b>%{x}</b><br>Completions: %{y}<extra></extra>"
+                        hovertemplate="<b>%{x}</b><br>Total Logs: %{y}<extra></extra>"
                     )
                     fig_rec_bar.update_layout(
                         showlegend=False,
@@ -2625,38 +2625,35 @@ with active_season:
                     st.plotly_chart(fig_rec_bar, use_container_width=True)
 
                 with col_sum2:
-                    st.markdown("<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Athlete Individual Progress</h4>", unsafe_allow_html=True)
+                    st.markdown("<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Athlete Recovery Choices</h4>", unsafe_allow_html=True)
                     if "Athlete" in summary_df.columns:
-                        # Group completions by athlete
-                        ath_grouped = summary_df.groupby("Athlete")["Station"].unique().reset_index()
+                        # Group by athlete to get all logged stations
+                        ath_summary = summary_df.groupby("Athlete")["Station"].value_counts().unstack(fill_value=0)
                         
-                        # Container for scrollable cards
                         with st.container(height=340):
-                            for _, row in ath_grouped.iterrows():
-                                ath_name = row["Athlete"]
-                                completed_stations = list(row["Station"])
-                                count = len(completed_stations)
-                                pct = int((count / 6) * 100) # Assuming 6 total stations
-                                
-                                # Render individual athlete row card
-                                badges_html = " ".join([f'<span style="background:#EFF6FF; color:#1D4ED8; font-weight:600; font-size:0.72rem; padding:2px 8px; border-radius:4px; border:1px solid #BFDBFE;">{s}</span>' for s in completed_stations])
-                                
+                            for ath_name, row in ath_summary.iterrows():
+                                # Get active stations used by this athlete
+                                used_stations = [f"{stn} ({count}x)" if count > 1 else stn for stn, count in row.items() if count > 0]
+                                total_logs = row.sum()
+
+                                # Station Badges HTML
+                                badges_html = " ".join([
+                                    f'<span style="background:#F0F9FF; color:#0284C7; font-weight:700; font-size:0.75rem; padding:3px 10px; border-radius:12px; border:1px solid #BAE6FD;">{s}</span>' 
+                                    for s in used_stations
+                                ])
+
                                 card_html = f"""
-                                <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:12px; margin-bottom:10px; box-shadow:0 1px 2px rgba(0,0,0,0.02);">
-                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                                        <span style="font-weight:700; color:#0F172A; font-size:0.9rem;">{ath_name}</span>
-                                        <span style="font-weight:800; color:#FF8200; font-size:0.85rem;">{count} / 6 Stations ({pct}%)</span>
+                                <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:10px; padding:12px 16px; margin-bottom:10px; box-shadow:0 1px 3px rgba(0,0,0,0.02);">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                                        <span style="font-weight:800; color:#0F172A; font-size:0.95rem;">{ath_name}</span>
+                                        <span style="background:#F8FAFC; border:1px solid #E2E8F0; color:#64748B; font-weight:700; font-size:0.75rem; padding:2px 8px; border-radius:6px;">{total_logs} Session{'s' if total_logs > 1 else ''} Logged</span>
                                     </div>
-                                    <div style="background:#F1F5F9; border-radius:4px; height:6px; width:100%; margin-bottom:8px; overflow:hidden;">
-                                        <div style="background:#FF8200; width:{pct}%; height:100%; border-radius:4px;"></div>
-                                    </div>
-                                    <div style="display:flex; flex-wrap:wrap; gap:4px;">
+                                    <div style="display:flex; flex-wrap:wrap; gap:6px;">
                                         {badges_html}
                                     </div>
                                 </div>
                                 """
                                 st.markdown(card_html, unsafe_allow_html=True)
-                                
             else:
                 st.info("No recovery data currently recorded.")
 
