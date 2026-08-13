@@ -2559,25 +2559,23 @@ with active_season:
                 top_station = station_counts.idxmax() if not station_counts.empty else "N/A"
 
                 # 1. TOP SECTION: KPI Cards across full width
-                st.markdown(
-                    f"""
-                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">
-                        <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #FF8200; border-radius: 10px; padding: 16px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-                            <div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Total Stations Utilized</div>
-                            <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{total_completions}</div>
-                        </div>
-                        <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #38BDF8; border-radius: 10px; padding: 16px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-                            <div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Active Athletes Logged</div>
-                            <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{active_athletes}</div>
-                        </div>
-                        <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #58595B; border-radius: 10px; padding: 16px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-                            <div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Most Popular Station</div>
-                            <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{top_station}</div>
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
+                kpi_html = (
+                    '<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">'
+                    '<div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #FF8200; border-radius: 10px; padding: 16px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">'
+                    '<div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Total Stations Utilized</div>'
+                    f'<div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{total_completions}</div>'
+                    '</div>'
+                    '<div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #38BDF8; border-radius: 10px; padding: 16px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">'
+                    '<div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Active Athletes Logged</div>'
+                    f'<div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{active_athletes}</div>'
+                    '</div>'
+                    '<div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #58595B; border-radius: 10px; padding: 16px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">'
+                    '<div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Most Popular Station</div>'
+                    f'<div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{top_station}</div>'
+                    '</div>'
+                    '</div>'
                 )
+                st.markdown(kpi_html, unsafe_allow_html=True)
 
                 # 2. MIDDLE SECTION: Full-width bar chart
                 st.markdown("<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Total Usage by Station</h4>", unsafe_allow_html=True)
@@ -2637,7 +2635,6 @@ with active_season:
                             raw_day = str(row.get("Day", ""))
                             stn = str(row.get("Station", ""))
                             
-                            # Match the logged day to standard weekday
                             day_key = next((full for full, _ in days_order if full in raw_day), raw_day)
                             if day_key not in day_stations_map:
                                 day_stations_map[day_key] = []
@@ -2659,25 +2656,19 @@ with active_season:
                                 card_style = 'background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:10px; flex:1; min-width:0;'
                                 header_color = '#64748B'
 
-                            days_grid_html += f"""
-                            <div style="{card_style}">
-                                <div style="font-weight:700; color:{header_color}; font-size:0.8rem; text-align:center; border-bottom:1px solid #E2E8F0; padding-bottom:4px; text-transform:uppercase;">
-                                    {short_day}
-                                </div>
-                                {stations_html}
-                            </div>
-                            """
+                            days_grid_html += (
+                                f'<div style="{card_style}">'
+                                f'<div style="font-weight:700; color:{header_color}; font-size:0.8rem; text-align:center; border-bottom:1px solid #E2E8F0; padding-bottom:4px; text-transform:uppercase;">{short_day}</div>'
+                                f'{stations_html}'
+                                '</div>'
+                            )
 
-                        card_html = f"""
-                        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:10px; padding:16px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.02);">
-                            <div style="font-weight:800; color:#0F172A; font-size:1rem; margin-bottom:12px;">
-                                {ath_name}
-                            </div>
-                            <div style="display:flex; gap:10px; width:100%;">
-                                {days_grid_html}
-                            </div>
-                        </div>
-                        """
+                        card_html = (
+                            '<div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:10px; padding:16px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.02);">'
+                            f'<div style="font-weight:800; color:#0F172A; font-size:1rem; margin-bottom:12px;">{ath_name}</div>'
+                            f'<div style="display:flex; gap:10px; width:100%;">{days_grid_html}</div>'
+                            '</div>'
+                        )
                         st.markdown(card_html, unsafe_allow_html=True)
             else:
                 st.info("No recovery data currently recorded.")
