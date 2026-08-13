@@ -2580,7 +2580,7 @@ with active_season:
                 )
 
                 # 2. MIDDLE SECTION: Full-width bar chart
-                st.markdown("<h4 style='color:#0F172A; font-size:1.1rem; font-weight:700; margin-bottom:12px;'>Total Usage by Station</h4>", unsafe_allow_html=True)
+                st.markdown("<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Total Usage by Station</h4>", unsafe_allow_html=True)
                 station_counts_df = (
                     summary_df["Station"]
                     .dropna()
@@ -2605,7 +2605,7 @@ with active_season:
                 )
                 fig_rec_bar.update_layout(
                     showlegend=False,
-                    height=300,
+                    height=280,
                     margin=dict(l=10, r=10, t=25, b=10),
                     plot_bgcolor="rgba(0,0,0,0)",
                     paper_bgcolor="rgba(0,0,0,0)",
@@ -2625,32 +2625,31 @@ with active_season:
 
                 st.divider()
 
-                # 3. BOTTOM SECTION: Full-width Option C list table
-                st.markdown("<h4 style='color:#0F172A; font-size:1.1rem; font-weight:700; margin-bottom:12px;'>Athlete Logging Overview</h4>", unsafe_allow_html=True)
+                # 3. BOTTOM SECTION: Styled Full-Width Cards View for Option C
+                st.markdown("<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Logged Activity List</h4>", unsafe_allow_html=True)
                 if "Athlete" in summary_df.columns:
-                    list_df = summary_df.groupby("Athlete")["Station"].apply(lambda x: ", ".join(sorted(x.unique()))).reset_index()
-                    list_df.columns = ["Athlete", "Stations Logged"]
-                    
-                    # Add total logs count per athlete for added context
-                    log_counts = summary_df.groupby("Athlete")["Station"].count().reset_index()
-                    log_counts.columns = ["Athlete", "Total Sessions"]
-                    
-                    final_summary_table = pd.merge(list_df, log_counts, on="Athlete")
-                    final_summary_table = final_summary_table[["Athlete", "Total Sessions", "Stations Logged"]]
+                    ath_grouped = summary_df.groupby("Athlete")["Station"].unique().reset_index()
 
-                    # Column configuration for center alignment and full width
-                    table_config = {
-                        "Athlete": st.column_config.Column("Athlete", width="medium"),
-                        "Total Sessions": st.column_config.Column("Total Sessions", alignment="center", width="small"),
-                        "Stations Logged": st.column_config.Column("Stations Logged", width="large"),
-                    }
+                    # Full-width styled card container
+                    for _, row in ath_grouped.iterrows():
+                        ath_name = row["Athlete"]
+                        stations_list = list(row["Station"])
+                        
+                        # Render each station as a clean pill badge
+                        badges_html = " ".join([
+                            f'<span style="background:#F0F9FF; color:#0284C7; font-weight:700; font-size:0.78rem; padding:4px 12px; border-radius:12px; border:1px solid #BAE6FD;">{s}</span>' 
+                            for s in stations_list
+                        ])
 
-                    st.dataframe(
-                        final_summary_table,
-                        column_config=table_config,
-                        use_container_width=True,
-                        hide_index=True,
-                    )
+                        card_html = f"""
+                        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:10px; padding:12px 18px; margin-bottom:10px; box-shadow:0 1px 3px rgba(0,0,0,0.02); display:flex; align-items:center; justify-content:space-between; gap:20px;">
+                            <div style="font-weight:800; color:#0F172A; font-size:0.95rem; min-width:180px;">{ath_name}</div>
+                            <div style="display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end;">
+                                {badges_html}
+                            </div>
+                        </div>
+                        """
+                        st.markdown(card_html, unsafe_allow_html=True)
             else:
                 st.info("No recovery data currently recorded.")
                 
