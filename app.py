@@ -2625,7 +2625,7 @@ with active_season:
 
                 st.divider()
 
-                # 3. BOTTOM SECTION: Monday–Sunday Weekly Grid per Athlete
+                # 3. BOTTOM SECTION: Mon-Sun Row Grid per Athlete
                 st.markdown("<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Weekly Athlete Recovery Timeline</h4>", unsafe_allow_html=True)
                 if "Athlete" in summary_df.columns:
                     ath_grouped = summary_df.groupby("Athlete")
@@ -2637,6 +2637,7 @@ with active_season:
                             raw_day = str(row.get("Day", ""))
                             stn = str(row.get("Station", ""))
                             
+                            # Match the logged day to standard weekday
                             day_key = next((full for full, _ in days_order if full in raw_day), raw_day)
                             if day_key not in day_stations_map:
                                 day_stations_map[day_key] = []
