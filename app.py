@@ -2625,37 +2625,28 @@ with active_season:
                     st.plotly_chart(fig_rec_bar, use_container_width=True)
 
                 with col_sum2:
-                    st.markdown("<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Athlete Active Logging</h4>", unsafe_allow_html=True)
+                    st.markdown("<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Individual Athlete Log Search</h4>", unsafe_allow_html=True)
                     if "Athlete" in summary_df.columns:
-                        # Group logs by athlete
-                        ath_grouped = summary_df.groupby("Athlete")
+                        athletes = sorted(summary_df["Athlete"].unique().tolist())
+                        selected_ath = st.selectbox("Select Athlete:", athletes, key="rec_summary_ath_dropdown")
                         
-                        with st.container(height=340):
-                            for ath_name, group in ath_grouped:
-                                stations_used = group["Station"].tolist()
-                                total_entries = len(stations_used)
-                                
-                                # Format distinct stations with counts
-                                counts = pd.Series(stations_used).value_counts()
-                                pills_html = "".join([
-                                    f'<span style="background:#FFF7ED; color:#C2410C; border:1px solid #FFEDD5; font-weight:700; font-size:0.75rem; padding:4px 10px; border-radius:16px;">{stn} <span style="opacity:0.6;">×{cnt}</span></span>'
-                                    for stn, cnt in counts.items()
-                                ])
+                        ath_logs = summary_df[summary_df["Athlete"] == selected_ath]
+                        
+                        with st.container(height=280):
+                            for _, row in ath_logs.iterrows():
+                                day_str = row.get("Day", "Session")
+                                station_str = row.get("Station", "")
                                 
                                 st.markdown(
                                     f"""
-                                    <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:10px; padding:14px; margin-bottom:10px;">
-                                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                                            <span style="font-weight:800; color:#0F172A; font-size:0.95rem;">{ath_name}</span>
-                                            <span style="font-size:0.75rem; color:#64748B; font-weight:600;">{total_entries} Active Log{'s' if total_entries > 1 else ''}</span>
-                                        </div>
-                                        <div style="display:flex; flex-wrap:wrap; gap:6px;">
-                                            {pills_html}
-                                        </div>
+                                    <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-left:4px solid #FF8200; border-radius:6px; padding:10px 14px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+                                        <span style="font-weight:700; color:#0F172A; font-size:0.9rem;">{station_str}</span>
+                                        <span style="font-size:0.8rem; color:#64748B; background:#F8FAFC; padding:2px 8px; border-radius:4px; border:1px solid #E2E8F0;">{day_str}</span>
                                     </div>
                                     """,
                                     unsafe_allow_html=True
                                 )
+                                
             else:
                 st.info("No recovery data currently recorded.")
 
