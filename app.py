@@ -2553,7 +2553,6 @@ with active_season:
             summary_df = pd.DataFrame(summary_rows) if summary_rows else pd.DataFrame(columns=["Week_Starting", "Athlete", "Station", "Day"])
 
             if not summary_df.empty and "Station" in summary_df.columns:
-                # Custom KPI Card Styling
                 total_completions = len(summary_df)
                 active_athletes = summary_df["Athlete"].nunique() if "Athlete" in summary_df.columns else 0
                 station_counts = summary_df["Station"].dropna().value_counts()
@@ -2626,7 +2625,7 @@ with active_season:
                     st.plotly_chart(fig_rec_bar, use_container_width=True)
 
                 with col_sum2:
-                    st.markdown("<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Athlete Completion Heatmap</h4>", unsafe_allow_html=True)
+                    st.markdown("<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Athlete Completion Matrix</h4>", unsafe_allow_html=True)
                     if "Athlete" in summary_df.columns:
                         p_df = summary_df.copy()
                         p_df["Value"] = 1
@@ -2636,18 +2635,25 @@ with active_season:
                             values="Value",
                             aggfunc="sum",
                             fill_value=0,
-                        )
+                        ).reset_index()
 
-                        # Styled heatmap-like gradient view
-                        styled_pivot = (
-                            pivot_summary.style
-                            .background_gradient(cmap="Oranges", low=0.0, high=0.8)
-                            .format("{:d}")
-                        )
+                        # Configure explicit center alignment & progress bar visuals per station column
+                        col_configs = {
+                            col: st.column_config.ProgressColumn(
+                                label=col,
+                                min_value=0,
+                                max_value=int(pivot_summary.iloc[:, 1:].max().max() or 1),
+                                format="%d",
+                            )
+                            for col in pivot_summary.columns if col != "Athlete"
+                        }
+                        col_configs["Athlete"] = st.column_config.Column(alignment="left")
 
                         st.dataframe(
-                            styled_pivot,
+                            pivot_summary,
+                            column_config=col_configs,
                             use_container_width=True,
+                            hide_index=True,
                             height=330,
                         )
             else:
