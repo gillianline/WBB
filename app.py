@@ -2625,23 +2625,17 @@ with active_season:
 
                 st.divider()
 
-                # 3. BOTTOM SECTION: Person-by-Person Activity Log with Days
+                # 3. BOTTOM SECTION: Individual Athlete Activity Badges
                 st.markdown("<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Individual Athlete Recovery Timeline</h4>", unsafe_allow_html=True)
                 if "Athlete" in summary_df.columns:
                     ath_grouped = summary_df.groupby("Athlete")
 
                     for ath_name, group in ath_grouped:
-                        # Build station + day badges for this athlete
                         items_html = ""
                         for _, row in group.iterrows():
                             stn = row.get("Station", "")
                             day = row.get("Day", "")
-                            items_html += f'''
-                            <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-left:3px solid #FF8200; border-radius:6px; padding:6px 12px; display:flex; align-items:center; gap:8px;">
-                                <span style="font-weight:700; color:#0F172A; font-size:0.82rem;">{stn}</span>
-                                <span style="color:#64748B; font-size:0.75rem;">• {day}</span>
-                            </div>
-                            '''
+                            items_html += f'''<div style="background:#F8FAFC; border:1px solid #E2E8F0; border-left:3px solid #FF8200; border-radius:6px; padding:6px 12px; display:flex; align-items:center; gap:8px;"><span style="font-weight:700; color:#0F172A; font-size:0.82rem;">{stn}</span><span style="color:#64748B; font-size:0.75rem;">• {day}</span></div>'''
 
                         card_html = f"""
                         <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:10px; padding:14px 18px; margin-bottom:12px; box-shadow:0 1px 3px rgba(0,0,0,0.02);">
