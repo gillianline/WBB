@@ -2625,25 +2625,63 @@ with active_season:
 
                 st.divider()
 
-                # 3. BOTTOM SECTION: Individual Athlete Activity Badges
-                st.markdown("<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Individual Athlete Recovery Timeline</h4>", unsafe_allow_html=True)
+                # 3. BOTTOM SECTION: Monday-Sunday Row Grid per Athlete
+                st.markdown("<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Weekly Athlete Recovery Timeline</h4>", unsafe_allow_html=True)
                 if "Athlete" in summary_df.columns:
                     ath_grouped = summary_df.groupby("Athlete")
 
+                    # Order of days across the week
+                    days_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
                     for ath_name, group in ath_grouped:
-                        items_html = ""
+                        # Map stations under each day name
+                        day_stations_map = {}
                         for _, row in group.iterrows():
-                            stn = row.get("Station", "")
-                            day = row.get("Day", "")
-                            items_html += f'''<div style="background:#F8FAFC; border:1px solid #E2E8F0; border-left:3px solid #FF8200; border-radius:6px; padding:6px 12px; display:flex; align-items:center; gap:8px;"><span style="font-weight:700; color:#0F172A; font-size:0.82rem;">{stn}</span><span style="color:#64748B; font-size:0.75rem;">• {day}</span></div>'''
+                            raw_day = str(row.get("Day", ""))
+                            stn = str(row.get("Station", ""))
+                            
+                            # Extract standard day name (e.g. "Monday" from "Monday (08/10)")
+                            day_key = next((d for d in days_order if d in raw_day), raw_day)
+                            
+                            if day_key not in day_stations_map:
+                                day_stations_map[day_key] = []
+                            day_stations_map[day_key].append(stn)
+
+                        # Generate 7 columns (Monday - Sunday) for this athlete
+                        days_grid_html = ""
+                        for day_name in days_order:
+                            stations_list = day_stations_map.get(day_name, [])
+                            
+                            if stations_list:
+                                stations_html = "".join([
+                                    f'<div style="background:#FFFFFF; border:1px solid #E2E8F0; border-left:3px solid #FF8200; border-radius:4px; padding:4px 8px; margin-top:4px; font-weight:700; color:#0F172A; font-size:0.78rem; text-align:center;">{stn}</div>'
+                                    for stn in stations_list
+                                ])
+                                card_bg = "#FFFFFF"
+                                border_color = "#CBD5E1"
+                                header_color = "#FF8200"
+                            else:
+                                stations_html = '<div style="color:#94A3B8; font-size:0.75rem; text-align:center; margin-top:8px; font-style:italic;">—</div>'
+                                card_bg = "#F8FAFC"
+                                border_color = "#E2E8F0"
+                                header_color = "#64748B"
+
+                            days_grid_html += f"""
+                            <div style="background:{card_bg}; border:1px solid {border_color}; border-radius:8px; padding:10px; flex:1; min-width:0;">
+                                <div style="font-weight:700; color:{header_color}; font-size:0.8rem; text-align:center; border-bottom:1px solid #E2E8F0; padding-bottom:4px; text-transform:uppercase;">
+                                    {day_name[:3]}
+                                </div>
+                                {stations_html}
+                            </div>
+                            """
 
                         card_html = f"""
-                        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:10px; padding:14px 18px; margin-bottom:12px; box-shadow:0 1px 3px rgba(0,0,0,0.02);">
-                            <div style="font-weight:800; color:#0F172A; font-size:0.95rem; margin-bottom:10px; border-bottom:1px solid #F1F5F9; padding-bottom:6px;">
+                        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:10px; padding:16px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.02);">
+                            <div style="font-weight:800; color:#0F172A; font-size:1rem; margin-bottom:12px;">
                                 {ath_name}
                             </div>
-                            <div style="display:flex; flex-wrap:wrap; gap:8px;">
-                                {items_html}
+                            <div style="display:flex; gap:10px; width:100%;">
+                                {days_grid_html}
                             </div>
                         </div>
                         """
