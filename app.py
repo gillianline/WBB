@@ -2864,72 +2864,279 @@ with active_season:
             if not track_df.empty:
                 filtered_wk_df = track_df[track_df["Week_Starting"] == track_week_str]
 
-                s1, s2, s3 = st.columns(3)
-                with s1:
-                    to_cnt = filtered_wk_df[filtered_wk_df["Metric"] == "Turnover"]["Count"].sum()
-                    st.metric("Total Turnovers (Week)", int(to_cnt))
-                with s2:
-                    orb_cnt = filtered_wk_df[filtered_wk_df["Metric"] == "Offensive Rebound"]["Count"].sum()
-                    st.metric("Total Offensive Rebounds (Week)", int(orb_cnt))
-                with s3:
-                    bo_cnt = filtered_wk_df[filtered_wk_df["Metric"] == "Box Out"]["Count"].sum()
-                    st.metric("Total Box Outs (Week)", int(bo_cnt))
+                total_tracking = int(filtered_wk_df["Count"].sum())
+                active_athletes = filtered_wk_df["Athlete"].nunique()
+                tracking_metrics = filtered_wk_df["Metric"].nunique()
 
-                st.markdown("<br>", unsafe_allow_html=True)
+                kpi_html = (
+                    '<div style="display:grid; '
+                    'grid-template-columns:repeat(3,1fr); '
+                    'gap:16px; margin-bottom:24px;">'
 
-                c_sum_d, c_sum_w = st.columns(2)
+                    '<div style="background:#FFFFFF; '
+                    'border:1px solid #E2E8F0; '
+                    'border-left:5px solid #FF8200; '
+                    'border-radius:10px; padding:16px; '
+                    'text-align:center; '
+                    'box-shadow:0 2px 4px rgba(0,0,0,0.02);">'
+                    '<div style="font-size:0.75rem; font-weight:700; '
+                    'color:#64748B; text-transform:uppercase; '
+                    'letter-spacing:0.5px;">Total Tracking Events</div>'
+                    f'<div style="font-size:1.8rem; font-weight:800; '
+                    f'color:#0F172A; margin-top:4px;">{total_tracking}</div>'
+                    '</div>'
 
-                with c_sum_d:
-                    st.markdown(f"#### Daily Breakdown ({session_date_val})")
-                    daily_df = filtered_wk_df[filtered_wk_df["Date"] == session_date_val]
-                    if not daily_df.empty:
-                        pivot_daily = daily_df.pivot_table(
-                            index="Athlete",
-                            columns="Metric",
-                            values="Count",
-                            aggfunc="sum",
-                            fill_value=0
-                        ).reset_index()
+                    '<div style="background:#FFFFFF; '
+                    'border:1px solid #E2E8F0; '
+                    'border-left:5px solid #38BDF8; '
+                    'border-radius:10px; padding:16px; '
+                    'text-align:center; '
+                    'box-shadow:0 2px 4px rgba(0,0,0,0.02);">'
+                    '<div style="font-size:0.75rem; font-weight:700; '
+                    'color:#64748B; text-transform:uppercase; '
+                    'letter-spacing:0.5px;">Active Athletes Logged</div>'
+                    f'<div style="font-size:1.8rem; font-weight:800; '
+                    f'color:#0F172A; margin-top:4px;">{active_athletes}</div>'
+                    '</div>'
 
-                        # Configure explicit center alignment for every column header and cell
-                        daily_config = {
-                            col: st.column_config.Column(alignment="center")
-                            for col in pivot_daily.columns
-                        }
+                    '<div style="background:#FFFFFF; '
+                    'border:1px solid #E2E8F0; '
+                    'border-left:5px solid #58595B; '
+                    'border-radius:10px; padding:16px; '
+                    'text-align:center; '
+                    'box-shadow:0 2px 4px rgba(0,0,0,0.02);">'
+                    '<div style="font-size:0.75rem; font-weight:700; '
+                    'color:#64748B; text-transform:uppercase; '
+                    'letter-spacing:0.5px;">Tracking Metrics Used</div>'
+                    f'<div style="font-size:1.8rem; font-weight:800; '
+                    f'color:#0F172A; margin-top:4px;">{tracking_metrics}</div>'
+                    '</div>'
 
-                        st.dataframe(
-                            pivot_daily,
-                            column_config=daily_config,
-                            use_container_width=True,
-                            hide_index=True
+                    '</div>'
+                )
+
+                st.markdown(kpi_html, unsafe_allow_html=True)
+
+                # ==================================================
+                # DAILY BREAKDOWN
+                # ==================================================
+
+                st.markdown(
+                    f"<h4 style='color:#0F172A; font-size:1.05rem; "
+                    f"font-weight:700; margin-bottom:12px;'>"
+                    f"Daily Tracking Breakdown ({session_date_val})"
+                    f"</h4>",
+                    unsafe_allow_html=True,
+                )
+
+                daily_df = filtered_wk_df[
+                    filtered_wk_df["Date"] == session_date_val
+                ]
+
+                if not daily_df.empty:
+
+                    pivot_daily = daily_df.pivot_table(
+                        index="Athlete",
+                        columns="Metric",
+                        values="Count",
+                        aggfunc="sum",
+                        fill_value=0
+                    ).reset_index()
+
+                    # Keep your dataframe functionality,
+                    # but make it fit the same visual system.
+                    daily_config = {
+                        col: st.column_config.Column(
+                            alignment="center"
                         )
-                    else:
-                        st.info("No stats recorded for the selected date.")
+                        for col in pivot_daily.columns
+                    }
 
-                with c_sum_w:
-                    st.markdown(f"#### Weekly Total Summary (Week of {track_week_str})")
-                    if not filtered_wk_df.empty:
-                        pivot_weekly = filtered_wk_df.pivot_table(
-                            index="Athlete",
-                            columns="Metric",
-                            values="Count",
-                            aggfunc="sum",
-                            fill_value=0
-                        ).reset_index()
+                    st.dataframe(
+                        pivot_daily,
+                        column_config=daily_config,
+                        use_container_width=True,
+                        hide_index=True
+                    )
 
-                        # Configure explicit center alignment for every column header and cell
-                        weekly_config = {
-                            col: st.column_config.Column(alignment="center")
-                            for col in pivot_weekly.columns
-                        }
+                else:
+                    st.info(
+                        "No stats recorded for the selected date."
+                    )
 
-                        st.dataframe(
-                            pivot_weekly,
-                            column_config=weekly_config,
-                            use_container_width=True,
-                            hide_index=True
+                st.divider()
+
+                # ==================================================
+                # WEEKLY ATHLETE TRACKING TIMELINE
+                # ==================================================
+
+                st.markdown(
+                    "<h4 style='color:#0F172A; font-size:1.05rem; "
+                    "font-weight:700; margin-bottom:12px;'>"
+                    "Weekly Athlete Tracking Timeline"
+                    "</h4>",
+                    unsafe_allow_html=True,
+                )
+
+                # Keep using your SAME filtered_wk_df.
+                # Nothing about the underlying tracking data changes.
+
+                if "Athlete" in filtered_wk_df.columns:
+
+                    ath_grouped = filtered_wk_df.groupby("Athlete")
+
+                    days_order = [
+                        ("Monday", "Mon"),
+                        ("Tuesday", "Tue"),
+                        ("Wednesday", "Wed"),
+                        ("Thursday", "Thu"),
+                        ("Friday", "Fri"),
+                        ("Saturday", "Sat"),
+                        ("Sunday", "Sun"),
+                    ]
+
+                    for ath_name, group in ath_grouped:
+
+                        day_metrics_map = {}
+
+                        for _, row in group.iterrows():
+
+                            raw_date = str(row.get("Date", ""))
+                            metric = str(row.get("Metric", ""))
+                            count = int(row.get("Count", 0))
+
+                            try:
+                                parsed_date = pd.to_datetime(raw_date)
+                                day_name = parsed_date.day_name()
+                            except:
+                                day_name = next(
+                                    (
+                                        full
+                                        for full, _ in days_order
+                                        if full.lower() in raw_date.lower()
+                                    ),
+                                    raw_date
+                                )
+    
+                            if day_name not in day_metrics_map:
+                                day_metrics_map[day_name] = []
+
+                            day_metrics_map[day_name].append(
+                                (metric, count)
+                            )
+
+                        days_grid_html = ""
+
+                            for full_day, short_day in days_order:
+
+                            metrics_list = day_metrics_map.get(
+                                full_day,
+                                []
+                            )
+
+                            if metrics_list:
+
+                                metrics_html = ""
+
+                                for metric, count in metrics_list:
+                                    metrics_html += (
+                                        '<div style="'
+                                        'background:#FFFFFF; '
+                                        'border:1px solid #E2E8F0; '
+                                        'border-left:3px solid #FF8200; '
+                                        'border-radius:4px; '
+                                        'padding:4px 8px; '
+                                        'margin-top:4px; '
+                                        'font-weight:700; '
+                                        'color:#0F172A; '
+                                        'font-size:0.78rem; '
+                                        'text-align:center;">'
+                                        f'{metric}: {count}'
+                                        '</div>'
+                                    )
+
+                                card_style = (
+                                    'background:#FFFFFF; '
+                                    'border:1px solid #CBD5E1; '
+                                    'border-radius:8px; '
+                                    'padding:10px; '
+                                    'flex:1; min-width:0;'
+                                )
+
+                                header_color = "#FF8200"
+
+                            else:
+
+                                metrics_html = (
+                                    '<div style="color:#94A3B8; '
+                                    'font-size:0.75rem; '
+                                    'text-align:center; '
+                                    'margin-top:8px; '
+                                    'font-style:italic;">'
+                                    '—'
+                                    '</div>'
+                                )
+
+                                card_style = (
+                                    'background:#F8FAFC; '
+                                    'border:1px solid #E2E8F0; '
+                                    'border-radius:8px; '
+                                    'padding:10px; '
+                                    'flex:1; min-width:0;'
+                                )
+
+                                header_color = "#64748B"
+
+                            days_grid_html += (
+                                f'<div style="{card_style}">'
+                                f'<div style="font-weight:700; '
+                                f'color:{header_color}; '
+                                f'font-size:0.8rem; '
+                                f'text-align:center; '
+                                f'border-bottom:1px solid #E2E8F0; '
+                                f'padding-bottom:4px; '
+                                f'text-transform:uppercase;">'
+                                f'{short_day}'
+                                f'</div>'
+                                f'{metrics_html}'
+                                '</div>'
+                            )
+
+                        card_html = (
+                            '<div style="background:#FFFFFF; '
+                            'border:1px solid #E2E8F0; '
+                            'border-radius:10px; '
+                            'padding:16px; '
+                            'margin-bottom:16px; '
+                            'box-shadow:0 1px 3px rgba(0,0,0,0.02);">'
+
+                            f'<div style="font-weight:800; '
+                            f'color:#0F172A; font-size:1rem; '
+                            f'margin-bottom:12px;">'
+                            f'{ath_name}'
+                            f'</div>'
+
+                            f'<div style="display:flex; '
+                            f'gap:10px; width:100%;">'
+                            f'{days_grid_html}'
+                            f'</div>'
+
+                            '</div>'
                         )
-                    else:
-                        st.info("No stats recorded for this week.")
+
+                        st.markdown(
+                            card_html,
+                            unsafe_allow_html=True
+                        )
+    
+                else:
+                    st.info("No athlete tracking data available.")
+
             else:
-                st.info("No tracking metrics recorded yet.")
+                st.info(
+                    f"No tracking data recorded for the week "
+                    f"of {track_week_str}."
+                )
+
+        else:
+            st.info("No tracking metrics recorded yet.")
