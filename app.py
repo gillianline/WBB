@@ -2864,59 +2864,118 @@ with active_season:
             if not track_df.empty:
                 filtered_wk_df = track_df[track_df["Week_Starting"] == track_week_str]
 
-                total_tracking = int(filtered_wk_df["Count"].sum())
-                active_athletes = filtered_wk_df["Athlete"].nunique()
-                tracking_metrics = filtered_wk_df["Metric"].nunique()
+                # ==================================================
+                # KPI CARDS
+                # ==================================================
+
+                total_tracking = int(
+                    filtered_wk_df["Count"].sum()
+                )
+
+                active_athletes = (
+                    filtered_wk_df["Athlete"].nunique()
+                )
+
+                metric_counts = (
+                    filtered_wk_df
+                    .groupby("Metric")["Count"]
+                    .sum()
+                    .sort_values(ascending=False)
+                )
+
+                top_metric = (
+                    metric_counts.index[0]
+                    if not metric_counts.empty
+                    else "N/A"
+                )
 
                 kpi_html = (
                     '<div style="display:grid; '
                     'grid-template-columns:repeat(3,1fr); '
                     'gap:16px; margin-bottom:24px;">'
 
+                    # TOTAL TRACKING EVENTS
                     '<div style="background:#FFFFFF; '
                     'border:1px solid #E2E8F0; '
                     'border-left:5px solid #FF8200; '
                     'border-radius:10px; padding:16px; '
                     'text-align:center; '
                     'box-shadow:0 2px 4px rgba(0,0,0,0.02);">'
-                    '<div style="font-size:0.75rem; font-weight:700; '
-                    'color:#64748B; text-transform:uppercase; '
-                    'letter-spacing:0.5px;">Total Tracking Events</div>'
-                    f'<div style="font-size:1.8rem; font-weight:800; '
-                    f'color:#0F172A; margin-top:4px;">{total_tracking}</div>'
+
+                    '<div style="font-size:0.75rem; '
+                    'font-weight:700; '
+                    'color:#64748B; '
+                    'text-transform:uppercase; '
+                    'letter-spacing:0.5px;">'
+                    'Total Tracking Events'
                     '</div>'
 
+                    f'<div style="font-size:1.8rem; '
+                    f'font-weight:800; '
+                    f'color:#0F172A; '
+                    f'margin-top:4px;">'
+                    f'{total_tracking}'
+                    f'</div>'
+
+                    '</div>'
+
+                    # ACTIVE ATHLETES
                     '<div style="background:#FFFFFF; '
                     'border:1px solid #E2E8F0; '
                     'border-left:5px solid #38BDF8; '
                     'border-radius:10px; padding:16px; '
                     'text-align:center; '
                     'box-shadow:0 2px 4px rgba(0,0,0,0.02);">'
-                    '<div style="font-size:0.75rem; font-weight:700; '
-                    'color:#64748B; text-transform:uppercase; '
-                    'letter-spacing:0.5px;">Active Athletes Logged</div>'
-                    f'<div style="font-size:1.8rem; font-weight:800; '
-                    f'color:#0F172A; margin-top:4px;">{active_athletes}</div>'
+
+                    '<div style="font-size:0.75rem; '
+                    'font-weight:700; '
+                    'color:#64748B; '
+                    'text-transform:uppercase; '
+                    'letter-spacing:0.5px;">'
+                    'Active Athletes Logged'
                     '</div>'
 
+                    f'<div style="font-size:1.8rem; '
+                    f'font-weight:800; '
+                    f'color:#0F172A; '
+                    f'margin-top:4px;">'
+                    f'{active_athletes}'
+                    f'</div>'
+
+                    '</div>'
+
+                    # MOST RECORDED ACTION
                     '<div style="background:#FFFFFF; '
                     'border:1px solid #E2E8F0; '
                     'border-left:5px solid #58595B; '
                     'border-radius:10px; padding:16px; '
                     'text-align:center; '
                     'box-shadow:0 2px 4px rgba(0,0,0,0.02);">'
-                    '<div style="font-size:0.75rem; font-weight:700; '
-                    'color:#64748B; text-transform:uppercase; '
-                    'letter-spacing:0.5px;">Tracking Metrics Used</div>'
-                    f'<div style="font-size:1.8rem; font-weight:800; '
-                    f'color:#0F172A; margin-top:4px;">{tracking_metrics}</div>'
+
+                    '<div style="font-size:0.75rem; '
+                    'font-weight:700; '
+                    'color:#64748B; '
+                    'text-transform:uppercase; '
+                    'letter-spacing:0.5px;">'
+                    'Most Recorded Action'
+                    '</div>'
+
+                    f'<div style="font-size:1.8rem; '
+                    f'font-weight:800; '
+                    f'color:#0F172A; '
+                    f'margin-top:4px;">'
+                    f'{top_metric}'
+                    f'</div>'
+
                     '</div>'
 
                     '</div>'
                 )
 
-                st.markdown(kpi_html, unsafe_allow_html=True)
-
+                st.markdown(
+                    kpi_html,
+                    unsafe_allow_html=True
+                )
                 # ==================================================
                 # DAILY BREAKDOWN
                 # ==================================================
