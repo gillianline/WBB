@@ -3138,5 +3138,5 @@ with active_season:
                     f"of {track_week_str}."
                 )
 
-            else:
-                st.info("No tracking metrics recorded yet.")
+    else:
+        st.info("No tracking metrics recorded yet.")
