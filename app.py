@@ -3029,78 +3029,78 @@ with active_season:
 
                         for full_day, short_day in days_order:
 
-                        metrics_list = day_metrics_map.get(
-                            full_day,
-                            []
-                        )
-
-                        if metrics_list:
-
-                            metrics_html = ""
-
-                            for metric, count in metrics_list:
-                                metrics_html += (
-                                    '<div style="'
-                                    'background:#FFFFFF; '
-                                    'border:1px solid #E2E8F0; '
-                                    'border-left:3px solid #FF8200; '
-                                    'border-radius:4px; '
-                                    'padding:4px 8px; '
-                                    'margin-top:4px; '
-                                    'font-weight:700; '
-                                    'color:#0F172A; '
-                                    'font-size:0.78rem; '
-                                    'text-align:center;">'
-                                    f'{metric}: {count}'
-                                    '</div>'
-                                 )
-
-                            card_style = (
-                                'background:#FFFFFF; '
-                                'border:1px solid #CBD5E1; '
-                                'border-radius:8px; '
-                                'padding:10px; '
-                                'flex:1; min-width:0;'
+                            metrics_list = day_metrics_map.get(
+                                full_day,
+                                []
                             )
 
-                            header_color = "#FF8200"
+                            if metrics_list:
 
-                        else:
+                                metrics_html = ""
 
-                            metrics_html = (
-                                '<div style="color:#94A3B8; '
-                                'font-size:0.75rem; '
-                                'text-align:center; '
-                                'margin-top:8px; '
-                                'font-style:italic;">'
-                                '—'
+                                for metric, count in metrics_list:
+                                    metrics_html += (
+                                        '<div style="'
+                                        'background:#FFFFFF; '
+                                        'border:1px solid #E2E8F0; '
+                                        'border-left:3px solid #FF8200; '
+                                        'border-radius:4px; '
+                                        'padding:4px 8px; '
+                                        'margin-top:4px; '
+                                        'font-weight:700; '
+                                        'color:#0F172A; '
+                                        'font-size:0.78rem; '
+                                        'text-align:center;">'
+                                        f'{metric}: {count}'
+                                        '</div>'
+                                     )
+
+                                card_style = (
+                                    'background:#FFFFFF; '
+                                    'border:1px solid #CBD5E1; '
+                                    'border-radius:8px; '
+                                    'padding:10px; '
+                                    'flex:1; min-width:0;'
+                                )
+
+                                header_color = "#FF8200"
+
+                            else:
+
+                                metrics_html = (
+                                    '<div style="color:#94A3B8; '
+                                    'font-size:0.75rem; '
+                                    'text-align:center; '
+                                    'margin-top:8px; '
+                                    'font-style:italic;">'
+                                    '—'
+                                    '</div>'
+                                )
+
+                                card_style = (
+                                    'background:#F8FAFC; '
+                                    'border:1px solid #E2E8F0; '
+                                    'border-radius:8px; '
+                                    'padding:10px; '
+                                    'flex:1; min-width:0;'
+                                )
+
+                                header_color = "#64748B"
+
+                            days_grid_html += (
+                                f'<div style="{card_style}">'
+                                f'<div style="font-weight:700; '
+                                f'color:{header_color}; '
+                                f'font-size:0.8rem; '
+                                f'text-align:center; '
+                                f'border-bottom:1px solid #E2E8F0; '
+                                f'padding-bottom:4px; '
+                                f'text-transform:uppercase;">'
+                                f'{short_day}'
+                                f'</div>'
+                                f'{metrics_html}'
                                 '</div>'
                             )
-
-                            card_style = (
-                                'background:#F8FAFC; '
-                                'border:1px solid #E2E8F0; '
-                                'border-radius:8px; '
-                                'padding:10px; '
-                                'flex:1; min-width:0;'
-                            )
-
-                            header_color = "#64748B"
-
-                        days_grid_html += (
-                            f'<div style="{card_style}">'
-                            f'<div style="font-weight:700; '
-                            f'color:{header_color}; '
-                            f'font-size:0.8rem; '
-                            f'text-align:center; '
-                            f'border-bottom:1px solid #E2E8F0; '
-                            f'padding-bottom:4px; '
-                            f'text-transform:uppercase;">'
-                            f'{short_day}'
-                            f'</div>'
-                            f'{metrics_html}'
-                            '</div>'
-                        )
 
                         card_html = (
                             '<div style="background:#FFFFFF; '
