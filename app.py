@@ -2024,16 +2024,7 @@ with active_season:
             rsi_cols = [c for c in p_cmj.columns if "rsi" in c.lower()]
             rsi_col = rsi_cols[0] if rsi_cols else None
 
-            display_cols = [
-                c for c in p_cmj.columns if c not in ["Name", "Date_Str"]
-            ]
-            st.markdown(f"### Jump History for {selected_player_t}")
-            st.markdown(
-                render_vball_table(p_cmj[display_cols]), unsafe_allow_html=True
-            )
-
-            st.markdown("<br>", unsafe_allow_html=True)
-
+            # 1. GRAPH FIRST
             if not p_cmj.empty and j_col:
                 p_cmj["Jump_Height_Clean"] = pd.to_numeric(
                     p_cmj[j_col]
@@ -2121,6 +2112,17 @@ with active_season:
                 )
 
                 st.plotly_chart(fig_jump_trend, use_container_width=True)
+
+            st.divider()
+
+            # 2. LOGS SECOND
+            display_cols = [
+                c for c in p_cmj.columns if c not in ["Name", "Date_Str", "Jump_Height_Clean", "RSI_Clean"]
+            ]
+            st.markdown(f"### Jump History Logs for {selected_player_t}")
+            st.markdown(
+                render_vball_table(p_cmj[display_cols]), unsafe_allow_html=True
+            )
 
         # ---------------------------------------------------------------------
         # SUB-TAB 3: OVERALL PROFILE
