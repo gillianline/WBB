@@ -32,7 +32,7 @@ def format_date_clean(val):
 
 
 # -----------------------------------------------------------------------------
-# 1. PAGE CONFIGURATION & STYLING (WITH BULLETPROOF PRINT FIXES)
+# 1. PAGE CONFIGURATION & STYLING (WITH 2-PER-PAGE PRINT STYLES)
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="Lady Vols Basketball | Performance Console",
@@ -142,7 +142,6 @@ st.markdown(
         /* TWO-PER-PAGE PRINT OPTIMIZATIONS                                     */
         /* -------------------------------------------------------------------- */
         @media print {
-            /* Hide UI chrome, header bar, print button, and tab bar */
             section[data-testid="stSidebar"],
             header[data-testid="stHeader"],
             footer,
@@ -155,7 +154,6 @@ st.markdown(
                 display: none !important;
             }
 
-            /* Unconstrain page boundaries */
             html, body, .stApp, .main, div[data-testid="stAppViewContainer"], div[data-testid="stMainBlockContainer"] {
                 overflow: visible !important;
                 height: auto !important;
@@ -168,7 +166,6 @@ st.markdown(
                 margin: 0 !important;
             }
 
-            /* Compact the practice cards so 2 fit comfortably per page */
             .practice-score-card {
                 padding: 10px 14px !important;
                 margin-bottom: 12px !important;
@@ -190,12 +187,15 @@ st.markdown(
                 margin-bottom: 6px !important;
             }
 
-            /* Force a clean page break after every 2nd athlete card */
             .practice-score-card:nth-of-type(2n) {
                 page-break-after: always !important;
                 break-after: page !important;
             }
         }
+    </style>
+""",
+    unsafe_allow_html=True,
+)
 
 # -----------------------------------------------------------------------------
 # 2. PASSWORD PROTECTION
@@ -718,7 +718,7 @@ if st.sidebar.button("Logout"):
 
 
 # -----------------------------------------------------------------------------
-# 6. VIEW CONTROLLERS & TOP BAR WITH ROBUST PARENT PRINT ACTION
+# 6. VIEW CONTROLLERS & TOP BAR WITH PRINT BUTTON
 # -----------------------------------------------------------------------------
 col_header_title, col_header_btn = st.columns([5, 1.2])
 
@@ -734,14 +734,13 @@ with col_header_title:
     )
 
 with col_header_btn:
-    # Direct HTML/JS print button targeting the main parent window
     components.html(
         """
         <button onclick="window.parent.print();" 
                 style="width: 100%; height: 42px; background: #FF8200; color: white; border: none; 
                        border-radius: 8px; font-weight: 800; font-size: 14px; cursor: pointer; 
                        box-shadow: 0 2px 4px rgba(0,0,0,0.1); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-             Print Page
+            🖨️ Print Page
         </button>
         """,
         height=45,
@@ -1356,7 +1355,7 @@ with active_season:
             
 
     # =========================================================================
-    # TAB 2: PRACTICE SCORE (TEAM/SESSION VIEW)
+    # TAB 2: PRACTICE SCORE (TEAM/SESSION VIEW - 2 PER PAGE PRINT READY)
     # =========================================================================
     elif main_tab == "Practice Score":
         c_d, _ = st.columns([1, 3])
@@ -1402,8 +1401,8 @@ with active_season:
             dy_str = str(dy).replace("Day ", "")
 
             single_box_card_html = f"""
-            <div class="practice-score-card" style="background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; border-bottom: 1px solid #E2E8F0; padding-bottom: 8px;">
+            <div class="practice-score-card" style="background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px; padding: 16px 20px; margin-bottom: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; border-bottom: 1px solid #E2E8F0; padding-bottom: 8px;">
                     <div style="display: flex; align-items: center; gap: 12px;">
                         <img src="{p_img}" style="width:50px; height:50px; border-radius:50%; border:3px solid #FF8200; object-fit:cover;">
                         <div>
