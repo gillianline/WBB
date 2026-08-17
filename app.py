@@ -714,7 +714,7 @@ with col_header_title:
     )
 
 with col_header_btn:
-    if st.button("🖨️ Print Page", use_container_width=True):
+    if st.button("Print Page", use_container_width=True):
         components.html("<script>window.print();</script>", height=0, width=0)
 
 st.markdown("<br>", unsafe_allow_html=True)
