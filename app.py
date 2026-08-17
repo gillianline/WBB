@@ -139,49 +139,63 @@ st.markdown(
         }
 
         /* -------------------------------------------------------------------- */
-        /* BULLETPROOF PRINT OVERRIDES (@media print)                            */
+        /* TWO-PER-PAGE PRINT OPTIMIZATIONS                                     */
         /* -------------------------------------------------------------------- */
         @media print {
-            /* Hide Streamlit UI Chrome, sidebar, inputs, and interactive widgets */
+            /* Hide UI chrome, header bar, print button, and tab bar */
             section[data-testid="stSidebar"],
             header[data-testid="stHeader"],
             footer,
             .stButton,
-            .no-print,
+            .console-header,
+            iframe,
+            div[data-testid="stTabs"],
             div[data-testid="stSelectbox"],
             div[data-testid="stDateInput"] {
                 display: none !important;
             }
 
-            /* Unconstrain body and main container heights so full page renders */
+            /* Unconstrain page boundaries */
             html, body, .stApp, .main, div[data-testid="stAppViewContainer"], div[data-testid="stMainBlockContainer"] {
                 overflow: visible !important;
                 height: auto !important;
-                min-height: 100% !important;
                 background-color: #FFFFFF !important;
             }
 
             .main .block-container {
                 max-width: 100% !important;
-                padding: 10px !important;
+                padding: 0 !important;
                 margin: 0 !important;
             }
 
-            /* Prevent elements from being cleanly cut in half */
-            .rec-grid-card, 
-            .compliance-subcard, 
-            .athlete-card, 
-            .vball-table, 
-            .hud-details-card,
-            .js-plotly-plot {
+            /* Compact the practice cards so 2 fit comfortably per page */
+            .practice-score-card {
+                padding: 10px 14px !important;
+                margin-bottom: 12px !important;
+                border: 1px solid #CBD5E1 !important;
+                box-shadow: none !important;
                 break-inside: avoid !important;
                 page-break-inside: avoid !important;
             }
+
+            .practice-score-card .vball-table th,
+            .practice-score-card .vball-table td {
+                padding: 3px 6px !important;
+                font-size: 0.72rem !important;
+            }
+
+            .practice-score-card .vball-section-title {
+                font-size: 0.78rem !important;
+                padding: 3px 8px !important;
+                margin-bottom: 6px !important;
+            }
+
+            /* Force a clean page break after every 2nd athlete card */
+            .practice-score-card:nth-of-type(2n) {
+                page-break-after: always !important;
+                break-after: page !important;
+            }
         }
-    </style>
-""",
-    unsafe_allow_html=True,
-)
 
 # -----------------------------------------------------------------------------
 # 2. PASSWORD PROTECTION
@@ -1388,42 +1402,42 @@ with active_season:
             dy_str = str(dy).replace("Day ", "")
 
             single_box_card_html = f"""
-            <div style="background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; border-bottom: 1px solid #E2E8F0; padding-bottom: 12px;">
-                    <div style="display: flex; align-items: center; gap: 15px;">
-                        <img src="{p_img}" style="width:60px; height:60px; border-radius:50%; border:3px solid #FF8200; object-fit:cover;">
+            <div class="practice-score-card" style="background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; border-bottom: 1px solid #E2E8F0; padding-bottom: 8px;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <img src="{p_img}" style="width:50px; height:50px; border-radius:50%; border:3px solid #FF8200; object-fit:cover;">
                         <div>
-                            <h3 style="margin:0; font-size:1.3rem; color:#0F172A; font-weight:700;">{player_name}</h3>
-                            <span style="color:#64748B; font-size:0.85rem;">{p_pos}</span>
+                            <h3 style="margin:0; font-size:1.15rem; color:#0F172A; font-weight:700;">{player_name}</h3>
+                            <span style="color:#64748B; font-size:0.8rem;">{p_pos}</span>
                         </div>
                     </div>
-                    <div style="display: flex; gap: 8px;">
-                        <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Minutes: {mins}</span>
-                        <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Week {wk_str}</span>
-                        <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Day {dy_str}</span>
+                    <div style="display: flex; gap: 6px;">
+                        <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:3px 8px; border-radius:6px; font-weight:600; font-size:0.75rem;">Minutes: {mins}</span>
+                        <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:3px 8px; border-radius:6px; font-weight:600; font-size:0.75rem;">Week {wk_str}</span>
+                        <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:3px 8px; border-radius:6px; font-weight:600; font-size:0.75rem;">Day {dy_str}</span>
                     </div>
                 </div>
-                <div style="display: flex; gap: 20px; width: 100%;">
+                <div style="display: flex; gap: 16px; width: 100%;">
                     <div style="flex: 1; min-width: 0;">
-                        <div style="background-color:#38BDF8; color:#0F172A; font-weight:700; font-size:0.95rem; padding:6px 12px; border-radius:6px; text-align:center; margin-bottom:12px; text-transform:uppercase;">Volume Metrics</div>
+                        <div class="vball-section-title" style="background-color:#38BDF8; color:#0F172A; font-weight:700; font-size:0.85rem; padding:4px 8px; border-radius:6px; text-align:center; margin-bottom:8px; text-transform:uppercase;">Volume Metrics</div>
                         {vol_html_table}
-                        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:10px; text-align:center; margin-top:10px;">
-                            <div style="font-weight:700; color:#64748B; font-size:0.85rem;">VOLUME SCORE</div>
-                            <div style="font-size:2rem; font-weight:800; padding:6px 0; border-radius:6px; background-color:{v_bg}; color:{v_fg}; margin-top:4px;">{vol_score}</div>
+                        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:6px; text-align:center; margin-top:6px;">
+                            <div style="font-weight:700; color:#64748B; font-size:0.75rem;">VOLUME SCORE</div>
+                            <div style="font-size:1.4rem; font-weight:800; padding:2px 0; border-radius:6px; background-color:{v_bg}; color:{v_fg}; margin-top:2px;">{vol_score}</div>
                         </div>
                     </div>
                     <div style="flex: 1; min-width: 0;">
-                        <div style="background-color:#38BDF8; color:#0F172A; font-weight:700; font-size:0.95rem; padding:6px 12px; border-radius:6px; text-align:center; margin-bottom:12px; text-transform:uppercase;">Intensity Metrics</div>
+                        <div class="vball-section-title" style="background-color:#38BDF8; color:#0F172A; font-weight:700; font-size:0.85rem; padding:4px 8px; border-radius:6px; text-align:center; margin-bottom:8px; text-transform:uppercase;">Intensity Metrics</div>
                         {int_html_table}
-                        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:10px; text-align:center; margin-top:10px;">
-                            <div style="font-weight:700; color:#64748B; font-size:0.85rem;">INTENSITY SCORE</div>
-                            <div style="font-size:2rem; font-weight:800; padding:6px 0; border-radius:6px; background-color:{i_bg}; color:{i_fg}; margin-top:4px;">{int_score}</div>
+                        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:6px; text-align:center; margin-top:6px;">
+                            <div style="font-weight:700; color:#64748B; font-size:0.75rem;">INTENSITY SCORE</div>
+                            <div style="font-size:1.4rem; font-weight:800; padding:2px 0; border-radius:6px; background-color:{i_bg}; color:{i_fg}; margin-top:2px;">{int_score}</div>
                         </div>
                     </div>
                 </div>
-                <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:10px; text-align:center; margin-top:16px;">
-                    <div style="font-weight:700; color:#58595B; font-size:0.85rem;">COMBINED PRACTICE SCORE</div>
-                    <div style="font-size:2rem; font-weight:800; padding:6px 0; border-radius:6px; background-color:{c_bg}; color:{c_fg}; margin-top:4px; max-width: 300px; margin-left: auto; margin-right: auto;">{comb_score}</div>
+                <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:6px; text-align:center; margin-top:10px;">
+                    <div style="font-weight:700; color:#58595B; font-size:0.75rem;">COMBINED PRACTICE SCORE</div>
+                    <div style="font-size:1.4rem; font-weight:800; padding:2px 0; border-radius:6px; background-color:{c_bg}; color:{c_fg}; margin-top:2px; max-width: 200px; margin-left: auto; margin-right: auto;">{comb_score}</div>
                 </div>
             </div>
             """
