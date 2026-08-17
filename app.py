@@ -88,9 +88,6 @@ st.markdown(
             margin-bottom: 15px; text-transform: uppercase; letter-spacing: 0.5px;
         }
 
-        /* -------------------------------------------------------------------- */
-        /* CENTERED HTML TABLES (.vball-table)                                  */
-        /* -------------------------------------------------------------------- */
         .vball-table {
             width: 100%; border-collapse: collapse; background-color: #FFFFFF;
             border-radius: 8px; overflow: hidden; border: 1px solid #E2E8F0;
@@ -107,22 +104,6 @@ st.markdown(
         .vball-table tr:last-child td { border-bottom: none; }
         .grade-badge { font-weight: 700; padding: 2px 8px; border-radius: 4px; display: inline-block; }
 
-        /* -------------------------------------------------------------------- */
-        /* CENTERED STREAMLIT DATAFRAMES (st.dataframe)                         */
-        /* -------------------------------------------------------------------- */
-        [data-testid="stDataFrame"] div[role="columnheader"] {
-            justify-content: center !important;
-            text-align: center !important;
-        }
-        [data-testid="stDataFrame"] div[role="gridcell"] {
-            justify-content: center !important;
-            text-align: center !important;
-        }
-
-        .compliance-wrapper {
-            background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px;
-            padding: 20px; margin-bottom: 25px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);
-        }
         .compliance-subcard {
             background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 10px;
             padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); height: 100%;
@@ -144,7 +125,6 @@ st.markdown(
             box-shadow: 0 2px 6px rgba(0,0,0,0.03);
         }
 
-        /* Center all st.dataframe column headers and cell values */
         [data-testid="stDataFrame"] div[role="columnheader"] {
             justify-content: center !important;
             text-align: center !important;
@@ -329,14 +309,13 @@ def fetch_live_tracking_sheet():
     return pd.DataFrame()
 
 
-# ONE-TIME HYDRATION: Fetch tracking data from Google Sheets ONCE on initial load
+# Hydrate tracking data from Google Sheets once
 if "tracking_data" not in st.session_state or not st.session_state.get("tracking_data_initialized", False):
     st.session_state.tracking_data = {}
     live_track_df = fetch_live_tracking_sheet()
     
     if not live_track_df.empty:
         cols_lower = {str(c).lower().strip(): c for c in live_track_df.columns}
-        
         wk_col = cols_lower.get("week_starting", "Week_Starting")
         dt_col = cols_lower.get("date", "Date")
         ath_col = cols_lower.get("athlete", "Athlete")
@@ -1314,7 +1293,6 @@ with active_season:
                 if not vol_raw.empty
                 else []
             )
-            formatted_dates = [format_date_clean(d) for d in available_dates]
             session_date = st.selectbox("Select Session Date:", available_dates, format_func=format_date_clean)
 
         st.markdown("<br>", unsafe_allow_html=True)
@@ -1612,11 +1590,12 @@ with active_season:
     # TAB 5: TESTING (SUB-TABS)
     # =========================================================================
     elif main_tab == "Testing":
-        testing_tab_intake, testing_tab_cmj, testing_tab_nordic, testing_tab_bs, testing_tab_overall = st.tabs(
-            ["Intake Assessment", "CMJ", "NordBord", "Harness Belt Squat", "Overall Profile"]
+        # NordBord and Harness Belt Squat tabs removed from here and merged into Intake Assessment
+        testing_tab_intake, testing_tab_cmj, testing_tab_overall = st.tabs(
+            ["Intake Assessment", "CMJ", "Overall Profile"]
         )
 
-        # SUB-TAB 1: INTAKE ASSESSMENT
+        # SUB-TAB 1: INTAKE ASSESSMENT (COMBINED MODULE)
         with testing_tab_intake:
             st.markdown(
                 "<h3 style='color:#1D1D1F; font-weight:900;"
@@ -1632,24 +1611,28 @@ with active_season:
                 )
 
             calf_ath = (
-                ankle_raw[ankle_raw["Name"] == selected_intake_athlete].sort_values(
-                    "Date"
-                )
+                ankle_raw[ankle_raw["Name"] == selected_intake_athlete].sort_values("Date")
                 if not ankle_raw.empty and "Name" in ankle_raw.columns
                 else pd.DataFrame()
             )
             hip_ath = (
-                hip_raw[hip_raw["Name"] == selected_intake_athlete].sort_values(
-                    "Date"
-                )
+                hip_raw[hip_raw["Name"] == selected_intake_athlete].sort_values("Date")
                 if not hip_raw.empty and "Name" in hip_raw.columns
                 else pd.DataFrame()
             )
             sh_ath = (
-                knee_raw[knee_raw["Name"] == selected_intake_athlete].sort_values(
-                    "Date"
-                )
+                knee_raw[knee_raw["Name"] == selected_intake_athlete].sort_values("Date")
                 if not knee_raw.empty and "Name" in knee_raw.columns
+                else pd.DataFrame()
+            )
+            nord_ath = (
+                nordic_raw[nordic_raw["Name"] == selected_intake_athlete].sort_values("Date")
+                if not nordic_raw.empty and "Name" in nordic_raw.columns
+                else pd.DataFrame()
+            )
+            bs_ath = (
+                belt_squat_raw[belt_squat_raw["Name"] == selected_intake_athlete].sort_values("Date")
+                if not belt_squat_raw.empty and "Name" in belt_squat_raw.columns
                 else pd.DataFrame()
             )
 
@@ -1657,6 +1640,8 @@ with active_season:
                 calf_ath.empty
                 and hip_ath.empty
                 and sh_ath.empty
+                and nord_ath.empty
+                and bs_ath.empty
             )
 
             def render_val_with_arrow(
@@ -1683,15 +1668,12 @@ with active_season:
                 if valid_rows.empty:
                     return (0.0, 0.0), (0.0, 0.0), (0.0, 0.0)
                 
-                # All-Time Peak Row
                 peak_row = valid_rows.sort_values("Max_Val", ascending=False).iloc[0]
                 max_L, max_R = peak_row["L_Val"], peak_row["R_Val"]
                 
-                # Most Recent Row
                 recent_row = valid_rows.sort_values("Date", ascending=True).iloc[-1]
                 rec_L, rec_R = recent_row["L_Val"], recent_row["R_Val"]
                 
-                # Initial Baseline Row
                 init_row = valid_rows.sort_values("Date", ascending=True).iloc[0]
                 init_L, init_R = init_row["L_Val"], init_row["R_Val"]
                 
@@ -1703,7 +1685,7 @@ with active_season:
                 hud_svg_html = """
                 <div style="background:#FFFFFF; border-radius:16px; padding:16px; border:1px solid #E5E5E7; box-shadow:0 4px 12px rgba(0,0,0,0.03);">
                     <div style="color:#1D1D1F; font-weight:800; font-size:13px; letter-spacing:1px; text-transform:uppercase; border-bottom:2px solid #FF8200; padding-bottom:6px; margin-bottom:12px;">ANATOMY LOCATION MAP</div>
-                    <div style="position:relative; width:100%; height:380px; background:#FAFDFD; border-radius:12px; border:1px solid #D5E5E8; display:flex; align-items:center; justify-content:center; overflow:hidden;">
+                    <div style="position:relative; width:100%; height:460px; background:#FAFDFD; border-radius:12px; border:1px solid #D5E5E8; display:flex; align-items:center; justify-content:center; overflow:hidden;">
                         <svg viewBox="0 0 160 220" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="width:100%; height:100%;">
                             <defs>
                                 <linearGradient id="anatomicalBodyGrad" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -1748,60 +1730,56 @@ with active_season:
                                 <line x1="55" y1="168" x2="81" y2="168" stroke="#D32F2F" stroke-width="1.1" />
                             </g>
                             
-                            <!-- Anatomical Muscle Lines & Muscle Definition Outlines -->
+                            <!-- Anatomical Muscle Lines -->
                             <g fill="none" stroke="#2C3036" stroke-width="0.8" opacity="0.75" stroke-linecap="round">
-                                <!-- Pectoral Arches -->
                                 <path d="M 54 48 C 60 52, 65 52, 68 50 M 82 48 C 76 52, 71 52, 68 50" />
-                                
-                                <!-- Abdominal Sections -->
                                 <path d="M 58 58 L 78 58 M 57 66 L 79 66 M 56 74 L 80 74" />
-                                <path d="M 62 50 L 62 82 M 74 50 L 74 82" stroke-width="0.6" stroke-dasharray="1 1.5" />
-                                
-                                <!-- Quadricep Outlines (Thigh Muscles) -->
                                 <path d="M 54 98 C 51 108, 52 120, 56 128" />
                                 <path d="M 64 98 C 66 108, 65 120, 61 128" />
                                 <circle cx="58" cy="132" r="3" stroke-width="0.7" />
-                                
                                 <path d="M 82 98 C 85 108, 84 120, 80 128" />
                                 <path d="M 72 98 C 70 108, 71 120, 75 128" />
                                 <circle cx="78" cy="132" r="3" stroke-width="0.7" />
-                                
-                                <!-- Gastrocnemius / Calf Outlines -->
                                 <path d="M 53 144 C 50 152, 51 160, 54 166" />
                                 <path d="M 61 144 C 62 152, 61 160, 59 166" />
-                                
                                 <path d="M 83 144 C 86 152, 85 160, 82 166" />
                                 <path d="M 75 144 C 74 152, 75 160, 77 166" />
                             </g>
                             
                             <!-- Node 1: Knee Extension/Flexion (Orange) -->
-                            <line x1="82" y1="58" x2="108" y2="58" stroke="#FF8200" stroke-width="2" stroke-dasharray="2 2" />
+                            <line x1="82" y1="58" x2="112" y2="58" stroke="#FF8200" stroke-width="2" stroke-dasharray="2 2" />
                             <circle cx="82" cy="58" r="4" fill="#FF8200" stroke="#FFFFFF" stroke-width="1.2" />
-                            <rect x="108" y="50" width="16" height="16" rx="4" fill="#FF8200" />
-                            <text x="116" y="62" font-size="10" font-weight="900" fill="#FFFFFF" text-anchor="middle">1</text>
+                            <rect x="112" y="50" width="16" height="16" rx="4" fill="#FF8200" />
+                            <text x="120" y="62" font-size="10" font-weight="900" fill="#FFFFFF" text-anchor="middle">1</text>
                             
-                            <!-- Node 3: Hip Adduction (Blue) -->
-                            <line x1="71" y1="122" x2="108" y2="122" stroke="#4895DB" stroke-width="2" stroke-dasharray="2 2" />
-                            <circle cx="71" cy="122" r="4" fill="#4895DB" stroke="#FFFFFF" stroke-width="1.2" />
-                            <rect x="108" y="114" width="16" height="16" rx="4" fill="#4895DB" />
-                            <text x="116" y="126" font-size="10" font-weight="900" fill="#FFFFFF" text-anchor="middle">3</text>
-                            
-                            <!-- Node 4: Hip Abduction (Blue) -->
-                            <line x1="58" y1="116" x2="28" y2="116" stroke="#4895DB" stroke-width="2" stroke-dasharray="2 2" />
+                            <!-- Node 2: Hip Adduction & Abduction (Blue) -->
+                            <line x1="58" y1="116" x2="24" y2="116" stroke="#4895DB" stroke-width="2" stroke-dasharray="2 2" />
                             <circle cx="58" cy="116" r="4" fill="#4895DB" stroke="#FFFFFF" stroke-width="1.2" />
-                            <rect x="12" y="108" width="16" height="16" rx="4" fill="#4895DB" />
-                            <text x="20" y="120" font-size="10" font-weight="900" fill="#FFFFFF" text-anchor="middle">4</text>
-                            
-                            <!-- Node 5: Ankle Plantar Flexion (Blue) -->
-                            <line x1="74" y1="172" x2="108" y2="172" stroke="#4895DB" stroke-width="2" stroke-dasharray="2 2" />
+                            <rect x="8" y="108" width="16" height="16" rx="4" fill="#4895DB" />
+                            <text x="16" y="120" font-size="10" font-weight="900" fill="#FFFFFF" text-anchor="middle">2</text>
+
+                            <!-- Node 3: Ankle Plantar Flexion (Blue) -->
+                            <line x1="74" y1="172" x2="112" y2="172" stroke="#4895DB" stroke-width="2" stroke-dasharray="2 2" />
                             <circle cx="74" cy="172" r="4" fill="#4895DB" stroke="#FFFFFF" stroke-width="1.2" />
-                            <rect x="108" y="164" width="16" height="16" rx="4" fill="#4895DB" />
-                            <text x="116" y="176" font-size="10" font-weight="900" fill="#FFFFFF" text-anchor="middle">5</text>
+                            <rect x="112" y="164" width="16" height="16" rx="4" fill="#4895DB" />
+                            <text x="120" y="176" font-size="10" font-weight="900" fill="#FFFFFF" text-anchor="middle">3</text>
+
+                            <!-- Node 4: NordBord Hamstrings (Orange) -->
+                            <line x1="60" y1="140" x2="24" y2="140" stroke="#FF8200" stroke-width="2" stroke-dasharray="2 2" />
+                            <circle cx="60" cy="140" r="4" fill="#FF8200" stroke="#FFFFFF" stroke-width="1.2" />
+                            <rect x="8" y="132" width="16" height="16" rx="4" fill="#FF8200" />
+                            <text x="16" y="144" font-size="10" font-weight="900" fill="#FFFFFF" text-anchor="middle">4</text>
+
+                            <!-- Node 5: Harness Belt Squat / Torso-Hips (Blue) -->
+                            <line x1="68" y1="84" x2="112" y2="84" stroke="#4895DB" stroke-width="2" stroke-dasharray="2 2" />
+                            <circle cx="68" cy="84" r="4" fill="#4895DB" stroke="#FFFFFF" stroke-width="1.2" />
+                            <rect x="112" y="76" width="16" height="16" rx="4" fill="#4895DB" />
+                            <text x="120" y="88" font-size="10" font-weight="900" fill="#FFFFFF" text-anchor="middle">5</text>
                         </svg>
                     </div>
                 </div>
                 """
-                components.html(hud_svg_html, height=450)
+                components.html(hud_svg_html, height=520)
 
             with hud_col2:
                 st.markdown(
@@ -1812,6 +1790,7 @@ with active_season:
                     .hud-metric-row-light { background: #F8F9FA; border-left: 4px solid #FF8200; border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; color: #1D1D1F; border: 1px solid #E5E5E7; border-left: 4px solid #FF8200; }
                     .hud-metric-row-light-blue { background: #F8F9FA; border-left: 4px solid #4895DB; border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; color: #1D1D1F; border: 1px solid #E5E5E7; border-left: 4px solid #4895DB; }
                     .node-badge-orange { display: inline-block; width: 20px; height: 20px; background: #FF8200; color: #FFFFFF; font-weight: 900; font-size: 11px; border-radius: 4px; text-align: center; line-height: 20px; margin-right: 8px; }
+                    .node-badge-blue { display: inline-block; width: 20px; height: 20px; background: #4895DB; color: #FFFFFF; font-weight: 900; font-size: 11px; border-radius: 4px; text-align: center; line-height: 20px; margin-right: 8px; }
                     </style>
                     <div class="hud-details-card">
                         <div class="hud-header-title-light">Anatomy Location Assessment Details</div>
@@ -1824,14 +1803,12 @@ with active_season:
                     if not sh_ath.empty:
                         l_col = next((c for c in sh_ath.columns if "l max force" in c.lower() or "left max" in c.lower()), None)
                         r_col = next((c for c in sh_ath.columns if "r max force" in c.lower() or "right max" in c.lower()), None)
-
                         dir_c = next((c for c in sh_ath.columns if "direction" in c.lower() or "test" in c.lower()), None)
                         knee_ext = sh_ath[sh_ath[dir_c].astype(str).str.contains("Extension", case=False, na=False)] if dir_c else sh_ath
                         knee_flx = sh_ath[sh_ath[dir_c].astype(str).str.contains("Flexion", case=False, na=False)] if dir_c else sh_ath
 
                         (ke_maxL, ke_maxR), (ke_recL, ke_recR), (ke_initL, ke_initR) = get_peak_and_recent_row(knee_ext, l_col, r_col)
                         (kf_maxL, kf_maxR), (kf_recL, kf_recR), (kf_initL, kf_initR) = get_peak_and_recent_row(knee_flx, l_col, r_col)
-
                         latest_date_str = format_date_clean(knee_ext.sort_values("Date").iloc[-1].get("Date")) if not knee_ext.empty else "N/A"
 
                         st.markdown(
@@ -1846,7 +1823,7 @@ with active_season:
                                     <b>Flexion:</b> Max L {kf_maxL:.1f}N | R {kf_maxR:.1f}N &nbsp;→&nbsp; <b>Recent:</b> L {render_val_with_arrow(kf_recL, kf_initL, '{:.1f}', 'N')} | R {render_val_with_arrow(kf_recR, kf_initR, '{:.1f}', 'N')}
                                 </div>
                             </div>
-                        """,
+                            """,
                             unsafe_allow_html=True,
                         )
 
@@ -1854,21 +1831,19 @@ with active_season:
                     if not hip_ath.empty:
                         l_col = next((c for c in hip_ath.columns if "l max force" in c.lower() or "left max" in c.lower()), None)
                         r_col = next((c for c in hip_ath.columns if "r max force" in c.lower() or "right max" in c.lower()), None)
-
                         dir_col = next((c for c in hip_ath.columns if "direction" in c.lower() or "test" in c.lower()), None)
                         hip_ad = hip_ath[hip_ath[dir_col].astype(str).str.contains("AD|Adduction", case=False, na=False)] if dir_col else hip_ath
                         hip_ab = hip_ath[hip_ath[dir_col].astype(str).str.contains("AB|Abduction", case=False, na=False)] if dir_col else hip_ath
 
                         (ad_maxL, ad_maxR), (ad_recL, ad_recR), (ad_initL, ad_initR) = get_peak_and_recent_row(hip_ad, l_col, r_col)
                         (ab_maxL, ab_maxR), (ab_recL, ab_recR), (ab_initL, ab_initR) = get_peak_and_recent_row(hip_ab, l_col, r_col)
-
                         date_str = format_date_clean(hip_ath.sort_values("Date").iloc[-1].get("Date")) if not hip_ath.empty else "N/A"
 
                         st.markdown(
                             f"""
-                            <div class="hud-metric-row-light">
+                            <div class="hud-metric-row-light-blue">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-orange">2</span>HIP ADDUCTION & ABDUCTION</span>
+                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">2</span>HIP ADDUCTION & ABDUCTION</span>
                                     <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
                                 </div>
                                 <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
@@ -1876,7 +1851,7 @@ with active_season:
                                     <b>Hip Abduction:</b> Max L {ab_maxL:.1f}N | R {ab_maxR:.1f}N &nbsp;→&nbsp; <b>Recent:</b> L {render_val_with_arrow(ab_recL, ab_initL, '{:.1f}', 'N')} | R {render_val_with_arrow(ab_recR, ab_initR, '{:.1f}', 'N')}
                                 </div>
                             </div>
-                        """,
+                            """,
                             unsafe_allow_html=True,
                         )
 
@@ -1884,36 +1859,159 @@ with active_season:
                     if not calf_ath.empty:
                         l_col = next((c for c in calf_ath.columns if "l max force" in c.lower() or "left max" in c.lower()), None)
                         r_col = next((c for c in calf_ath.columns if "r max force" in c.lower() or "right max" in c.lower()), None)
-
                         (ank_maxL, ank_maxR), (ank_recL, ank_recR), (ank_initL, ank_initR) = get_peak_and_recent_row(calf_ath, l_col, r_col)
                         date_str = format_date_clean(calf_ath.sort_values("Date").iloc[-1].get("Date")) if not calf_ath.empty else "N/A"
 
                         st.markdown(
                             f"""
-                            <div class="hud-metric-row-light">
+                            <div class="hud-metric-row-light-blue">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-orange">3</span>ANKLE PLANTAR FLEXION</span>
+                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">3</span>ANKLE PLANTAR FLEXION</span>
                                     <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
                                 </div>
                                 <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
                                     <b>Max Force:</b> L {ank_maxL:.1f}N | R {ank_maxR:.1f}N &nbsp;→&nbsp; <b>Recent:</b> L {render_val_with_arrow(ank_recL, ank_initL, '{:.1f}', 'N')} | R {render_val_with_arrow(ank_recR, ank_initR, '{:.1f}', 'N')}
                                 </div>
                             </div>
-                        """,
+                            """,
                             unsafe_allow_html=True,
                         )
 
+                    # NODE 4: NORDBORD HAMSTRINGS
+                    if not nord_ath.empty:
+                        l_col = next((c for c in nord_ath.columns if "l max force" in c.lower() or "left max" in c.lower()), None)
+                        r_col = next((c for c in nord_ath.columns if "r max force" in c.lower() or "right max" in c.lower()), None)
+                        (nord_maxL, nord_maxR), (nord_recL, nord_recR), (nord_initL, nord_initR) = get_peak_and_recent_row(nord_ath, l_col, r_col)
+                        date_str = format_date_clean(nord_ath.sort_values("Date").iloc[-1].get("Date")) if not nord_ath.empty else "N/A"
+
+                        st.markdown(
+                            f"""
+                            <div class="hud-metric-row-light">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-orange">4</span>NORDBORD HAMSTRING</span>
+                                    <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
+                                </div>
+                                <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
+                                    <b>Peak Force:</b> L {nord_maxL:.1f}N | R {nord_maxR:.1f}N &nbsp;→&nbsp; <b>Recent:</b> L {render_val_with_arrow(nord_recL, nord_initL, '{:.1f}', 'N')} | R {render_val_with_arrow(nord_recR, nord_initR, '{:.1f}', 'N')}
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+
+                    # NODE 5: HARNESS BELT SQUAT
+                    if not bs_ath.empty:
+                        f_c = next((c for c in bs_ath.columns if "peak vertical force" in c.lower() or "force" in c.lower()), None)
+                        if f_c:
+                            bs_ath["PVF_Calc"] = pd.to_numeric(bs_ath[f_c].astype(str).str.replace(r"[^0-9.]", "", regex=True), errors="coerce").fillna(0.0)
+                            peak_bs_val = bs_ath["PVF_Calc"].max()
+                            rec_bs_val = bs_ath.sort_values("Date").iloc[-1]["PVF_Calc"]
+                            init_bs_val = bs_ath.sort_values("Date").iloc[0]["PVF_Calc"]
+                            date_str = format_date_clean(bs_ath.sort_values("Date").iloc[-1].get("Date"))
+
+                            st.markdown(
+                                f"""
+                                <div class="hud-metric-row-light-blue">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                        <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">5</span>HARNESS BELT SQUAT</span>
+                                        <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
+                                    </div>
+                                    <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
+                                        <b>Peak Vertical Force:</b> Max {peak_bs_val:.1f}N &nbsp;→&nbsp; <b>Recent:</b> {render_val_with_arrow(rec_bs_val, init_bs_val, '{:.1f}', 'N')}
+                                    </div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
                 else:
-                    st.info(
-                        f"No Intake Assessment records found for {selected_intake_athlete}."
-                    )
+                    st.info(f"No Intake Assessment records found for {selected_intake_athlete}.")
 
                 st.markdown("</div>", unsafe_allow_html=True)
 
             st.divider()
 
-            # RAW DATA LOG TABLES BELOW ANATOMY MAP
-            st.markdown(f"### Intake Assessment Raw Logs for {selected_intake_athlete}")
+            # RAW LOGS & DETAILED PERFORMANCE DRILL-DOWNS
+            st.markdown(f"### Intake Assessment Modules & Logs for {selected_intake_athlete}")
+
+            with st.expander("NordBord Test Details & Performance Log", expanded=False):
+                if not nord_ath.empty:
+                    test_type_col = next((c for c in nord_ath.columns if "test" in c.lower()), None)
+                    available_tests = nord_ath[test_type_col].dropna().unique().tolist() if test_type_col else ["Nordic"]
+                    sel_nord_test = st.selectbox("Filter NordBord Test Type:", available_tests, key="intake_nord_type_sel")
+
+                    df_filtered_nord = nord_ath[nord_ath[test_type_col] == sel_nord_test] if test_type_col else nord_ath
+                    l_col = next((c for c in df_filtered_nord.columns if "l max force" in c.lower() or "left max" in c.lower()), None)
+                    r_col = next((c for c in df_filtered_nord.columns if "r max force" in c.lower() or "right max" in c.lower()), None)
+
+                    if not df_filtered_nord.empty and l_col and r_col:
+                        df_filtered_nord["Left_Force"] = pd.to_numeric(df_filtered_nord[l_col], errors="coerce")
+                        df_filtered_nord["Right_Force"] = pd.to_numeric(df_filtered_nord[r_col], errors="coerce")
+
+                        fig_nordic = go.Figure()
+                        fig_nordic.add_trace(go.Scatter(
+                            x=df_filtered_nord["Date"], y=df_filtered_nord["Left_Force"],
+                            name="Left Max Force (N)", mode="lines+markers",
+                            line=dict(color="#FF8200", width=3)
+                        ))
+                        fig_nordic.add_trace(go.Scatter(
+                            x=df_filtered_nord["Date"], y=df_filtered_nord["Right_Force"],
+                            name="Right Max Force (N)", mode="lines+markers",
+                            line=dict(color="#38BDF8", width=3)
+                        ))
+                        fig_nordic.update_layout(
+                            title=f"{sel_nord_test} Force Trend — {selected_intake_athlete}",
+                            height=280, margin=dict(l=20, r=20, t=40, b=20),
+                            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                        )
+                        st.plotly_chart(fig_nordic, use_container_width=True)
+
+                    disp_nord = [c for c in nord_ath.columns if c not in ["Name", "Date_Str"]]
+                    st.markdown(render_vball_table(nord_ath[disp_nord]), unsafe_allow_html=True)
+                else:
+                    st.info(f"No NordBord assessment logs found for {selected_intake_athlete}.")
+
+            with st.expander("Harness Belt Squat Details & Log", expanded=False):
+                if not bs_ath.empty:
+                    force_col = next((c for c in bs_ath.columns if "peak vertical force [n]" in c.lower() or "peak vertical force" in c.lower()), None)
+                    rfd_col = next((c for c in bs_ath.columns if "rfd" in c.lower()), None)
+
+                    if force_col:
+                        bs_ath["Peak_Force_Clean"] = pd.to_numeric(
+                            bs_ath[force_col].astype(str).str.replace(r"[^0-9.]", "", regex=True),
+                            errors="coerce",
+                        )
+                        fig_bs = go.Figure()
+                        fig_bs.add_trace(go.Scatter(
+                            x=bs_ath["Date"], y=bs_ath["Peak_Force_Clean"],
+                            name="Peak Vertical Force [N]", mode="lines+markers",
+                            line=dict(color="#FF8200", width=4), marker=dict(size=8)
+                        ))
+
+                        if rfd_col:
+                            bs_ath["RFD_Clean"] = pd.to_numeric(
+                                bs_ath[rfd_col].astype(str).str.replace(r"[^0-9.]", "", regex=True),
+                                errors="coerce",
+                            )
+                            fig_bs.add_trace(go.Scatter(
+                                x=bs_ath["Date"], y=bs_ath["RFD_Clean"],
+                                name="RFD - 100ms [N/s]", mode="lines+markers", yaxis="y2",
+                                line=dict(color="#38BDF8", width=3, dash="dot"), marker=dict(size=8)
+                            ))
+
+                        fig_bs.update_layout(
+                            title=f"Belt Squat Peak Force & RFD — {selected_intake_athlete}",
+                            height=280, margin=dict(l=40, r=40, t=50, b=40),
+                            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                            yaxis=dict(side="left", title="Force [N]"),
+                            yaxis2=dict(overlaying="y", side="right", title="RFD [N/s]"),
+                            legend=dict(orientation="h", y=1.1, x=0.01)
+                        )
+                        st.plotly_chart(fig_bs, use_container_width=True)
+
+                    disp_bs = [c for c in bs_ath.columns if c not in ["Name", "Date_Str", "Peak_Force_Clean", "RFD_Clean", "PVF_Calc"]]
+                    st.markdown(render_vball_table(bs_ath[disp_bs]), unsafe_allow_html=True)
+                else:
+                    st.info(f"No Harness Belt Squat records for {selected_intake_athlete}.")
 
             with st.expander("Knee Extension / Flexion Log", expanded=False):
                 if not sh_ath.empty:
@@ -1939,9 +2037,7 @@ with active_season:
                     if test_col and test_col != "Test":
                         omit_cols.append(test_col)
 
-                    # Build explicit ordered list starting with Date and Test
                     all_cols = [c for c in hip_display_df.columns if c not in omit_cols]
-                    
                     final_cols = []
                     if "Date" in all_cols:
                         final_cols.append("Date")
@@ -2091,143 +2187,7 @@ with active_season:
 
                 st.plotly_chart(fig_jump_trend, use_container_width=True)
 
-        # SUB-TAB 3: NORDBORD (SPLIT BY TEST TYPES: ISO 30, ISO 60, NORDIC)
-        with testing_tab_nordic:
-            st.markdown(
-                '<div class="vball-section-title">NordBord Testing Profiles</div>',
-                unsafe_allow_html=True,
-            )
-            c_nord1, c_nord2 = st.columns([1, 1])
-            with c_nord1:
-                selected_nord_athlete = st.selectbox(
-                    "Select Athlete for NordBord View:",
-                    roster_players,
-                    key="nordic_ath_select",
-                )
-
-            p_nordic = (
-                nordic_raw[nordic_raw["Name"] == selected_nord_athlete]
-                .sort_values("Date")
-                .copy()
-                if not nordic_raw.empty and "Name" in nordic_raw.columns
-                else pd.DataFrame()
-            )
-
-            if not p_nordic.empty:
-                test_type_col = next((c for c in p_nordic.columns if "test" in c.lower()), None)
-                available_tests = (
-                    p_nordic[test_type_col].dropna().unique().tolist()
-                    if test_type_col
-                    else ["Nordic"]
-                )
-
-                with c_nord2:
-                    selected_test_type = st.selectbox(
-                        "Select Test Type:",
-                        available_tests,
-                        key="nordic_test_type_select"
-                    )
-
-                df_filtered_nord = p_nordic[p_nordic[test_type_col] == selected_test_type] if test_type_col else p_nordic
-
-                l_col = next((c for c in df_filtered_nord.columns if "l max force" in c.lower() or "left max" in c.lower()), None)
-                r_col = next((c for c in df_filtered_nord.columns if "r max force" in c.lower() or "right max" in c.lower()), None)
-
-                if not df_filtered_nord.empty and l_col and r_col:
-                    df_filtered_nord["Left_Force"] = pd.to_numeric(df_filtered_nord[l_col], errors="coerce")
-                    df_filtered_nord["Right_Force"] = pd.to_numeric(df_filtered_nord[r_col], errors="coerce")
-
-                    fig_nordic = go.Figure()
-                    fig_nordic.add_trace(go.Scatter(
-                        x=df_filtered_nord["Date"], y=df_filtered_nord["Left_Force"],
-                        name="Left Max Force (N)", mode="lines+markers",
-                        line=dict(color="#FF8200", width=3)
-                    ))
-                    fig_nordic.add_trace(go.Scatter(
-                        x=df_filtered_nord["Date"], y=df_filtered_nord["Right_Force"],
-                        name="Right Max Force (N)", mode="lines+markers",
-                        line=dict(color="#38BDF8", width=3)
-                    ))
-
-                    fig_nordic.update_layout(
-                        title=f"{selected_test_type} Force Trend — {selected_nord_athlete}",
-                        height=320, margin=dict(l=20, r=20, t=40, b=20),
-                        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                    )
-                    st.plotly_chart(fig_nordic, use_container_width=True)
-
-                disp_nord = [c for c in p_nordic.columns if c not in ["Name", "Date_Str"]]
-                st.markdown(f"#### Complete NordBord Logs for {selected_nord_athlete}")
-                st.markdown(render_vball_table(p_nordic[disp_nord]), unsafe_allow_html=True)
-            else:
-                st.info(f"No NordBord records logged for {selected_nord_athlete}.")
-
-        # SUB-TAB 4: HARNESS BELT SQUAT
-        with testing_tab_bs:
-            st.markdown(
-                '<div class="vball-section-title">Harness Belt Squat Performance</div>',
-                unsafe_allow_html=True,
-            )
-            c_bs_ath, _ = st.columns([1, 2])
-            with c_bs_ath:
-                selected_bs_athlete = st.selectbox(
-                    "Select Athlete for Belt Squat View:",
-                    roster_players,
-                    key="belt_squat_ath_select",
-                )
-
-            p_bs = (
-                belt_squat_raw[belt_squat_raw["Name"] == selected_bs_athlete]
-                .sort_values("Date")
-                .copy()
-                if not belt_squat_raw.empty and "Name" in belt_squat_raw.columns
-                else pd.DataFrame()
-            )
-
-            if not p_bs.empty:
-                force_col = next((c for c in p_bs.columns if "peak vertical force [n]" in c.lower()), None)
-                rfd_col = next((c for c in p_bs.columns if "rfd" in c.lower()), None)
-
-                if force_col:
-                    p_bs["Peak_Force_Clean"] = pd.to_numeric(
-                        p_bs[force_col].astype(str).str.replace(r"[^0-9.]", "", regex=True),
-                        errors="coerce",
-                    )
-                    fig_bs = go.Figure()
-                    fig_bs.add_trace(go.Scatter(
-                        x=p_bs["Date"], y=p_bs["Peak_Force_Clean"],
-                        name="Peak Vertical Force [N]", mode="lines+markers",
-                        line=dict(color="#FF8200", width=4), marker=dict(size=8)
-                    ))
-
-                    if rfd_col:
-                        p_bs["RFD_Clean"] = pd.to_numeric(
-                            p_bs[rfd_col].astype(str).str.replace(r"[^0-9.]", "", regex=True),
-                            errors="coerce",
-                        )
-                        fig_bs.add_trace(go.Scatter(
-                            x=p_bs["Date"], y=p_bs["RFD_Clean"],
-                            name="RFD - 100ms [N/s]", mode="lines+markers", yaxis="y2",
-                            line=dict(color="#38BDF8", width=3, dash="dot"), marker=dict(size=8)
-                        ))
-
-                    fig_bs.update_layout(
-                        title=f"Belt Squat Peak Force & RFD — {selected_bs_athlete}",
-                        height=320, margin=dict(l=40, r=40, t=50, b=40),
-                        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                        yaxis=dict(side="left", title="Force [N]"),
-                        yaxis2=dict(overlaying="y", side="right", title="RFD [N/s]"),
-                        legend=dict(orientation="h", y=1.1, x=0.01)
-                    )
-                    st.plotly_chart(fig_bs, use_container_width=True)
-
-                disp_bs = [c for c in p_bs.columns if c not in ["Name", "Date_Str", "Peak_Force_Clean", "RFD_Clean"]]
-                st.markdown(f"#### Belt Squat Records for {selected_bs_athlete}")
-                st.markdown(render_vball_table(p_bs[disp_bs]), unsafe_allow_html=True)
-            else:
-                st.info(f"No Belt Squat records logged for {selected_bs_athlete}.")
-
-        # SUB-TAB 5: OVERALL PROFILE
+        # SUB-TAB 3: OVERALL PROFILE
         with testing_tab_overall:
             st.markdown(
                 '<div class="vball-section-title">Master Athletic Performance Summary</div>',
@@ -2558,7 +2518,6 @@ with active_season:
                 station_counts = summary_df["Station"].dropna().value_counts()
                 top_station = station_counts.idxmax() if not station_counts.empty else "N/A"
 
-                # 1. TOP SECTION: KPI Cards across full width
                 kpi_html = (
                     '<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">'
                     '<div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #FF8200; border-radius: 10px; padding: 16px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">'
@@ -2577,7 +2536,6 @@ with active_season:
                 )
                 st.markdown(kpi_html, unsafe_allow_html=True)
 
-                # 2. MIDDLE SECTION: Full-width bar chart
                 st.markdown("<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Total Usage by Station</h4>", unsafe_allow_html=True)
                 station_counts_df = (
                     summary_df["Station"]
@@ -2623,7 +2581,6 @@ with active_season:
 
                 st.divider()
 
-                # 3. BOTTOM SECTION: Mon-Sun Row Grid per Athlete
                 st.markdown("<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Weekly Athlete Recovery Timeline</h4>", unsafe_allow_html=True)
                 if "Athlete" in summary_df.columns:
                     ath_grouped = summary_df.groupby("Athlete")
@@ -2634,7 +2591,6 @@ with active_season:
                         for _, row in group.iterrows():
                             raw_day = str(row.get("Day", ""))
                             stn = str(row.get("Station", ""))
-                            
                             day_key = next((full for full, _ in days_order if full in raw_day), raw_day)
                             if day_key not in day_stations_map:
                                 day_stations_map[day_key] = []
@@ -2675,7 +2631,7 @@ with active_season:
                 
 
     # =========================================================================
-    # TAB 7: TRACKING (LIVE PRACTICE STATS & SUMMARY WITH AUTOMATIC WEBHOOK SYNC)
+    # TAB 7: TRACKING (LIVE PRACTICE STATS & SUMMARY)
     # =========================================================================
     elif main_tab == "Tracking":
         track_tab_live, track_tab_summary = st.tabs(
@@ -2730,7 +2686,6 @@ with active_season:
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # Instantly update local session_state AND asynchronously post to Google Sheets
             def modify_counter(p_name, metric, delta, wk_s, date_s):
                 wk_clean = format_date_clean(wk_s)
                 dt_clean = format_date_clean(date_s)
@@ -2770,7 +2725,6 @@ with active_season:
                     except Exception as ex:
                         print(f"Tracking auto-sync POST failed: {ex}")
 
-            # Render 2-column grid of player cards
             for i in range(0, len(roster_players), 2):
                 grid_cols = st.columns(2)
                 for j in range(2):
@@ -2864,136 +2818,42 @@ with active_season:
             if not track_df.empty:
                 filtered_wk_df = track_df[track_df["Week_Starting"] == track_week_str]
 
-                # ==================================================
-                # KPI CARDS
-                # ==================================================
-
-                total_tracking = int(
-                    filtered_wk_df["Count"].sum()
-                )
-
-                active_athletes = (
-                    filtered_wk_df["Athlete"].nunique()
-                )
-
+                total_tracking = int(filtered_wk_df["Count"].sum())
+                active_athletes = filtered_wk_df["Athlete"].nunique()
                 metric_counts = (
-                    filtered_wk_df
-                    .groupby("Metric")["Count"]
+                    filtered_wk_df.groupby("Metric")["Count"]
                     .sum()
                     .sort_values(ascending=False)
                 )
-
-                top_metric = (
-                    metric_counts.index[0]
-                    if not metric_counts.empty
-                    else "N/A"
-                )
+                top_metric = metric_counts.index[0] if not metric_counts.empty else "N/A"
 
                 kpi_html = (
-                    '<div style="display:grid; '
-                    'grid-template-columns:repeat(3,1fr); '
-                    'gap:16px; margin-bottom:24px;">'
-
-                    # TOTAL TRACKING EVENTS
-                    '<div style="background:#FFFFFF; '
-                    'border:1px solid #E2E8F0; '
-                    'border-left:5px solid #FF8200; '
-                    'border-radius:10px; padding:16px; '
-                    'text-align:center; '
-                    'box-shadow:0 2px 4px rgba(0,0,0,0.02);">'
-
-                    '<div style="font-size:0.75rem; '
-                    'font-weight:700; '
-                    'color:#64748B; '
-                    'text-transform:uppercase; '
-                    'letter-spacing:0.5px;">'
-                    'Total Tracking Events'
+                    '<div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:24px;">'
+                    '<div style="background:#FFFFFF; border:1px solid #E2E8F0; border-left:5px solid #FF8200; border-radius:10px; padding:16px; text-align:center; box-shadow:0 2px 4px rgba(0,0,0,0.02);">'
+                    '<div style="font-size:0.75rem; font-weight:700; color:#64748B; text-transform:uppercase; letter-spacing:0.5px;">Total Tracking Events</div>'
+                    f'<div style="font-size:1.8rem; font-weight:800; color:#0F172A; margin-top:4px;">{total_tracking}</div>'
                     '</div>'
-
-                    f'<div style="font-size:1.8rem; '
-                    f'font-weight:800; '
-                    f'color:#0F172A; '
-                    f'margin-top:4px;">'
-                    f'{total_tracking}'
-                    f'</div>'
-
+                    '<div style="background:#FFFFFF; border:1px solid #E2E8F0; border-left:5px solid #38BDF8; border-radius:10px; padding:16px; text-align:center; box-shadow:0 2px 4px rgba(0,0,0,0.02);">'
+                    '<div style="font-size:0.75rem; font-weight:700; color:#64748B; text-transform:uppercase; letter-spacing:0.5px;">Active Athletes Logged</div>'
+                    f'<div style="font-size:1.8rem; font-weight:800; color:#0F172A; margin-top:4px;">{active_athletes}</div>'
                     '</div>'
-
-                    # ACTIVE ATHLETES
-                    '<div style="background:#FFFFFF; '
-                    'border:1px solid #E2E8F0; '
-                    'border-left:5px solid #38BDF8; '
-                    'border-radius:10px; padding:16px; '
-                    'text-align:center; '
-                    'box-shadow:0 2px 4px rgba(0,0,0,0.02);">'
-
-                    '<div style="font-size:0.75rem; '
-                    'font-weight:700; '
-                    'color:#64748B; '
-                    'text-transform:uppercase; '
-                    'letter-spacing:0.5px;">'
-                    'Active Athletes Logged'
+                    '<div style="background:#FFFFFF; border:1px solid #E2E8F0; border-left:5px solid #58595B; border-radius:10px; padding:16px; text-align:center; box-shadow:0 2px 4px rgba(0,0,0,0.02);">'
+                    '<div style="font-size:0.75rem; font-weight:700; color:#64748B; text-transform:uppercase; letter-spacing:0.5px;">Most Recorded Action</div>'
+                    f'<div style="font-size:1.8rem; font-weight:800; color:#0F172A; margin-top:4px;">{top_metric}</div>'
                     '</div>'
-
-                    f'<div style="font-size:1.8rem; '
-                    f'font-weight:800; '
-                    f'color:#0F172A; '
-                    f'margin-top:4px;">'
-                    f'{active_athletes}'
-                    f'</div>'
-
-                    '</div>'
-
-                    # MOST RECORDED ACTION
-                    '<div style="background:#FFFFFF; '
-                    'border:1px solid #E2E8F0; '
-                    'border-left:5px solid #58595B; '
-                    'border-radius:10px; padding:16px; '
-                    'text-align:center; '
-                    'box-shadow:0 2px 4px rgba(0,0,0,0.02);">'
-
-                    '<div style="font-size:0.75rem; '
-                    'font-weight:700; '
-                    'color:#64748B; '
-                    'text-transform:uppercase; '
-                    'letter-spacing:0.5px;">'
-                    'Most Recorded Action'
-                    '</div>'
-
-                    f'<div style="font-size:1.8rem; '
-                    f'font-weight:800; '
-                    f'color:#0F172A; '
-                    f'margin-top:4px;">'
-                    f'{top_metric}'
-                    f'</div>'
-
-                    '</div>'
-
                     '</div>'
                 )
 
-                st.markdown(
-                    kpi_html,
-                    unsafe_allow_html=True
-                )
-                # ==================================================
-                # DAILY BREAKDOWN
-                # ==================================================
+                st.markdown(kpi_html, unsafe_allow_html=True)
 
                 st.markdown(
-                    f"<h4 style='color:#0F172A; font-size:1.05rem; "
-                    f"font-weight:700; margin-bottom:12px;'>"
-                    f"Daily Tracking Breakdown ({session_date_val})"
-                    f"</h4>",
+                    f"<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Daily Tracking Breakdown ({session_date_val})</h4>",
                     unsafe_allow_html=True,
                 )
 
-                daily_df = filtered_wk_df[
-                    filtered_wk_df["Date"] == session_date_val
-                ]
+                daily_df = filtered_wk_df[filtered_wk_df["Date"] == session_date_val]
 
                 if not daily_df.empty:
-
                     pivot_daily = daily_df.pivot_table(
                         index="Athlete",
                         columns="Metric",
@@ -3002,12 +2862,8 @@ with active_season:
                         fill_value=0
                     ).reset_index()
 
-                    # Keep your dataframe functionality,
-                    # but make it fit the same visual system.
                     daily_config = {
-                        col: st.column_config.Column(
-                            alignment="center"
-                        )
+                        col: st.column_config.Column(alignment="center")
                         for col in pivot_daily.columns
                     }
 
@@ -3017,33 +2873,18 @@ with active_season:
                         use_container_width=True,
                         hide_index=True
                     )
-
                 else:
-                    st.info(
-                        "No stats recorded for the selected date."
-                    )
+                    st.info("No stats recorded for the selected date.")
 
                 st.divider()
 
-                # ==================================================
-                # WEEKLY ATHLETE TRACKING TIMELINE
-                # ==================================================
-
                 st.markdown(
-                    "<h4 style='color:#0F172A; font-size:1.05rem; "
-                    "font-weight:700; margin-bottom:12px;'>"
-                    "Weekly Athlete Tracking Timeline"
-                    "</h4>",
+                    "<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Weekly Athlete Tracking Timeline</h4>",
                     unsafe_allow_html=True,
                 )
 
-                # Keep using your SAME filtered_wk_df.
-                # Nothing about the underlying tracking data changes.
-
                 if "Athlete" in filtered_wk_df.columns:
-
                     ath_grouped = filtered_wk_df.groupby("Athlete")
-
                     days_order = [
                         ("Monday", "Mon"),
                         ("Tuesday", "Tue"),
@@ -3055,11 +2896,8 @@ with active_season:
                     ]
 
                     for ath_name, group in ath_grouped:
-
                         day_metrics_map = {}
-
                         for _, row in group.iterrows():
-
                             raw_date = str(row.get("Date", ""))
                             metric = str(row.get("Metric", ""))
                             count = int(row.get("Count", 0))
@@ -3069,133 +2907,49 @@ with active_season:
                                 day_name = parsed_date.day_name()
                             except:
                                 day_name = next(
-                                    (
-                                        full
-                                        for full, _ in days_order
-                                        if full.lower() in raw_date.lower()
-                                    ),
+                                    (full for full, _ in days_order if full.lower() in raw_date.lower()),
                                     raw_date
                                 )
-    
+
                             if day_name not in day_metrics_map:
                                 day_metrics_map[day_name] = []
 
-                            day_metrics_map[day_name].append(
-                                (metric, count)
-                            )
+                            day_metrics_map[day_name].append((metric, count))
 
                         days_grid_html = ""
-
                         for full_day, short_day in days_order:
-
-                            metrics_list = day_metrics_map.get(
-                                full_day,
-                                []
-                            )
+                            metrics_list = day_metrics_map.get(full_day, [])
 
                             if metrics_list:
-
                                 metrics_html = ""
-
                                 for metric, count in metrics_list:
                                     metrics_html += (
-                                        '<div style="'
-                                        'background:#FFFFFF; '
-                                        'border:1px solid #E2E8F0; '
-                                        'border-left:3px solid #FF8200; '
-                                        'border-radius:4px; '
-                                        'padding:4px 8px; '
-                                        'margin-top:4px; '
-                                        'font-weight:700; '
-                                        'color:#0F172A; '
-                                        'font-size:0.78rem; '
-                                        'text-align:center;">'
-                                        f'{metric}: {count}'
-                                        '</div>'
-                                     )
-
-                                card_style = (
-                                    'background:#FFFFFF; '
-                                    'border:1px solid #CBD5E1; '
-                                    'border-radius:8px; '
-                                    'padding:10px; '
-                                    'flex:1; min-width:0;'
-                                )
-
+                                        f'<div style="background:#FFFFFF; border:1px solid #E2E8F0; border-left:3px solid #FF8200; border-radius:4px; padding:4px 8px; margin-top:4px; font-weight:700; color:#0F172A; font-size:0.78rem; text-align:center;">{metric}: {count}</div>'
+                                    )
+                                card_style = 'background:#FFFFFF; border:1px solid #CBD5E1; border-radius:8px; padding:10px; flex:1; min-width:0;'
                                 header_color = "#FF8200"
-
                             else:
-
-                                metrics_html = (
-                                    '<div style="color:#94A3B8; '
-                                    'font-size:0.75rem; '
-                                    'text-align:center; '
-                                    'margin-top:8px; '
-                                    'font-style:italic;">'
-                                    '—'
-                                    '</div>'
-                                )
-
-                                card_style = (
-                                    'background:#F8FAFC; '
-                                    'border:1px solid #E2E8F0; '
-                                    'border-radius:8px; '
-                                    'padding:10px; '
-                                    'flex:1; min-width:0;'
-                                )
-
+                                metrics_html = '<div style="color:#94A3B8; font-size:0.75rem; text-align:center; margin-top:8px; font-style:italic;">—</div>'
+                                card_style = 'background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:10px; flex:1; min-width:0;'
                                 header_color = "#64748B"
 
                             days_grid_html += (
                                 f'<div style="{card_style}">'
-                                f'<div style="font-weight:700; '
-                                f'color:{header_color}; '
-                                f'font-size:0.8rem; '
-                                f'text-align:center; '
-                                f'border-bottom:1px solid #E2E8F0; '
-                                f'padding-bottom:4px; '
-                                f'text-transform:uppercase;">'
-                                f'{short_day}'
-                                f'</div>'
+                                f'<div style="font-weight:700; color:{header_color}; font-size:0.8rem; text-align:center; border-bottom:1px solid #E2E8F0; padding-bottom:4px; text-transform:uppercase;">{short_day}</div>'
                                 f'{metrics_html}'
                                 '</div>'
                             )
 
                         card_html = (
-                            '<div style="background:#FFFFFF; '
-                            'border:1px solid #E2E8F0; '
-                            'border-radius:10px; '
-                            'padding:16px; '
-                            'margin-bottom:16px; '
-                            'box-shadow:0 1px 3px rgba(0,0,0,0.02);">'
-
-                            f'<div style="font-weight:800; '
-                            f'color:#0F172A; font-size:1rem; '
-                            f'margin-bottom:12px;">'
-                            f'{ath_name}'
-                            f'</div>'
-
-                            f'<div style="display:flex; '
-                            f'gap:10px; width:100%;">'
-                            f'{days_grid_html}'
-                            f'</div>'
-
+                            '<div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:10px; padding:16px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.02);">'
+                            f'<div style="font-weight:800; color:#0F172A; font-size:1rem; margin-bottom:12px;">{ath_name}</div>'
+                            f'<div style="display:flex; gap:10px; width:100%;">{days_grid_html}</div>'
                             '</div>'
                         )
-
-                        st.markdown(
-                            card_html,
-                            unsafe_allow_html=True
-                        )
-    
+                        st.markdown(card_html, unsafe_allow_html=True)
                 else:
                     st.info("No athlete tracking data available.")
-
             else:
-                st.info(
-                    f"No tracking data recorded for the week "
-                    f"of {track_week_str}."
-                )
-
+                st.info(f"No tracking data recorded for the week of {track_week_str}.")
     else:
         st.info("No tracking metrics recorded yet.")
