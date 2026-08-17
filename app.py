@@ -32,7 +32,7 @@ def format_date_clean(val):
 
 
 # -----------------------------------------------------------------------------
-# 1. PAGE CONFIGURATION & STYLING
+# 1. PAGE CONFIGURATION & STYLING (WITH PRINT OPTIMIZATIONS)
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="Lady Vols Basketball | Performance Console",
@@ -136,6 +136,41 @@ st.markdown(
         [data-testid="stDataFrame"] div[role="gridcell"] {
             justify-content: center !important;
             text-align: center !important;
+        }
+
+        /* -------------------------------------------------------------------- */
+        /* PRINT OPTIMIZATIONS (@media print)                                   */
+        /* -------------------------------------------------------------------- */
+        @media print {
+            section[data-testid="stSidebar"],
+            header[data-testid="stHeader"],
+            footer,
+            .stButton,
+            .no-print,
+            div[data-testid="stSelectbox"],
+            div[data-testid="stDateInput"] {
+                display: none !important;
+            }
+
+            .main .block-container {
+                max-width: 100% !important;
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+
+            .stApp {
+                background-color: #FFFFFF !important;
+            }
+
+            .rec-grid-card, 
+            .compliance-subcard, 
+            .athlete-card, 
+            .vball-table, 
+            .hud-details-card,
+            .js-plotly-plot {
+                break-inside: avoid !important;
+                page-break-inside: avoid !important;
+            }
         }
     </style>
 """,
@@ -309,7 +344,6 @@ def fetch_live_tracking_sheet():
     return pd.DataFrame()
 
 
-# Hydrate tracking data from Google Sheets once
 if "tracking_data" not in st.session_state or not st.session_state.get("tracking_data_initialized", False):
     st.session_state.tracking_data = {}
     live_track_df = fetch_live_tracking_sheet()
@@ -664,17 +698,26 @@ if st.sidebar.button("Logout"):
 
 
 # -----------------------------------------------------------------------------
-# 6. VIEW CONTROLLERS
+# 6. VIEW CONTROLLERS & TOP BAR WITH PRINT ACTION
 # -----------------------------------------------------------------------------
-st.markdown(
-    """
-    <div class="console-header">
-        <span>LADY VOLS BASKETBALL ANALYTICS</span>
-        <span style="font-size: 0.9rem; font-weight: 600; background: rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 4px;">SUMMER PHASE</span>
-    </div>
-""",
-    unsafe_allow_html=True,
-)
+col_header_title, col_header_btn = st.columns([5, 1])
+
+with col_header_title:
+    st.markdown(
+        """
+        <div class="console-header" style="margin-bottom: 0;">
+            <span>LADY VOLS BASKETBALL ANALYTICS</span>
+            <span style="font-size: 0.9rem; font-weight: 600; background: rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 4px;">SUMMER PHASE</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+with col_header_btn:
+    if st.button("🖨️ Print Page", use_container_width=True):
+        components.html("<script>window.print();</script>", height=0, width=0)
+
+st.markdown("<br>", unsafe_allow_html=True)
 
 active_season = st.tabs(["Summer"])[0]
 
