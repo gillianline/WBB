@@ -147,7 +147,6 @@ st.markdown(
                 margin: 0.4in;
             }
 
-            /* Hide everything that is interactive or outside main report */
             section[data-testid="stSidebar"],
             header[data-testid="stHeader"],
             footer,
@@ -160,7 +159,6 @@ st.markdown(
                 display: none !important;
             }
 
-            /* Expand root Streamlit scroll containers to make content fully visible */
             html, body, .stApp, .main,
             div[data-testid="stAppViewContainer"],
             div[data-testid="stAppViewBlockContainer"],
@@ -178,7 +176,6 @@ st.markdown(
                 margin: 0 !important;
             }
 
-            /* Practice Score 2-Card formatting */
             .practice-score-card {
                 padding: 10px 14px !important;
                 margin-bottom: 12px !important;
@@ -747,16 +744,33 @@ with col_header_title:
     )
 
 with col_header_btn:
-    st.markdown(
-        """
-        <a href="javascript:window.print()" style="text-decoration:none; display:block;">
-            <div style="width: 100%; height: 42px; background: #FF8200; color: white; border-radius: 8px; font-weight: 800; font-size: 14px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); cursor: pointer; user-select: none;">
-                🖨️ Print Page
-            </div>
-        </a>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.button("🖨️ Print Page", key="global_print_btn", use_container_width=True)
+
+# Directly binds window.print to the Streamlit button in the top DOM
+components.html(
+    """
+    <script>
+    const parentDoc = window.parent.document;
+    function attachPrintListener() {
+        const btns = parentDoc.querySelectorAll('button');
+        btns.forEach(b => {
+            if (b.innerText.includes('Print Page') && !b.getAttribute('data-print-bound')) {
+                b.setAttribute('data-print-bound', 'true');
+                b.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    window.parent.print();
+                });
+            }
+        });
+    }
+    attachPrintListener();
+    setInterval(attachPrintListener, 1000);
+    </script>
+    """,
+    height=0,
+    width=0,
+)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -2108,6 +2122,7 @@ with active_season:
             rsi_cols = [c for c in p_cmj.columns if "rsi" in c.lower()]
             rsi_col = rsi_cols[0] if rsi_cols else None
 
+            # 1. GRAPH FIRST
             if not p_cmj.empty and j_col:
                 p_cmj["Jump_Height_Clean"] = pd.to_numeric(
                     p_cmj[j_col]
@@ -2198,6 +2213,7 @@ with active_season:
 
             st.divider()
 
+            # 2. LOGS SECOND
             display_cols = [
                 c for c in p_cmj.columns if c not in ["Name", "Date_Str", "Jump_Height_Clean", "RSI_Clean"]
             ]
