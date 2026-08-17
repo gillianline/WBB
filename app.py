@@ -32,7 +32,7 @@ def format_date_clean(val):
 
 
 # -----------------------------------------------------------------------------
-# 1. PAGE CONFIGURATION & STYLING (WITH PRINT OPTIMIZATIONS)
+# 1. PAGE CONFIGURATION & STYLING (WITH BULLETPROOF PRINT FIXES)
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="Lady Vols Basketball | Performance Console",
@@ -139,9 +139,10 @@ st.markdown(
         }
 
         /* -------------------------------------------------------------------- */
-        /* PRINT OPTIMIZATIONS (@media print)                                   */
+        /* BULLETPROOF PRINT OVERRIDES (@media print)                            */
         /* -------------------------------------------------------------------- */
         @media print {
+            /* Hide Streamlit UI Chrome, sidebar, inputs, and interactive widgets */
             section[data-testid="stSidebar"],
             header[data-testid="stHeader"],
             footer,
@@ -152,16 +153,21 @@ st.markdown(
                 display: none !important;
             }
 
-            .main .block-container {
-                max-width: 100% !important;
-                padding: 0 !important;
-                margin: 0 !important;
-            }
-
-            .stApp {
+            /* Unconstrain body and main container heights so full page renders */
+            html, body, .stApp, .main, div[data-testid="stAppViewContainer"], div[data-testid="stMainBlockContainer"] {
+                overflow: visible !important;
+                height: auto !important;
+                min-height: 100% !important;
                 background-color: #FFFFFF !important;
             }
 
+            .main .block-container {
+                max-width: 100% !important;
+                padding: 10px !important;
+                margin: 0 !important;
+            }
+
+            /* Prevent elements from being cleanly cut in half */
             .rec-grid-card, 
             .compliance-subcard, 
             .athlete-card, 
@@ -698,9 +704,9 @@ if st.sidebar.button("Logout"):
 
 
 # -----------------------------------------------------------------------------
-# 6. VIEW CONTROLLERS & TOP BAR WITH PRINT ACTION
+# 6. VIEW CONTROLLERS & TOP BAR WITH ROBUST PARENT PRINT ACTION
 # -----------------------------------------------------------------------------
-col_header_title, col_header_btn = st.columns([5, 1])
+col_header_title, col_header_btn = st.columns([5, 1.2])
 
 with col_header_title:
     st.markdown(
@@ -714,8 +720,18 @@ with col_header_title:
     )
 
 with col_header_btn:
-    if st.button("Print Page", use_container_width=True):
-        components.html("<script>window.print();</script>", height=0, width=0)
+    # Direct HTML/JS print button targeting the main parent window
+    components.html(
+        """
+        <button onclick="window.parent.print();" 
+                style="width: 100%; height: 42px; background: #FF8200; color: white; border: none; 
+                       border-radius: 8px; font-weight: 800; font-size: 14px; cursor: pointer; 
+                       box-shadow: 0 2px 4px rgba(0,0,0,0.1); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+             Print Page
+        </button>
+        """,
+        height=45,
+    )
 
 st.markdown("<br>", unsafe_allow_html=True)
 
