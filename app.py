@@ -2428,7 +2428,7 @@ with active_season:
                         data=json.dumps(payload),
                         headers={"Content-Type": "text/plain;charset=utf-8"},
                         allow_redirects=True,
-                        timeout=8
+                        timeout=8,
                     )
             except Exception as ex:
                 print(f"Recovery webhook POST failed: {ex}")
@@ -2475,7 +2475,14 @@ with active_season:
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            stations = [f"Recovery {i}" for i in range(1, 7)]
+            stations = [
+                "Normatec",
+                "Cold Tub",
+                "Firefly",
+                "(placeholder 1)",
+                "(placeholder 2)",
+                "(placeholder 3)",
+            ]
 
             for i in range(0, len(roster_players), 2):
                 grid_cols = st.columns(2)
@@ -2517,9 +2524,11 @@ with active_season:
                             chk_cols = st.columns(3)
                             for s_idx, station_label in enumerate(stations):
                                 state_key = f"{str(week_str).strip()}|{str(player).strip()}|{str(station_label).strip()}|{str(selected_rec_day).strip()}"
-                                is_checked = state_key in st.session_state.recovery_local_state
+                                is_checked = (
+                                    state_key in st.session_state.recovery_local_state
+                                )
 
-                                cb_key = f"rec_cb_{player.replace(' ', '_').replace(',', '')}_{station_label.replace(' ', '_')}_{week_str}_{selected_rec_day.replace(' ', '_')}"
+                                cb_key = f"rec_cb_{player.replace(' ', '_').replace(',', '')}_{station_label.replace(' ', '_').replace('(', '').replace(')', '')}_{week_str}_{selected_rec_day.replace(' ', '_')}"
 
                                 with chk_cols[s_idx % 3]:
                                     st.checkbox(
@@ -2551,36 +2560,51 @@ with active_season:
                         "Week_Starting": parts[0],
                         "Athlete": parts[1],
                         "Station": parts[2],
-                        "Day": parts[3]
+                        "Day": parts[3],
                     })
 
-            summary_df = pd.DataFrame(summary_rows) if summary_rows else pd.DataFrame(columns=["Week_Starting", "Athlete", "Station", "Day"])
+            summary_df = (
+                pd.DataFrame(summary_rows)
+                if summary_rows
+                else pd.DataFrame(
+                    columns=["Week_Starting", "Athlete", "Station", "Day"]
+                )
+            )
 
             if not summary_df.empty and "Station" in summary_df.columns:
                 total_completions = len(summary_df)
-                active_athletes = summary_df["Athlete"].nunique() if "Athlete" in summary_df.columns else 0
+                active_athletes = (
+                    summary_df["Athlete"].nunique()
+                    if "Athlete" in summary_df.columns
+                    else 0
+                )
                 station_counts = summary_df["Station"].dropna().value_counts()
-                top_station = station_counts.idxmax() if not station_counts.empty else "N/A"
+                top_station = (
+                    station_counts.idxmax() if not station_counts.empty else "N/A"
+                )
 
                 kpi_html = (
                     '<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">'
                     '<div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #FF8200; border-radius: 10px; padding: 16px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">'
                     '<div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Total Stations Utilized</div>'
                     f'<div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{total_completions}</div>'
-                    '</div>'
+                    "</div>"
                     '<div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #38BDF8; border-radius: 10px; padding: 16px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">'
                     '<div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Active Athletes Logged</div>'
                     f'<div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{active_athletes}</div>'
-                    '</div>'
+                    "</div>"
                     '<div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #58595B; border-radius: 10px; padding: 16px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">'
                     '<div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Most Popular Station</div>'
                     f'<div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{top_station}</div>'
-                    '</div>'
-                    '</div>'
+                    "</div>"
+                    "</div>"
                 )
                 st.markdown(kpi_html, unsafe_allow_html=True)
 
-                st.markdown("<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Total Usage by Station</h4>", unsafe_allow_html=True)
+                st.markdown(
+                    "<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Total Usage by Station</h4>",
+                    unsafe_allow_html=True,
+                )
                 station_counts_df = (
                     summary_df["Station"]
                     .dropna()
@@ -2588,7 +2612,9 @@ with active_season:
                     .reset_index()
                 )
                 station_counts_df.columns = ["Station", "Count"]
-                station_counts_df["Station"] = station_counts_df["Station"].astype(str)
+                station_counts_df["Station"] = station_counts_df[
+                    "Station"
+                ].astype(str)
 
                 fig_rec_bar = px.bar(
                     station_counts_df,
@@ -2601,7 +2627,7 @@ with active_season:
                     marker_line_color="#D96B00",
                     marker_line_width=1.5,
                     textposition="outside",
-                    hovertemplate="<b>%{x}</b><br>Total Logs: %{y}<extra></extra>"
+                    hovertemplate="<b>%{x}</b><br>Total Logs: %{y}<extra></extra>",
                 )
                 fig_rec_bar.update_layout(
                     showlegend=False,
@@ -2612,7 +2638,9 @@ with active_season:
                     xaxis=dict(
                         title=None,
                         showgrid=False,
-                        tickfont=dict(color="#475569", size=11, weight="bold"),
+                        tickfont=dict(
+                            color="#475569", size=11, weight="bold"
+                        ),
                     ),
                     yaxis=dict(
                         title=None,
@@ -2625,17 +2653,35 @@ with active_season:
 
                 st.divider()
 
-                st.markdown("<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Weekly Athlete Recovery Timeline</h4>", unsafe_allow_html=True)
+                st.markdown(
+                    "<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Weekly Athlete Recovery Timeline</h4>",
+                    unsafe_allow_html=True,
+                )
                 if "Athlete" in summary_df.columns:
                     ath_grouped = summary_df.groupby("Athlete")
-                    days_order = [("Monday", "Mon"), ("Tuesday", "Tue"), ("Wednesday", "Wed"), ("Thursday", "Thu"), ("Friday", "Fri"), ("Saturday", "Sat"), ("Sunday", "Sun")]
+                    days_order = [
+                        ("Monday", "Mon"),
+                        ("Tuesday", "Tue"),
+                        ("Wednesday", "Wed"),
+                        ("Thursday", "Thu"),
+                        ("Friday", "Fri"),
+                        ("Saturday", "Sat"),
+                        ("Sunday", "Sun"),
+                    ]
 
                     for ath_name, group in ath_grouped:
                         day_stations_map = {}
                         for _, row in group.iterrows():
                             raw_day = str(row.get("Day", ""))
                             stn = str(row.get("Station", ""))
-                            day_key = next((full for full, _ in days_order if full in raw_day), raw_day)
+                            day_key = next(
+                                (
+                                    full
+                                    for full, _ in days_order
+                                    if full in raw_day
+                                ),
+                                raw_day,
+                            )
                             if day_key not in day_stations_map:
                                 day_stations_map[day_key] = []
                             day_stations_map[day_key].append(stn)
@@ -2643,31 +2689,31 @@ with active_season:
                         days_grid_html = ""
                         for full_day, short_day in days_order:
                             stations_list = day_stations_map.get(full_day, [])
-                            
+
                             if stations_list:
                                 stations_html = "".join([
                                     f'<div style="background:#FFFFFF; border:1px solid #E2E8F0; border-left:3px solid #FF8200; border-radius:4px; padding:4px 8px; margin-top:4px; font-weight:700; color:#0F172A; font-size:0.78rem; text-align:center;">{stn}</div>'
                                     for stn in stations_list
                                 ])
-                                card_style = 'background:#FFFFFF; border:1px solid #CBD5E1; border-radius:8px; padding:10px; flex:1; min-width:0;'
-                                header_color = '#FF8200'
+                                card_style = "background:#FFFFFF; border:1px solid #CBD5E1; border-radius:8px; padding:10px; flex:1; min-width:0;"
+                                header_color = "#FF8200"
                             else:
                                 stations_html = '<div style="color:#94A3B8; font-size:0.75rem; text-align:center; margin-top:8px; font-style:italic;">—</div>'
-                                card_style = 'background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:10px; flex:1; min-width:0;'
-                                header_color = '#64748B'
+                                card_style = "background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:10px; flex:1; min-width:0;"
+                                header_color = "#64748B"
 
                             days_grid_html += (
                                 f'<div style="{card_style}">'
                                 f'<div style="font-weight:700; color:{header_color}; font-size:0.8rem; text-align:center; border-bottom:1px solid #E2E8F0; padding-bottom:4px; text-transform:uppercase;">{short_day}</div>'
-                                f'{stations_html}'
-                                '</div>'
+                                f"{stations_html}"
+                                "</div>"
                             )
 
                         card_html = (
                             '<div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:10px; padding:16px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.02);">'
                             f'<div style="font-weight:800; color:#0F172A; font-size:1rem; margin-bottom:12px;">{ath_name}</div>'
                             f'<div style="display:flex; gap:10px; width:100%;">{days_grid_html}</div>'
-                            '</div>'
+                            "</div>"
                         )
                         st.markdown(card_html, unsafe_allow_html=True)
             else:
