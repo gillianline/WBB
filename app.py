@@ -2477,11 +2477,11 @@ with active_season:
 
             stations = [
                 "Normatec",
-                "Cold Tub",
+                "Tubs",
                 "Firefly",
-                "(placeholder 1)",
-                "(placeholder 2)",
-                "(placeholder 3)",
+                "BFR",
+                "Mobility",
+                "Marc Pro",
             ]
 
             for i in range(0, len(roster_players), 2):
