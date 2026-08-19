@@ -731,6 +731,8 @@ if st.sidebar.button("Refresh Google Sheets Data"):
 
 if st.sidebar.button("Logout"):
     st.session_state["authenticated"] = False
+    if "recovery_authenticated" in st.session_state:
+        st.session_state["recovery_authenticated"] = False
     st.rerun()
 
 
@@ -2497,9 +2499,39 @@ with active_season:
                 st.info(f"No testing records found across modules for {selected_ov_athlete}.")
                 
    # =========================================================================
-    # TAB 6: RECOVERY (2-PERSON GRID WITH DURATION & WEEK FILTERED SUMMARY)
+    # TAB 6: RECOVERY (PASSWORD PROTECTED)
     # =========================================================================
     elif main_tab == "Recovery":
+        # ---------------------------------------------------------------------
+        # RECOVERY TAB PASSWORD GATE
+        # ---------------------------------------------------------------------
+        if "recovery_authenticated" not in st.session_state:
+            st.session_state["recovery_authenticated"] = False
+
+        if not st.session_state["recovery_authenticated"]:
+            st.markdown(
+                '<div class="vball-section-title">Recovery Console Access</div>',
+                unsafe_allow_html=True,
+            )
+            
+            c_auth1, _ = st.columns([1.5, 2.5])
+            with c_auth1:
+                st.info("🔒 This section is restricted. Enter your credentials to manage live recovery.")
+                rec_pwd = st.text_input("Enter Recovery Password:", type="password", key="rec_pwd_input")
+                
+                if st.button("Unlock Recovery Tab", type="primary", use_container_width=True):
+                    target_rec_pwd = st.secrets.get("recovery_password", "ladyvolsrecovery")
+                    if rec_pwd == target_rec_pwd:
+                        st.session_state["recovery_authenticated"] = True
+                        st.success("Access Granted.")
+                        st.rerun()
+                    else:
+                        st.error("Incorrect recovery password.")
+            st.stop()
+
+        # ---------------------------------------------------------------------
+        # UNLOCKED RECOVERY INTERFACE
+        # ---------------------------------------------------------------------
         rec_tab_tracker, rec_tab_summary = st.tabs(
             ["Live Recovery Tracker", "Team Recovery Summary"]
         )
@@ -2737,7 +2769,6 @@ with active_season:
             for item, dur in st.session_state.recovery_local_state.items():
                 parts = item.split("|")
                 if len(parts) == 4:
-                    # Clean duration into numeric minutes (default to 0 if skipped or non-numeric)
                     dur_clean = pd.to_numeric(dur, errors="coerce")
                     dur_val = int(dur_clean) if pd.notna(dur_clean) else 0
                     summary_rows.append({
@@ -2772,7 +2803,6 @@ with active_season:
                     else 0
                 )
                 
-                # Format total time into clean string (e.g., 2h 15m or 45m)
                 hrs = total_duration_all // 60
                 mins = total_duration_all % 60
                 total_time_str = f"{hrs}h {mins}m" if hrs > 0 else f"{mins}m"
@@ -2803,7 +2833,6 @@ with active_season:
                     unsafe_allow_html=True,
                 )
 
-                # Aggregate both Count and Total Duration per station
                 stn_agg = (
                     summary_df.groupby("Station")
                     .agg(
@@ -2814,7 +2843,6 @@ with active_season:
                     .sort_values(by="Total_Minutes", ascending=False)
                 )
 
-                # Format human-friendly time string (e.g., 45m, 1h 30m)
                 def format_mins_str(m):
                     if m <= 0:
                         return "--"
@@ -2951,6 +2979,7 @@ with active_season:
                         st.markdown(card_html, unsafe_allow_html=True)
             else:
                 st.info(f"No recovery data recorded for the week of {summary_week_str}.")
+                
                 
 
     # =========================================================================
