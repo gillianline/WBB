@@ -2367,7 +2367,7 @@ with active_season:
                 st.info(f"No testing records found across modules for {selected_ov_athlete}.")
                 
     # =========================================================================
-    # TAB 6: RECOVERY (2-PERSON GRID WITH FAILSAFE PERSISTENCE)
+    # TAB 6: RECOVERY (2-PERSON GRID WITH FAILSAFE PERSISTENCE & DURATION MODAL)
     # =========================================================================
     elif main_tab == "Recovery":
         rec_tab_tracker, rec_tab_summary = st.tabs(
@@ -2381,32 +2381,24 @@ with active_season:
         live_rec_df = fetch_live_recovery_sheet()
 
         if "recovery_local_state" not in st.session_state:
-            st.session_state.recovery_local_state = set()
+            st.session_state.recovery_local_state = {}
 
+        # Load live recovery records into dictionary: key -> duration
         if not live_rec_df.empty:
             for _, row in live_rec_df.iterrows():
                 wk_val = str(row.get("Week_Starting", "")).strip()
                 ath_val = str(row.get("Athlete", "")).strip()
                 stn_val = str(row.get("Station", "")).strip()
                 dy_val = str(row.get("Day", "")).strip()
+                dur_val = str(row.get("Duration_Minutes", "")).strip()
                 if wk_val and ath_val and stn_val and dy_val:
                     key = f"{wk_val}|{ath_val}|{stn_val}|{dy_val}"
-                    st.session_state.recovery_local_state.add(key)
+                    if key not in st.session_state.recovery_local_state:
+                        st.session_state.recovery_local_state[key] = dur_val
 
-        def handle_recovery_check_change(
-            ath_name, stn_label, key_name, wk_s, dy_s
-        ):
-            is_checked = st.session_state[key_name]
-            state_key = f"{str(wk_s).strip()}|{str(ath_name).strip()}|{str(stn_label).strip()}|{str(dy_s).strip()}"
-
-            if is_checked:
-                st.session_state.recovery_local_state.add(state_key)
-            else:
-                st.session_state.recovery_local_state.discard(state_key)
-
-            action_val = "add" if is_checked else "remove"
-            time_val = get_eastern_time_str() if is_checked else ""
-
+        # Webhook dispatcher
+        def send_recovery_update(ath_name, stn_label, wk_s, dy_s, action_val, duration=None):
+            time_val = get_eastern_time_str() if action_val == "add" else ""
             payload = {
                 "Week_Starting": str(wk_s).strip(),
                 "Athlete": str(ath_name).strip(),
@@ -2415,6 +2407,8 @@ with active_season:
                 "Timestamp": time_val,
                 "Action": action_val,
             }
+            if duration is not None:
+                payload["Duration_Minutes"] = duration
 
             try:
                 macro_url = (
@@ -2432,6 +2426,45 @@ with active_season:
                     )
             except Exception as ex:
                 print(f"Recovery webhook POST failed: {ex}")
+
+        # Modal Dialog Pop-up for Duration Input
+        @st.dialog("Log Recovery Duration")
+        def log_duration_modal(ath_name, stn_label, state_key, wk_s, dy_s):
+            st.markdown(f"Logging **{stn_label}** for **{ath_name}**")
+            duration_val = st.number_input(
+                "Duration (Minutes):",
+                min_value=1,
+                max_value=180,
+                value=15,
+                step=1,
+                key=f"input_dur_{state_key}",
+            )
+            col_save, col_skip = st.columns(2)
+            with col_save:
+                if st.button("Save & Log", use_container_width=True, type="primary"):
+                    st.session_state.recovery_local_state[state_key] = str(duration_val)
+                    send_recovery_update(ath_name, stn_label, wk_s, dy_s, "add", duration=duration_val)
+                    st.rerun()
+            with col_skip:
+                if st.button("Skip Duration", use_container_width=True):
+                    st.session_state.recovery_local_state[state_key] = ""
+                    send_recovery_update(ath_name, stn_label, wk_s, dy_s, "add", duration="")
+                    st.rerun()
+
+        def handle_recovery_check_change(
+            ath_name, stn_label, key_name, wk_s, dy_s
+        ):
+            is_checked = st.session_state[key_name]
+            state_key = f"{str(wk_s).strip()}|{str(ath_name).strip()}|{str(stn_label).strip()}|{str(dy_s).strip()}"
+
+            if is_checked:
+                # Open modal to log duration
+                log_duration_modal(ath_name, stn_label, state_key, wk_s, dy_s)
+            else:
+                # Remove on uncheck
+                if state_key in st.session_state.recovery_local_state:
+                    del st.session_state.recovery_local_state[state_key]
+                send_recovery_update(ath_name, stn_label, wk_s, dy_s, "remove")
 
         with rec_tab_tracker:
             st.markdown(
@@ -2554,7 +2587,7 @@ with active_season:
             )
 
             summary_rows = []
-            for item in st.session_state.recovery_local_state:
+            for item, dur in st.session_state.recovery_local_state.items():
                 parts = item.split("|")
                 if len(parts) == 4:
                     summary_rows.append({
@@ -2562,13 +2595,14 @@ with active_season:
                         "Athlete": parts[1],
                         "Station": parts[2],
                         "Day": parts[3],
+                        "Duration_Minutes": dur,
                     })
 
             summary_df = (
                 pd.DataFrame(summary_rows)
                 if summary_rows
                 else pd.DataFrame(
-                    columns=["Week_Starting", "Athlete", "Station", "Day"]
+                    columns=["Week_Starting", "Athlete", "Station", "Day", "Duration_Minutes"]
                 )
             )
 
@@ -2675,6 +2709,8 @@ with active_season:
                         for _, row in group.iterrows():
                             raw_day = str(row.get("Day", ""))
                             stn = str(row.get("Station", ""))
+                            dur = str(row.get("Duration_Minutes", "")).strip()
+                            stn_display = f"{stn} ({dur}m)" if dur and dur.lower() != "nan" else stn
                             day_key = next(
                                 (
                                     full
@@ -2685,7 +2721,7 @@ with active_season:
                             )
                             if day_key not in day_stations_map:
                                 day_stations_map[day_key] = []
-                            day_stations_map[day_key].append(stn)
+                            day_stations_map[day_key].append(stn_display)
 
                         days_grid_html = ""
                         for full_day, short_day in days_order:
