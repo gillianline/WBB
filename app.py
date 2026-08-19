@@ -841,6 +841,9 @@ with active_season:
             unsafe_allow_html=True,
         )
 
+        # ---------------------------------------------------------------------
+        # 1. Workload Exposure & Compliance Grid
+        # ---------------------------------------------------------------------
         st.markdown(
             '<div class="vball-section-title">1. Workload Exposure & Compliance Grid</div>',
             unsafe_allow_html=True,
@@ -871,6 +874,9 @@ with active_season:
 
         st.divider()
 
+        # ---------------------------------------------------------------------
+        # 2. Practice Performance & Score Trends
+        # ---------------------------------------------------------------------
         st.markdown(
             '<div class="vball-section-title">2. Practice Performance & Score Trends</div>',
             unsafe_allow_html=True,
@@ -1009,6 +1015,9 @@ with active_season:
 
         st.divider()
 
+        # ---------------------------------------------------------------------
+        # 3. Jump Performance & RSI Tracking
+        # ---------------------------------------------------------------------
         st.markdown(
             '<div class="vball-section-title">3. Jump Performance & RSI Tracking</div>',
             unsafe_allow_html=True,
@@ -1133,6 +1142,9 @@ with active_season:
 
         st.divider()
 
+        # ---------------------------------------------------------------------
+        # 4. Weekly Output vs. Team Averages
+        # ---------------------------------------------------------------------
         st.markdown(
             '<div class="vball-section-title">4. Weekly Output vs. Team Averages</div>',
             unsafe_allow_html=True,
@@ -1213,11 +1225,130 @@ with active_season:
 
         st.divider()
 
-        # =========================================================================
-        # 5. LIVE TRACKING STATS SUMMARY
-        # =========================================================================
+        # ---------------------------------------------------------------------
+        # 5. ATHLETE RECOVERY LOG & DURATION SUMMARY
+        # ---------------------------------------------------------------------
         st.markdown(
-            '<div class="vball-section-title">5. In-Practice Live Tracking Summary</div>',
+            '<div class="vball-section-title">5. Athlete Recovery Log & Duration Summary</div>',
+            unsafe_allow_html=True,
+        )
+
+        local_now_rec_p = get_eastern_now()
+        today_rec_p = local_now_rec_p.date()
+        current_mon_rec_p = today_rec_p - datetime.timedelta(days=today_rec_p.weekday())
+
+        c_rec_prof_wk, _ = st.columns([1, 2])
+        with c_rec_prof_wk:
+            sel_rec_prof_mon = st.date_input(
+                "Select Recovery Week Starting (Monday):",
+                value=current_mon_rec_p,
+                key="ind_prof_rec_week_picker",
+            )
+            if sel_rec_prof_mon.weekday() != 0:
+                sel_rec_prof_mon = sel_rec_prof_mon - datetime.timedelta(days=sel_rec_prof_mon.weekday())
+            sel_rec_prof_mon_str = sel_rec_prof_mon.strftime("%Y-%m-%d")
+
+        # Parse local state for this specific athlete and week
+        p_rec_rows = []
+        if "recovery_local_state" in st.session_state and isinstance(st.session_state.recovery_local_state, dict):
+            for r_key, dur_str in st.session_state.recovery_local_state.items():
+                parts = r_key.split("|")
+                if len(parts) == 4:
+                    r_wk, r_ath, r_stn, r_day = parts[0], parts[1], parts[2], parts[3]
+                    if r_ath.strip() == selected_player.strip() and r_wk.strip() == sel_rec_prof_mon_str:
+                        dur_clean = pd.to_numeric(dur_str, errors="coerce")
+                        dur_val = int(dur_clean) if pd.notna(dur_clean) else 0
+                        p_rec_rows.append({
+                            "Week_Starting": r_wk,
+                            "Athlete": r_ath,
+                            "Station": r_stn,
+                            "Day": r_day,
+                            "Duration_Minutes": dur_val,
+                        })
+
+        p_rec_df = pd.DataFrame(p_rec_rows) if p_rec_rows else pd.DataFrame(columns=["Week_Starting", "Athlete", "Station", "Day", "Duration_Minutes"])
+
+        p_rec_count = len(p_rec_df)
+        p_rec_duration = int(p_rec_df["Duration_Minutes"].sum()) if not p_rec_df.empty else 0
+        p_top_stn = p_rec_df["Station"].value_counts().idxmax() if not p_rec_df.empty else "N/A"
+
+        hrs_p = p_rec_duration // 60
+        mins_p = p_rec_duration % 60
+        p_time_str = f"{hrs_p}h {mins_p}m" if hrs_p > 0 else f"{mins_p}m"
+
+        r_col1, r_col2, r_col3 = st.columns(3)
+        with r_col1:
+            st.metric("Total Stations Used", p_rec_count)
+        with r_col2:
+            st.metric("Total Recovery Duration", p_time_str, help=f"{p_rec_duration} minutes total")
+        with r_col3:
+            st.metric("Top Station", p_top_stn)
+
+        # Weekly Athlete Timeline Grid
+        days_order = [
+            ("Monday", "Mon"),
+            ("Tuesday", "Tue"),
+            ("Wednesday", "Wed"),
+            ("Thursday", "Thu"),
+            ("Friday", "Fri"),
+            ("Saturday", "Sat"),
+            ("Sunday", "Sun"),
+        ]
+
+        if not p_rec_df.empty:
+            day_stations_map = {}
+            for _, row in p_rec_df.iterrows():
+                raw_day = str(row.get("Day", ""))
+                stn = str(row.get("Station", ""))
+                dur = row.get("Duration_Minutes", 0)
+                stn_display = f"{stn} ({dur}m)" if dur > 0 else stn
+                day_key = next(
+                    (full for full, _ in days_order if full in raw_day),
+                    raw_day,
+                )
+                if day_key not in day_stations_map:
+                    day_stations_map[day_key] = []
+                day_stations_map[day_key].append(stn_display)
+
+            days_grid_html = ""
+            for full_day, short_day in days_order:
+                stations_list = day_stations_map.get(full_day, [])
+
+                if stations_list:
+                    stations_html = "".join([
+                        f'<div style="background:#FFFFFF; border:1px solid #E2E8F0; border-left:3px solid #FF8200; border-radius:4px; padding:4px 8px; margin-top:4px; font-weight:700; color:#0F172A; font-size:0.78rem; text-align:center;">{stn}</div>'
+                        for stn in stations_list
+                    ])
+                    card_style = "background:#FFFFFF; border:1px solid #CBD5E1; border-radius:8px; padding:10px; flex:1; min-width:0;"
+                    header_color = "#FF8200"
+                else:
+                    stations_html = '<div style="color:#94A3B8; font-size:0.75rem; text-align:center; margin-top:8px; font-style:italic;">—</div>'
+                    card_style = "background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:10px; flex:1; min-width:0;"
+                    header_color = "#64748B"
+
+                days_grid_html += (
+                    f'<div style="{card_style}">'
+                    f'<div style="font-weight:700; color:{header_color}; font-size:0.8rem; text-align:center; border-bottom:1px solid #E2E8F0; padding-bottom:4px; text-transform:uppercase;">{short_day}</div>'
+                    f"{stations_html}"
+                    "</div>"
+                )
+
+            ind_rec_card_html = (
+                f'<div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:10px; padding:16px; margin-top:14px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.02);">'
+                f'<div style="display:flex; gap:10px; width:100%;">{days_grid_html}</div>'
+                f'</div>'
+            )
+            st.markdown(ind_rec_card_html, unsafe_allow_html=True)
+        else:
+            st.info(f"No recovery stations logged for {selected_player} during the week of {sel_rec_prof_mon_str}.")
+
+        st.divider()
+
+        # ---------------------------------------------------------------------
+        # 6. IN-PRACTICE LIVE TRACKING SUMMARY
+        # ---------------------------------------------------------------------
+        st.markdown(
+            '<div class="vball-section-title">6. In-Practice Live Tracking Summary</div>',
             unsafe_allow_html=True,
         )
 
@@ -1281,11 +1412,11 @@ with active_season:
 
         st.divider()
 
-        # =========================================================================
-        # 6. ADDITIONAL ASSESSMENT RECORDS
-        # =========================================================================
+        # ---------------------------------------------------------------------
+        # 7. ADDITIONAL ASSESSMENT RECORDS
+        # ---------------------------------------------------------------------
         st.markdown(
-            '<div class="vball-section-title">6. Additional Assessment Records</div>',
+            '<div class="vball-section-title">7. Additional Assessment Records</div>',
             unsafe_allow_html=True,
         )
 
@@ -1386,7 +1517,6 @@ with active_season:
         else:
             st.info(f"No additional assessment logs found for {selected_player}.")
             
-
     # =========================================================================
     # TAB 2: PRACTICE SCORE (TEAM/SESSION VIEW - 2 PER PAGE PRINT READY)
     # =========================================================================
