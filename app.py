@@ -2607,12 +2607,15 @@ with active_season:
             for item, dur in st.session_state.recovery_local_state.items():
                 parts = item.split("|")
                 if len(parts) == 4:
+                    # Clean duration into numeric minutes (default to 0 if skipped or non-numeric)
+                    dur_clean = pd.to_numeric(dur, errors="coerce")
+                    dur_val = int(dur_clean) if pd.notna(dur_clean) else 0
                     summary_rows.append({
                         "Week_Starting": parts[0],
                         "Athlete": parts[1],
                         "Station": parts[2],
                         "Day": parts[3],
-                        "Duration_Minutes": dur,
+                        "Duration_Minutes": dur_val,
                     })
 
             all_summary_df = (
@@ -2632,83 +2635,122 @@ with active_season:
 
             if not summary_df.empty and "Station" in summary_df.columns:
                 total_completions = len(summary_df)
+                total_duration_all = summary_df["Duration_Minutes"].sum()
                 active_athletes = (
                     summary_df["Athlete"].nunique()
                     if "Athlete" in summary_df.columns
                     else 0
                 )
-                station_counts = summary_df["Station"].dropna().value_counts()
-                top_station = (
-                    station_counts.idxmax() if not station_counts.empty else "N/A"
-                )
+                
+                # Format total time into clean string (e.g., 2h 15m or 45m)
+                hrs = total_duration_all // 60
+                mins = total_duration_all % 60
+                total_time_str = f"{hrs}h {mins}m" if hrs > 0 else f"{mins}m"
 
                 kpi_html = (
                     '<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">'
                     '<div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #FF8200; border-radius: 10px; padding: 16px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">'
-                    '<div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Total Stations Utilized</div>'
-                    f'<div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{total_completions}</div>'
+                    '<div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Total Recovery Duration</div>'
+                    f'<div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{total_time_str}</div>'
+                    f'<div style="font-size: 0.72rem; color: #94A3B8; margin-top: 2px;">{total_duration_all} Total Minutes Logged</div>'
                     "</div>"
                     '<div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #38BDF8; border-radius: 10px; padding: 16px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">'
                     '<div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Active Athletes Logged</div>'
                     f'<div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{active_athletes}</div>'
+                    f'<div style="font-size: 0.72rem; color: #94A3B8; margin-top: 2px;">Logged Recovery This Week</div>'
                     "</div>"
                     '<div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #58595B; border-radius: 10px; padding: 16px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">'
-                    '<div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Most Popular Station</div>'
-                    f'<div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{top_station}</div>'
+                    '<div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Total Check-ins</div>'
+                    f'<div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{total_completions}</div>'
+                    f'<div style="font-size: 0.72rem; color: #94A3B8; margin-top: 2px;">Across All Stations</div>'
                     "</div>"
                     "</div>"
                 )
                 st.markdown(kpi_html, unsafe_allow_html=True)
 
                 st.markdown(
-                    f"<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Total Usage by Station (Week of {summary_week_str})</h4>",
+                    f"<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Station Usage & Duration Breakdown (Week of {summary_week_str})</h4>",
                     unsafe_allow_html=True,
                 )
-                station_counts_df = (
-                    summary_df["Station"]
-                    .dropna()
-                    .value_counts()
-                    .reset_index()
-                )
-                station_counts_df.columns = ["Station", "Count"]
-                station_counts_df["Station"] = station_counts_df[
-                    "Station"
-                ].astype(str)
 
-                fig_rec_bar = px.bar(
-                    station_counts_df,
-                    x="Station",
-                    y="Count",
-                    text="Count",
+                # Aggregate both Count and Total Duration per station
+                stn_agg = (
+                    summary_df.groupby("Station")
+                    .agg(
+                        Usages=("Station", "count"),
+                        Total_Minutes=("Duration_Minutes", "sum")
+                    )
+                    .reset_index()
+                    .sort_values(by="Total_Minutes", ascending=False)
                 )
-                fig_rec_bar.update_traces(
-                    marker_color="#FF8200",
-                    marker_line_color="#D96B00",
-                    marker_line_width=1.5,
-                    textposition="outside",
-                    hovertemplate="<b>%{x}</b><br>Total Logs: %{y}<extra></extra>",
-                )
-                fig_rec_bar.update_layout(
-                    showlegend=False,
-                    height=280,
-                    margin=dict(l=10, r=10, t=25, b=10),
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    xaxis=dict(
-                        title=None,
-                        showgrid=False,
-                        tickfont=dict(
-                            color="#475569", size=11, weight="bold"
+
+                # Format human-friendly time string (e.g., 45m, 1h 30m)
+                def format_mins_str(m):
+                    if m <= 0:
+                        return "--"
+                    h = m // 60
+                    rem = m % 60
+                    return f"{h}h {rem}m" if h > 0 else f"{rem}m"
+
+                stn_agg["Formatted_Duration"] = stn_agg["Total_Minutes"].apply(format_mins_str)
+
+                col_stn_chart, col_stn_tbl = st.columns([1.6, 1.2])
+
+                with col_stn_chart:
+                    fig_dur_bar = px.bar(
+                        stn_agg,
+                        x="Station",
+                        y="Total_Minutes",
+                        text="Formatted_Duration",
+                        title="Total Duration (Minutes) by Station",
+                    )
+                    fig_dur_bar.update_traces(
+                        marker_color="#FF8200",
+                        marker_line_color="#D96B00",
+                        marker_line_width=1.5,
+                        textposition="outside",
+                        hovertemplate="<b>%{x}</b><br>Total Time: %{text}<br>Minutes: %{y}m<extra></extra>",
+                    )
+                    fig_dur_bar.update_layout(
+                        showlegend=False,
+                        height=290,
+                        margin=dict(l=10, r=10, t=35, b=10),
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        title_font=dict(size=13, color="#0F172A"),
+                        xaxis=dict(
+                            title=None,
+                            showgrid=False,
+                            tickfont=dict(color="#475569", size=11, weight="bold"),
                         ),
-                    ),
-                    yaxis=dict(
-                        title=None,
-                        showgrid=True,
-                        gridcolor="#F1F5F9",
-                        zeroline=False,
-                    ),
-                )
-                st.plotly_chart(fig_rec_bar, use_container_width=True)
+                        yaxis=dict(
+                            title="Minutes",
+                            showgrid=True,
+                            gridcolor="#F1F5F9",
+                            zeroline=False,
+                        ),
+                    )
+                    st.plotly_chart(fig_dur_bar, use_container_width=True)
+
+                with col_stn_tbl:
+                    display_stn_df = stn_agg.rename(
+                        columns={
+                            "Station": "Station",
+                            "Usages": "Total Logs",
+                            "Formatted_Duration": "Total Time",
+                            "Total_Minutes": "Minutes",
+                        }
+                    )[["Station", "Total Logs", "Total Time"]]
+
+                    st.markdown(
+                        f"""
+                        <div style="font-weight:700; font-size:0.9rem; margin-bottom: 8px; color:#0F172A;">
+                            Station Summary Table
+                        </div>
+                        {render_vball_table(display_stn_df)}
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
                 st.divider()
 
@@ -2733,8 +2775,8 @@ with active_season:
                         for _, row in group.iterrows():
                             raw_day = str(row.get("Day", ""))
                             stn = str(row.get("Station", ""))
-                            dur = str(row.get("Duration_Minutes", "")).strip()
-                            stn_display = f"{stn} ({dur}m)" if dur and dur.lower() != "nan" else stn
+                            dur = row.get("Duration_Minutes", 0)
+                            stn_display = f"{stn} ({dur}m)" if dur > 0 else stn
                             day_key = next(
                                 (
                                     full
