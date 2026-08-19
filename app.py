@@ -2366,8 +2366,8 @@ with active_season:
             else:
                 st.info(f"No testing records found across modules for {selected_ov_athlete}.")
                 
-    # =========================================================================
-    # TAB 6: RECOVERY (2-PERSON GRID WITH FAILSAFE PERSISTENCE & DURATION MODAL)
+   # =========================================================================
+    # TAB 6: RECOVERY (2-PERSON GRID WITH DURATION & WEEK FILTERED SUMMARY)
     # =========================================================================
     elif main_tab == "Recovery":
         rec_tab_tracker, rec_tab_summary = st.tabs(
@@ -2586,6 +2586,23 @@ with active_season:
                 unsafe_allow_html=True,
             )
 
+            # --- Week Filter Picker for Summary ---
+            c_sum_wk, _ = st.columns([1, 2])
+            with c_sum_wk:
+                summary_selected_monday = st.date_input(
+                    "Filter Summary by Week Starting (Monday):",
+                    value=current_monday,
+                    key="rec_summary_week_picker",
+                )
+                if summary_selected_monday.weekday() != 0:
+                    summary_selected_monday = (
+                        summary_selected_monday
+                        - datetime.timedelta(days=summary_selected_monday.weekday())
+                    )
+                summary_week_str = summary_selected_monday.strftime("%Y-%m-%d")
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
             summary_rows = []
             for item, dur in st.session_state.recovery_local_state.items():
                 parts = item.split("|")
@@ -2598,12 +2615,19 @@ with active_season:
                         "Duration_Minutes": dur,
                     })
 
-            summary_df = (
+            all_summary_df = (
                 pd.DataFrame(summary_rows)
                 if summary_rows
                 else pd.DataFrame(
                     columns=["Week_Starting", "Athlete", "Station", "Day", "Duration_Minutes"]
                 )
+            )
+
+            # Filter dataframe to the selected week
+            summary_df = (
+                all_summary_df[all_summary_df["Week_Starting"] == summary_week_str]
+                if not all_summary_df.empty and "Week_Starting" in all_summary_df.columns
+                else pd.DataFrame(columns=["Week_Starting", "Athlete", "Station", "Day", "Duration_Minutes"])
             )
 
             if not summary_df.empty and "Station" in summary_df.columns:
@@ -2637,7 +2661,7 @@ with active_season:
                 st.markdown(kpi_html, unsafe_allow_html=True)
 
                 st.markdown(
-                    "<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Total Usage by Station</h4>",
+                    f"<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Total Usage by Station (Week of {summary_week_str})</h4>",
                     unsafe_allow_html=True,
                 )
                 station_counts_df = (
@@ -2689,7 +2713,7 @@ with active_season:
                 st.divider()
 
                 st.markdown(
-                    "<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Weekly Athlete Recovery Timeline</h4>",
+                    f"<h4 style='color:#0F172A; font-size:1.05rem; font-weight:700; margin-bottom:12px;'>Weekly Athlete Recovery Timeline (Week of {summary_week_str})</h4>",
                     unsafe_allow_html=True,
                 )
                 if "Athlete" in summary_df.columns:
@@ -2754,7 +2778,7 @@ with active_season:
                         )
                         st.markdown(card_html, unsafe_allow_html=True)
             else:
-                st.info("No recovery data currently recorded.")
+                st.info(f"No recovery data recorded for the week of {summary_week_str}.")
                 
 
     # =========================================================================
