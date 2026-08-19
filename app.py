@@ -2482,6 +2482,7 @@ with active_season:
                 "BFR",
                 "Mobility",
                 "Marc Pro",
+                "Tempering",
             ]
 
             for i in range(0, len(roster_players), 2):
