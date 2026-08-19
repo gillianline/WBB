@@ -227,8 +227,31 @@ def check_password():
             '<div class="console-header">LADY VOLS PERFORMANCE CONSOLE - LOGIN</div>',
             unsafe_allow_html=True,
         )
+        
+        # Scoped CSS targeting ONLY the login button container
+        st.markdown(
+            """
+            <style>
+                div[data-testid="stVerticalBlock"]:has(button[key="login_submit_btn"]) button,
+                div[data-testid="stButton"]:has(button[key="login_submit_btn"]) button {
+                    background-color: #38BDF8 !important;
+                    color: #0F172A !important;
+                    border: 1px solid #0284C7 !important;
+                    font-weight: 700 !important;
+                }
+                div[data-testid="stVerticalBlock"]:has(button[key="login_submit_btn"]) button:hover,
+                div[data-testid="stButton"]:has(button[key="login_submit_btn"]) button:hover {
+                    background-color: #0EA5E9 !important;
+                    color: #0F172A !important;
+                    border-color: #0369A1 !important;
+                }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+
         pwd = st.text_input("Enter Dashboard Password:", type="password")
-        if st.button("Login", type="primary", use_container_width=True):
+        if st.button("Login", key="login_submit_btn", use_container_width=True):
             admin_pwd = st.secrets.get("dashboard_password", "ladyvols")
             rec_pwd = st.secrets.get("recovery_password", "ladyvolsrecovery")
 
