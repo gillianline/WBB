@@ -215,11 +215,12 @@ st.markdown(
 )
 
 # -----------------------------------------------------------------------------
-# 2. PASSWORD PROTECTION
+# 2. PASSWORD PROTECTION (ROLE-BASED LOGIN)
 # -----------------------------------------------------------------------------
 def check_password():
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
+        st.session_state["user_role"] = None
 
     if not st.session_state["authenticated"]:
         st.markdown(
@@ -227,10 +228,17 @@ def check_password():
             unsafe_allow_html=True,
         )
         pwd = st.text_input("Enter Dashboard Password:", type="password")
-        if st.button("Login"):
-            target_password = st.secrets.get("dashboard_password", "ladyvols")
-            if pwd == target_password:
+        if st.button("Login", type="primary", use_container_width=True):
+            admin_pwd = st.secrets.get("dashboard_password", "ladyvols")
+            rec_pwd = st.secrets.get("recovery_password", "ladyvolsrecovery")
+
+            if pwd == admin_pwd:
                 st.session_state["authenticated"] = True
+                st.session_state["user_role"] = "admin"
+                st.rerun()
+            elif pwd == rec_pwd:
+                st.session_state["authenticated"] = True
+                st.session_state["user_role"] = "recovery_only"
                 st.rerun()
             else:
                 st.error("Incorrect password.")
@@ -340,7 +348,7 @@ def fetch_live_recovery_sheet():
                 data = res.json()
                 if isinstance(data, list) and len(data) > 0:
                     df_json = pd.DataFrame(data)
-                    for col in ["Week_Starting", "Athlete", "Station", "Day"]:
+                    for col in ["Week_Starting", "Athlete", "Station", "Day", "Duration_Minutes"]:
                         if col in df_json.columns:
                             df_json[col] = df_json[col].astype(str).str.strip()
                     return df_json
@@ -354,6 +362,7 @@ def fetch_live_recovery_sheet():
             "Station",
             "Day",
             "Timestamp",
+            "Duration_Minutes",
         ]
     )
 
@@ -697,13 +706,14 @@ def render_metric_subcard_html(p_comp, col_name, title_name, unit):
 
 
 # -----------------------------------------------------------------------------
-# 5. SIDEBAR NAVIGATION
+# 5. SIDEBAR NAVIGATION (DYNAMIC ROLES)
 # -----------------------------------------------------------------------------
 st.sidebar.markdown("### LADY VOLS BASKETBALL")
 
-main_tab = st.sidebar.radio(
-    "Console View:",
-    options=[
+if st.session_state.get("user_role") == "recovery_only":
+    available_views = ["Recovery"]
+else:
+    available_views = [
         "Individual Profile",
         "Practice Score",
         "Compliance",
@@ -711,14 +721,18 @@ main_tab = st.sidebar.radio(
         "Testing",
         "Recovery",
         "Tracking",
-    ],
+    ]
+
+main_tab = st.sidebar.radio(
+    "Console View:",
+    options=available_views,
     index=0,
 )
 
 st.sidebar.divider()
 st.sidebar.markdown("### DATA MANAGEMENT")
 
-if st.sidebar.button("Refresh Google Sheets Data"):
+if st.sidebar.button("Refresh Google Sheets Data", use_container_width=True):
     st.cache_data.clear()
     if "recovery_local_state" in st.session_state:
         del st.session_state["recovery_local_state"]
@@ -729,10 +743,9 @@ if st.sidebar.button("Refresh Google Sheets Data"):
     st.sidebar.success("Data reloaded!")
     st.rerun()
 
-if st.sidebar.button("Logout"):
+if st.sidebar.button("Logout", use_container_width=True):
     st.session_state["authenticated"] = False
-    if "recovery_authenticated" in st.session_state:
-        st.session_state["recovery_authenticated"] = False
+    st.session_state["user_role"] = None
     st.rerun()
 
 
@@ -755,7 +768,6 @@ with col_header_title:
 with col_header_btn:
     st.button("Print Page", key="global_print_btn", use_container_width=True)
 
-# Attach direct window.print trigger to top document without iframe sandbox block
 components.html(
     """
     <script>
@@ -843,9 +855,6 @@ with active_season:
             unsafe_allow_html=True,
         )
 
-        # ---------------------------------------------------------------------
-        # 1. Workload Exposure & Compliance Grid
-        # ---------------------------------------------------------------------
         st.markdown(
             '<div class="vball-section-title">1. Workload Exposure & Compliance Grid</div>',
             unsafe_allow_html=True,
@@ -876,9 +885,6 @@ with active_season:
 
         st.divider()
 
-        # ---------------------------------------------------------------------
-        # 2. Practice Performance & Score Trends
-        # ---------------------------------------------------------------------
         st.markdown(
             '<div class="vball-section-title">2. Practice Performance & Score Trends</div>',
             unsafe_allow_html=True,
@@ -1017,9 +1023,6 @@ with active_season:
 
         st.divider()
 
-        # ---------------------------------------------------------------------
-        # 3. Jump Performance & RSI Tracking
-        # ---------------------------------------------------------------------
         st.markdown(
             '<div class="vball-section-title">3. Jump Performance & RSI Tracking</div>',
             unsafe_allow_html=True,
@@ -1144,9 +1147,6 @@ with active_season:
 
         st.divider()
 
-        # ---------------------------------------------------------------------
-        # 4. Weekly Output vs. Team Averages
-        # ---------------------------------------------------------------------
         st.markdown(
             '<div class="vball-section-title">4. Weekly Output vs. Team Averages</div>',
             unsafe_allow_html=True,
@@ -1250,7 +1250,6 @@ with active_season:
                 sel_rec_prof_mon = sel_rec_prof_mon - datetime.timedelta(days=sel_rec_prof_mon.weekday())
             sel_rec_prof_mon_str = sel_rec_prof_mon.strftime("%Y-%m-%d")
 
-        # Parse local state for this specific athlete and week
         p_rec_rows = []
         if "recovery_local_state" in st.session_state and isinstance(st.session_state.recovery_local_state, dict):
             for r_key, dur_str in st.session_state.recovery_local_state.items():
@@ -1286,7 +1285,6 @@ with active_season:
         with r_col3:
             st.metric("Top Station", p_top_stn)
 
-        # Weekly Athlete Timeline Grid
         days_order = [
             ("Monday", "Mon"),
             ("Tuesday", "Tue"),
@@ -1519,6 +1517,7 @@ with active_season:
         else:
             st.info(f"No additional assessment logs found for {selected_player}.")
             
+
     # =========================================================================
     # TAB 2: PRACTICE SCORE (TEAM/SESSION VIEW - 2 PER PAGE PRINT READY)
     # =========================================================================
@@ -1600,7 +1599,7 @@ with active_season:
                     </div>
                 </div>
                 <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:6px; text-align:center; margin-top:10px;">
-                    <div style="font-weight:700; color:#58595B; font-size:0.75rem;">COMBINED PRACTICE SCORE</div>
+                    <div style="font-weight:700; color:58595B; font-size:0.75rem;">COMBINED PRACTICE SCORE</div>
                     <div style="font-size:1.4rem; font-weight:800; padding:2px 0; border-radius:6px; background-color:{c_bg}; color:{c_fg}; margin-top:2px; max-width: 200px; margin-left: auto; margin-right: auto;">{comb_score}</div>
                 </div>
             </div>
@@ -1831,9 +1830,6 @@ with active_season:
             ["Intake Assessment", "CMJ", "Overall Profile"]
         )
 
-        # ---------------------------------------------------------------------
-        # SUB-TAB 1: INTAKE ASSESSMENT (COMBINED MODULE)
-        # ---------------------------------------------------------------------
         with testing_tab_intake:
             st.markdown(
                 "<h3 style='color:#1D1D1F; font-weight:900;"
@@ -1933,40 +1929,29 @@ with active_season:
                                 </linearGradient>
                             </defs>
                             
-                            <!-- Ground Shadow -->
                             <ellipse cx="68" cy="214" rx="20" ry="3.5" fill="#000000" opacity="0.12" />
                             
-                            <!-- Main Body Outer Contour -->
                             <g stroke="#2C3036" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
-                                <!-- Head & Neck -->
                                 <ellipse cx="68" cy="17" rx="7" ry="9" fill="url(#anatomicalBodyGrad)" />
                                 <path d="M 65 25 L 63 33 M 71 25 L 73 33" stroke-width="1.2" />
                                 
-                                <!-- Shoulders & Upper Arms -->
                                 <path d="M 63 33 C 58 33, 48 36, 42 40 C 37 43, 36 50, 39 56 L 43 56 C 47 52, 49 46, 52 44 M 73 33 C 78 33, 88 36, 94 40 C 99 43, 100 50, 97 56 L 93 56 C 89 52, 87 46, 84 44" fill="url(#anatomicalBodyGrad)" />
                                 
-                                <!-- Arms -->
                                 <path d="M 42 40 C 37 43, 35 52, 33 64 C 31 74, 29 82, 27 92 C 25 96, 23 100, 22 104 C 21 106, 23 107, 25 106 C 27 104, 28 98, 30 92 C 33 82, 36 74, 38 64 C 40 54, 42 48, 43 56 Z" fill="url(#anatomicalBodyGrad)" />
                                 <path d="M 22 104 C 20 106, 18 108, 17 110 M 23 105 C 21 108, 20 110, 19 112 M 24 105 C 23 108, 22 110, 21 112 M 25 104 C 25 107, 24 109, 23 111" fill="none" stroke-width="0.8" />
                                 <path d="M 94 40 C 99 43, 101 52, 103 64 C 105 74, 107 82, 109 92 C 111 96, 113 100, 114 104 C 115 106, 113 107, 111 106 C 109 104, 108 98, 106 92 C 103 82, 100 74, 98 64 C 96 54, 94 48, 93 56 Z" fill="url(#anatomicalBodyGrad)" />
                                 <path d="M 114 104 C 116 106, 118 108, 119 110 M 113 105 C 115 108, 116 110, 117 112 M 112 105 C 113 108, 114 110, 115 112 M 111 104 C 111 107, 112 109, 113 111" fill="none" stroke-width="0.8" />
                                 
-                                <!-- Torso & Hips -->
                                 <path d="M 52 44 L 54 75 L 52 92 L 68 106 L 84 92 L 82 75 L 84 44 Z" fill="url(#anatomicalBodyGrad)" />
                                 
-                                <!-- Legs -->
                                 <path d="M 52 92 C 50 105, 49 122, 53 138 C 55 144, 55 152, 54 162 C 52 175, 52 192, 54 205 L 48 210 L 58 210 L 59 203 C 60 190, 60 175, 60 162 C 60 152, 60 144, 62 138 C 66 122, 66 105, 68 106 Z" fill="url(#anatomicalBodyGrad)" />
                                 <path d="M 84 92 C 86 105, 87 122, 83 138 C 81 144, 81 152, 82 162 C 84 175, 84 192, 82 205 L 88 210 L 78 210 L 77 203 C 76 190, 76 175, 76 162 C 76 152, 76 144, 74 138 C 70 122, 70 105, 68 106 Z" fill="url(#anatomicalBodyGrad)" />
                                 
-                                <!-- Center Axis Line -->
                                 <line x1="68" y1="8" x2="68" y2="211" stroke="#FF8200" stroke-width="1.3" />
-                                
-                                <!-- Joint Reference Baseline Markers -->
                                 <line x1="51" y1="116" x2="85" y2="116" stroke="#D32F2F" stroke-width="1.1" />
                                 <line x1="55" y1="168" x2="81" y2="168" stroke="#D32F2F" stroke-width="1.1" />
                             </g>
                             
-                            <!-- Anatomical Muscle Lines -->
                             <g fill="none" stroke="#2C3036" stroke-width="0.8" opacity="0.75" stroke-linecap="round">
                                 <path d="M 54 48 C 60 52, 65 52, 68 50 M 82 48 C 76 52, 71 52, 68 50" />
                                 <path d="M 58 58 L 78 58 M 57 66 L 79 66 M 56 74 L 80 74" />
@@ -1982,31 +1967,26 @@ with active_season:
                                 <path d="M 75 144 C 74 152, 75 160, 77 166" />
                             </g>
                             
-                            <!-- Node 1: Knee Extension/Flexion (Orange) -->
                             <line x1="82" y1="58" x2="112" y2="58" stroke="#FF8200" stroke-width="2" stroke-dasharray="2 2" />
                             <circle cx="82" cy="58" r="4" fill="#FF8200" stroke="#FFFFFF" stroke-width="1.2" />
                             <rect x="112" y="50" width="16" height="16" rx="4" fill="#FF8200" />
                             <text x="120" y="62" font-size="10" font-weight="900" fill="#FFFFFF" text-anchor="middle">1</text>
                             
-                            <!-- Node 2: Hip Adduction & Abduction (Blue) -->
                             <line x1="58" y1="116" x2="24" y2="116" stroke="#4895DB" stroke-width="2" stroke-dasharray="2 2" />
                             <circle cx="58" cy="116" r="4" fill="#4895DB" stroke="#FFFFFF" stroke-width="1.2" />
                             <rect x="8" y="108" width="16" height="16" rx="4" fill="#4895DB" />
                             <text x="16" y="120" font-size="10" font-weight="900" fill="#FFFFFF" text-anchor="middle">2</text>
 
-                            <!-- Node 3: Ankle Plantar Flexion (Blue) -->
                             <line x1="74" y1="172" x2="112" y2="172" stroke="#4895DB" stroke-width="2" stroke-dasharray="2 2" />
                             <circle cx="74" cy="172" r="4" fill="#4895DB" stroke="#FFFFFF" stroke-width="1.2" />
                             <rect x="112" y="164" width="16" height="16" rx="4" fill="#4895DB" />
                             <text x="120" y="176" font-size="10" font-weight="900" fill="#FFFFFF" text-anchor="middle">3</text>
 
-                            <!-- Node 4: NordBord Hamstrings (Orange) -->
                             <line x1="60" y1="140" x2="24" y2="140" stroke="#FF8200" stroke-width="2" stroke-dasharray="2 2" />
                             <circle cx="60" cy="140" r="4" fill="#FF8200" stroke="#FFFFFF" stroke-width="1.2" />
                             <rect x="8" y="132" width="16" height="16" rx="4" fill="#FF8200" />
                             <text x="16" y="144" font-size="10" font-weight="900" fill="#FFFFFF" text-anchor="middle">4</text>
 
-                            <!-- Node 5: Harness Belt Squat (Blue) -->
                             <line x1="68" y1="84" x2="112" y2="84" stroke="#4895DB" stroke-width="2" stroke-dasharray="2 2" />
                             <circle cx="68" cy="84" r="4" fill="#4895DB" stroke="#FFFFFF" stroke-width="1.2" />
                             <rect x="112" y="76" width="16" height="16" rx="4" fill="#4895DB" />
@@ -2084,7 +2064,7 @@ with active_season:
                                 </div>
                                 <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
                                     <b>Hip Adduction:</b> Max L {ad_maxL:.1f}N | R {ad_maxR:.1f}N &nbsp;→&nbsp; <b>Recent:</b> L {render_val_with_arrow(ad_recL, ad_initL, '{:.1f}', 'N')} | R {render_val_with_arrow(ad_recR, ad_initR, '{:.1f}', 'N')}<br>
-                                    <b>Hip Abduction:</b> Max L {ab_maxL:.1f}N | R {ab_maxR:.1f}N &nbsp;→&nbsp; <b>Recent:</b> L {render_val_with_arrow(ab_recL, ab_initL, '{:.1f}', 'N')} | R {render_val_with_arrow(ab_recR, ab_initR, '{:.1f}', 'N')}
+                                    <b>Hip Abduction:</b> Max L {ab_maxL:.1f}N | R {ab_maxR:.1f}N &nbsp;→&nbsp; <b>Recent:</b> L {render_val_with_arrow(ab_recL, ad_initL, '{:.1f}', 'N')} | R {render_val_with_arrow(ab_recR, ad_initR, '{:.1f}', 'N')}
                                 </div>
                             </div>
                             """,
@@ -2166,7 +2146,6 @@ with active_season:
 
             st.divider()
 
-            # RAW LOG TABLES
             st.markdown(f"### Intake Assessment Raw Logs for {selected_intake_athlete}")
 
             with st.expander("NordBord Test Log", expanded=False):
@@ -2228,9 +2207,6 @@ with active_season:
                 else:
                     st.info(f"No Ankle Assessment records for {selected_intake_athlete}.")
 
-        # ---------------------------------------------------------------------
-        # SUB-TAB 2: CMJ HISTORY
-        # ---------------------------------------------------------------------
         with testing_tab_cmj:
             st.markdown(
                 '<div class="vball-section-title">CMJ History</div>',
@@ -2261,7 +2237,6 @@ with active_season:
             rsi_cols = [c for c in p_cmj.columns if "rsi" in c.lower()]
             rsi_col = rsi_cols[0] if rsi_cols else None
 
-            # 1. GRAPH FIRST
             if not p_cmj.empty and j_col:
                 p_cmj["Jump_Height_Clean"] = pd.to_numeric(
                     p_cmj[j_col]
@@ -2352,7 +2327,6 @@ with active_season:
 
             st.divider()
 
-            # 2. LOGS SECOND
             display_cols = [
                 c for c in p_cmj.columns if c not in ["Name", "Date_Str", "Jump_Height_Clean", "RSI_Clean"]
             ]
@@ -2361,9 +2335,6 @@ with active_season:
                 render_vball_table(p_cmj[display_cols]), unsafe_allow_html=True
             )
 
-        # ---------------------------------------------------------------------
-        # SUB-TAB 3: OVERALL PROFILE
-        # ---------------------------------------------------------------------
         with testing_tab_overall:
             st.markdown(
                 '<div class="vball-section-title">Master Athletic Performance Summary</div>',
@@ -2403,7 +2374,6 @@ with active_season:
                 else:
                     return None, None
 
-            # 1. CMJ Best Peak
             p_cmj_ov = cmj_raw[cmj_raw["Name"] == selected_ov_athlete] if not cmj_raw.empty and "Name" in cmj_raw.columns else pd.DataFrame()
             if not p_cmj_ov.empty:
                 jh_c = next((c for c in p_cmj_ov.columns if "jump" in c.lower() or "height" in c.lower()), None)
@@ -2416,7 +2386,6 @@ with active_season:
                         "Date Achieved": format_date_clean(best_cmj.get("Date"))
                     })
 
-            # 2. NordBord Best Peaks per Test Type
             p_nord_ov = nordic_raw[nordic_raw["Name"] == selected_ov_athlete].copy() if not nordic_raw.empty and "Name" in nordic_raw.columns else pd.DataFrame()
             if not p_nord_ov.empty:
                 t_c = next((c for c in p_nord_ov.columns if "test" in c.lower()), None)
@@ -2439,7 +2408,6 @@ with active_season:
                             "Date Achieved": dt
                         })
 
-            # 3. Belt Squat Best Peak
             p_bs_ov = belt_squat_raw[belt_squat_raw["Name"] == selected_ov_athlete] if not belt_squat_raw.empty and "Name" in belt_squat_raw.columns else pd.DataFrame()
             if not p_bs_ov.empty:
                 f_c = next((c for c in p_bs_ov.columns if "peak vertical force" in c.lower() or "force" in c.lower()), None)
@@ -2454,7 +2422,6 @@ with active_season:
                             "Date Achieved": format_date_clean(best_bs.get("Date"))
                         })
 
-            # 4. Knee Extension & Flexion
             p_knee_ov = knee_raw[knee_raw["Name"] == selected_ov_athlete].copy() if not knee_raw.empty and "Name" in knee_raw.columns else pd.DataFrame()
             if not p_knee_ov.empty:
                 dir_col = next((c for c in p_knee_ov.columns if "direction" in c.lower() or "test" in c.lower()), None)
@@ -2469,7 +2436,6 @@ with active_season:
                 if val:
                     records.append({"Category": "Knee Flexion (L/R)", "Best Test Value": val, "Date Achieved": dt})
 
-            # 5. Hip Adduction & Abduction
             p_hip_ov = hip_raw[hip_raw["Name"] == selected_ov_athlete].copy() if not hip_raw.empty and "Name" in hip_raw.columns else pd.DataFrame()
             if not p_hip_ov.empty:
                 dir_col = next((c for c in p_hip_ov.columns if "direction" in c.lower() or "test" in c.lower()), None)
@@ -2484,7 +2450,6 @@ with active_season:
                 if val:
                     records.append({"Category": "Hip Abduction (L/R)", "Best Test Value": val, "Date Achieved": dt})
 
-            # 6. Ankle Plantar Flexion
             p_ank_ov = ankle_raw[ankle_raw["Name"] == selected_ov_athlete].copy() if not ankle_raw.empty and "Name" in ankle_raw.columns else pd.DataFrame()
             if not p_ank_ov.empty:
                 val, dt = get_formatted_peak_overall(p_ank_ov)
@@ -2498,40 +2463,11 @@ with active_season:
             else:
                 st.info(f"No testing records found across modules for {selected_ov_athlete}.")
                 
-   # =========================================================================
-    # TAB 6: RECOVERY (PASSWORD PROTECTED)
+
+    # =========================================================================
+    # TAB 6: RECOVERY (LIVE TRACKER, MODAL, DURATION & SUMMARY)
     # =========================================================================
     elif main_tab == "Recovery":
-        # ---------------------------------------------------------------------
-        # RECOVERY TAB PASSWORD GATE
-        # ---------------------------------------------------------------------
-        if "recovery_authenticated" not in st.session_state:
-            st.session_state["recovery_authenticated"] = False
-
-        if not st.session_state["recovery_authenticated"]:
-            st.markdown(
-                '<div class="vball-section-title">Recovery Console Access</div>',
-                unsafe_allow_html=True,
-            )
-            
-            c_auth1, _ = st.columns([1.5, 2.5])
-            with c_auth1:
-                st.info("🔒 This section is restricted. Enter your credentials to manage live recovery.")
-                rec_pwd = st.text_input("Enter Recovery Password:", type="password", key="rec_pwd_input")
-                
-                if st.button("Unlock Recovery Tab", type="primary", use_container_width=True):
-                    target_rec_pwd = st.secrets.get("recovery_password", "ladyvolsrecovery")
-                    if rec_pwd == target_rec_pwd:
-                        st.session_state["recovery_authenticated"] = True
-                        st.success("Access Granted.")
-                        st.rerun()
-                    else:
-                        st.error("Incorrect recovery password.")
-            st.stop()
-
-        # ---------------------------------------------------------------------
-        # UNLOCKED RECOVERY INTERFACE
-        # ---------------------------------------------------------------------
         rec_tab_tracker, rec_tab_summary = st.tabs(
             ["Live Recovery Tracker", "Team Recovery Summary"]
         )
@@ -2545,7 +2481,6 @@ with active_season:
         if "recovery_local_state" not in st.session_state:
             st.session_state.recovery_local_state = {}
 
-        # Load live recovery records into dictionary: key -> duration
         if not live_rec_df.empty:
             for _, row in live_rec_df.iterrows():
                 wk_val = str(row.get("Week_Starting", "")).strip()
@@ -2558,7 +2493,6 @@ with active_season:
                     if key not in st.session_state.recovery_local_state:
                         st.session_state.recovery_local_state[key] = dur_val
 
-        # Webhook dispatcher
         def send_recovery_update(ath_name, stn_label, wk_s, dy_s, action_val, duration=None):
             time_val = get_eastern_time_str() if action_val == "add" else ""
             payload = {
@@ -2589,7 +2523,6 @@ with active_season:
             except Exception as ex:
                 print(f"Recovery webhook POST failed: {ex}")
 
-        # Modal Dialog Pop-up for Duration Input
         @st.dialog("Log Recovery Duration")
         def log_duration_modal(ath_name, stn_label, state_key, wk_s, dy_s):
             st.markdown(f"Logging **{stn_label}** for **{ath_name}**")
@@ -2620,10 +2553,8 @@ with active_season:
             state_key = f"{str(wk_s).strip()}|{str(ath_name).strip()}|{str(stn_label).strip()}|{str(dy_s).strip()}"
 
             if is_checked:
-                # Open modal to log duration
                 log_duration_modal(ath_name, stn_label, state_key, wk_s, dy_s)
             else:
-                # Remove on uncheck
                 if state_key in st.session_state.recovery_local_state:
                     del st.session_state.recovery_local_state[state_key]
                 send_recovery_update(ath_name, stn_label, wk_s, dy_s, "remove")
@@ -2748,7 +2679,6 @@ with active_season:
                 unsafe_allow_html=True,
             )
 
-            # --- Week Filter Picker for Summary ---
             c_sum_wk, _ = st.columns([1, 2])
             with c_sum_wk:
                 summary_selected_monday = st.date_input(
@@ -2787,7 +2717,6 @@ with active_season:
                 )
             )
 
-            # Filter dataframe to the selected week
             summary_df = (
                 all_summary_df[all_summary_df["Week_Starting"] == summary_week_str]
                 if not all_summary_df.empty and "Week_Starting" in all_summary_df.columns
@@ -2979,8 +2908,7 @@ with active_season:
                         st.markdown(card_html, unsafe_allow_html=True)
             else:
                 st.info(f"No recovery data recorded for the week of {summary_week_str}.")
-                
-                
+
 
     # =========================================================================
     # TAB 7: TRACKING (LIVE PRACTICE STATS & SUMMARY)
