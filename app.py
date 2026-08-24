@@ -443,7 +443,11 @@ def filter_by_season(df, season_name):
         return df
     season_col = next((c for c in df.columns if c.lower() in ["season", "phase"]), None)
     if season_col:
-        return df[df[season_col].astype(str).str.strip().str.lower() == season_name.lower()]
+        # Standardize matching for Summer vs Post-Summer / Post Summer
+        target_norm = season_name.lower().replace("-", "").replace(" ", "").replace("_", "")
+        series_norm = df[season_col].astype(str).str.lower().str.replace("-", "").str.replace(" ", "").str.replace("_", "")
+        filtered = df[series_norm == target_norm]
+        return filtered if not filtered.empty else pd.DataFrame(columns=df.columns)
     return df
 
 
@@ -461,7 +465,7 @@ def get_vball_color(score):
 def render_vball_table(df):
     if df.empty:
         return (
-            "<p style='color:#64748B; font-style:italic;'>No data available.</p>"
+            "<p style='color:#64748B; font-style:italic;'>No data available for this season.</p>"
         )
     df_clean = df.copy()
     if "Date" in df_clean.columns:
@@ -523,6 +527,7 @@ def compute_practice_tables(player_name, session_date_str, v_source, i_source):
         else pd.DataFrame()
     )
 
+    # Calculate 14-day baseline specific to this active season
     if not v_all.empty and "Date" in v_all.columns and v_all["Date"].notna().any():
         start_date_v = v_all["Date"].min()
         v_base = v_all[v_all["Date"] <= start_date_v + pd.Timedelta(days=14)]
@@ -659,7 +664,7 @@ def create_team_bar_athlete_line_chart(
     return fig
 
 
-def render_metric_subcard_html(p_comp, col_name, title_name, unit):
+def render_metric_subcard_html(p_comp, col_name, display_title, unit):
     if p_comp.empty or col_name not in p_comp.columns:
         return ""
 
@@ -699,7 +704,7 @@ def render_metric_subcard_html(p_comp, col_name, title_name, unit):
     return f"""
     <div class="compliance-subcard">
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
-            <h5 style="margin:0; font-size:0.95rem; color:#0F172A; font-weight:700;">{title_name}</h5>
+            <h5 style="margin:0; font-size:0.95rem; color:#0F172A; font-weight:700;">{display_title}</h5>
             <div style="background-color:{badge_bg}; color:{badge_fg}; font-weight:700; padding:2px 8px; border-radius:10px; font-size:0.7rem;">
                 {days_since} Days
             </div>
@@ -711,7 +716,7 @@ def render_metric_subcard_html(p_comp, col_name, title_name, unit):
                 <div class="compliance-metric-sub">{recent_date}</div>
             </div>
             <div class="compliance-metric-card">
-                <div class="compliance-metric-label">All-Time Max</div>
+                <div class="compliance-metric-label">Season Max</div>
                 <div class="compliance-metric-value">{max_str}</div>
                 <div class="compliance-metric-sub">{max_date}</div>
             </div>
@@ -827,9 +832,9 @@ season_tab_summer, season_tab_post_summer = st.tabs(["Summer Phase", "Post-Summe
 # 7. DASHBOARD RENDER ENGINE PER SEASON
 # -----------------------------------------------------------------------------
 def render_dashboard_content(season_label, season_key):
-    st.markdown(f"<div style='font-weight:700; color:#64748B; margin-bottom:12px; font-size:0.9rem;'>CURRENT VIEW: <span style='color:#FF8200;'>{season_label.upper()}</span></div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='font-weight:700; color:#64748B; margin-bottom:12px; font-size:0.9rem;'>CURRENT ACTIVE SEASON: <span style='color:#FF8200;'>{season_label.upper()}</span></div>", unsafe_allow_html=True)
     
-    # Filter datasets for current season
+    # Filter datasets strictly for active season so jump records & tracking start fresh
     vol_data = filter_by_season(vol_raw, season_label)
     int_data = filter_by_season(int_raw, season_label)
     comp_data = filter_by_season(comp_raw, season_label)
@@ -972,6 +977,8 @@ def render_dashboard_content(season_label, season_key):
                     ),
                 )
                 st.plotly_chart(fig1, use_container_width=True, key=f"chart_trend_{season_key}")
+            else:
+                st.info(f"No practice scores recorded for {selected_player} in {season_label}.")
 
         latest_date_str = (
             vol_data[vol_data["Player"] == selected_player]["Date_Str"].max()
@@ -1047,6 +1054,7 @@ def render_dashboard_content(season_label, season_key):
 
         st.divider()
 
+        # SECTION 3: CMJ (Starts over strictly for active season)
         st.markdown(
             '<div class="vball-section-title">3. Jump Performance & RSI Tracking</div>',
             unsafe_allow_html=True,
@@ -1144,11 +1152,13 @@ def render_dashboard_content(season_label, season_key):
             )
             st.plotly_chart(fig_jump_trend, use_container_width=True, key=f"jump_chart_{season_key}")
 
-            with st.expander(f"View Raw CMJ Data Log for {selected_player}"):
+            with st.expander(f"View Raw CMJ Data Log for {selected_player} ({season_label})"):
                 display_cols_ind = [
                     c for c in p_cmj_ind.columns if c not in ["Name", "Date_Str", "Jump_Height_Clean", "RSI_Clean"]
                 ]
                 st.markdown(render_vball_table(p_cmj_ind[display_cols_ind]), unsafe_allow_html=True)
+        else:
+            st.info(f"No CMJ jump data recorded for {selected_player} during {season_label}.")
 
         st.divider()
 
@@ -1505,7 +1515,7 @@ def render_dashboard_content(season_label, season_key):
         if ind_records:
             st.markdown(render_vball_table(pd.DataFrame(ind_records)), unsafe_allow_html=True)
         else:
-            st.info(f"No additional assessment logs found for {selected_player}.")
+            st.info(f"No additional assessment logs found for {selected_player} in {season_label}.")
 
     # TAB 2: PRACTICE SCORE
     elif main_tab == "Practice Score":
@@ -1786,7 +1796,7 @@ def render_dashboard_content(season_label, season_key):
             )
             st.plotly_chart(fig_ind_dl, use_container_width=True, key=f"ind_dl_{season_key}")
 
-    # TAB 5: TESTING
+    # TAB 5: TESTING (CMJ & Physical Diagnostics Reset per Season)
     elif main_tab == "Testing":
         testing_tab_intake, testing_tab_cmj, testing_tab_overall = st.tabs(
             ["Intake Assessment", "CMJ", "Overall Profile"]
@@ -1794,7 +1804,7 @@ def render_dashboard_content(season_label, season_key):
 
         with testing_tab_intake:
             st.markdown(
-                "<h3 style='color:#1D1D1F; font-weight:900; text-transform:uppercase;'>Athlete Intake Assessment</h3>",
+                f"<h3 style='color:#1D1D1F; font-weight:900; text-transform:uppercase;'>Athlete Intake Assessment ({season_label})</h3>",
                 unsafe_allow_html=True,
             )
             c_int_ath, _ = st.columns([2, 2])
@@ -1907,17 +1917,17 @@ def render_dashboard_content(season_label, season_key):
 
             with hud_col2:
                 st.markdown(
-                    """
+                    f"""
                     <style>
-                    .hud-details-card { background: #FFFFFF; border-radius: 16px; padding: 20px; border: 1px solid #E5E5E7; box-shadow: 0 4px 12px rgba(0,0,0,0.03); }
-                    .hud-header-title-light { color: #1D1D1F; font-weight: 800; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; border-bottom: 2px solid #FF8200; padding-bottom: 6px; margin-bottom: 16px; }
-                    .hud-metric-row-light { background: #F8F9FA; border-left: 4px solid #FF8200; border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; color: #1D1D1F; border: 1px solid #E5E5E7; border-left: 4px solid #FF8200; }
-                    .hud-metric-row-light-blue { background: #F8F9FA; border-left: 4px solid #4895DB; border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; color: #1D1D1F; border: 1px solid #E5E5E7; border-left: 4px solid #4895DB; }
-                    .node-badge-orange { display: inline-block; width: 20px; height: 20px; background: #FF8200; color: #FFFFFF; font-weight: 900; font-size: 11px; border-radius: 4px; text-align: center; line-height: 20px; margin-right: 8px; }
-                    .node-badge-blue { display: inline-block; width: 20px; height: 20px; background: #4895DB; color: #FFFFFF; font-weight: 900; font-size: 11px; border-radius: 4px; text-align: center; line-height: 20px; margin-right: 8px; }
+                    .hud-details-card {{ background: #FFFFFF; border-radius: 16px; padding: 20px; border: 1px solid #E5E5E7; box-shadow: 0 4px 12px rgba(0,0,0,0.03); }}
+                    .hud-header-title-light {{ color: #1D1D1F; font-weight: 800; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; border-bottom: 2px solid #FF8200; padding-bottom: 6px; margin-bottom: 16px; }}
+                    .hud-metric-row-light {{ background: #F8F9FA; border-left: 4px solid #FF8200; border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; color: #1D1D1F; border: 1px solid #E5E5E7; border-left: 4px solid #FF8200; }}
+                    .hud-metric-row-light-blue {{ background: #F8F9FA; border-left: 4px solid #4895DB; border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; color: #1D1D1F; border: 1px solid #E5E5E7; border-left: 4px solid #4895DB; }}
+                    .node-badge-orange {{ display: inline-block; width: 20px; height: 20px; background: #FF8200; color: #FFFFFF; font-weight: 900; font-size: 11px; border-radius: 4px; text-align: center; line-height: 20px; margin-right: 8px; }}
+                    .node-badge-blue {{ display: inline-block; width: 20px; height: 20px; background: #4895DB; color: #FFFFFF; font-weight: 900; font-size: 11px; border-radius: 4px; text-align: center; line-height: 20px; margin-right: 8px; }}
                     </style>
                     <div class="hud-details-card">
-                        <div class="hud-header-title-light">Anatomy Location Assessment Details</div>
+                        <div class="hud-header-title-light">Location Assessment ({season_label})</div>
                     """,
                     unsafe_allow_html=True,
                 )
@@ -2043,34 +2053,34 @@ def render_dashboard_content(season_label, season_key):
                                 unsafe_allow_html=True,
                             )
                 else:
-                    st.info(f"No Intake Assessment records found for {selected_intake_athlete}.")
+                    st.info(f"No Intake Assessment records found for {selected_intake_athlete} in {season_label}.")
 
                 st.markdown("</div>", unsafe_allow_html=True)
 
             st.divider()
 
-            st.markdown(f"### Intake Assessment Raw Logs for {selected_intake_athlete}")
+            st.markdown(f"### Intake Assessment Raw Logs for {selected_intake_athlete} ({season_label})")
 
             with st.expander("NordBord Test Log", expanded=False):
                 if not nord_ath.empty:
                     disp_nord = [c for c in nord_ath.columns if c not in ["Name", "Date_Str"]]
                     st.markdown(render_vball_table(nord_ath[disp_nord]), unsafe_allow_html=True)
                 else:
-                    st.info(f"No NordBord records for {selected_intake_athlete}.")
+                    st.info(f"No NordBord records for {selected_intake_athlete} in {season_label}.")
 
             with st.expander("Harness Belt Squat Log", expanded=False):
                 if not bs_ath.empty:
                     disp_bs = [c for c in bs_ath.columns if c not in ["Name", "Date_Str", "PVF_Calc"]]
                     st.markdown(render_vball_table(bs_ath[disp_bs]), unsafe_allow_html=True)
                 else:
-                    st.info(f"No Harness Belt Squat records for {selected_intake_athlete}.")
+                    st.info(f"No Harness Belt Squat records for {selected_intake_athlete} in {season_label}.")
 
             with st.expander("Knee Extension / Flexion Log", expanded=False):
                 if not sh_ath.empty:
                     disp_knee = [c for c in sh_ath.columns if c not in ["Name", "Date_Str"]]
                     st.markdown(render_vball_table(sh_ath[disp_knee]), unsafe_allow_html=True)
                 else:
-                    st.info(f"No Knee Assessment records for {selected_intake_athlete}.")
+                    st.info(f"No Knee Assessment records for {selected_intake_athlete} in {season_label}.")
 
             with st.expander("Hip Adduction / Abduction Log", expanded=False):
                 if not hip_ath.empty:
@@ -2101,18 +2111,19 @@ def render_dashboard_content(season_label, season_key):
 
                     st.markdown(render_vball_table(hip_display_df[final_cols]), unsafe_allow_html=True)
                 else:
-                    st.info(f"No Hip Assessment records for {selected_intake_athlete}.")
+                    st.info(f"No Hip Assessment records for {selected_intake_athlete} in {season_label}.")
 
             with st.expander("Ankle Plantar Flexion Log", expanded=False):
                 if not calf_ath.empty:
                     disp_ankle = [c for c in calf_ath.columns if c not in ["Name", "Date_Str"]]
                     st.markdown(render_vball_table(calf_ath[disp_ankle]), unsafe_allow_html=True)
                 else:
-                    st.info(f"No Ankle Assessment records for {selected_intake_athlete}.")
+                    st.info(f"No Ankle Assessment records for {selected_intake_athlete} in {season_label}.")
 
+        # SECTION 5B: CMJ TAB (Independent timeline & baseline)
         with testing_tab_cmj:
             st.markdown(
-                '<div class="vball-section-title">CMJ History</div>',
+                f'<div class="vball-section-title">CMJ History — {season_label}</div>',
                 unsafe_allow_html=True,
             )
 
@@ -2217,17 +2228,20 @@ def render_dashboard_content(season_label, season_key):
                 )
                 st.plotly_chart(fig_jump_trend, use_container_width=True, key=f"cmj_trend_{season_key}")
 
-            st.divider()
+                st.divider()
 
-            display_cols = [
-                c for c in p_cmj.columns if c not in ["Name", "Date_Str", "Jump_Height_Clean", "RSI_Clean"]
-            ]
-            st.markdown(f"### Jump History Logs for {selected_player_t}")
-            st.markdown(render_vball_table(p_cmj[display_cols]), unsafe_allow_html=True)
+                display_cols = [
+                    c for c in p_cmj.columns if c not in ["Name", "Date_Str", "Jump_Height_Clean", "RSI_Clean"]
+                ]
+                st.markdown(f"### Jump History Logs for {selected_player_t} ({season_label})")
+                st.markdown(render_vball_table(p_cmj[display_cols]), unsafe_allow_html=True)
+            else:
+                st.info(f"No Countermovement Jump (CMJ) logs found for {selected_player_t} in {season_label}.")
 
+        # SECTION 5C: OVERALL PROFILE (Peak snapshot per season)
         with testing_tab_overall:
             st.markdown(
-                '<div class="vball-section-title">Master Athletic Performance Summary</div>',
+                f'<div class="vball-section-title">Master Athletic Performance Summary ({season_label})</div>',
                 unsafe_allow_html=True,
             )
             c_ov_ath, _ = st.columns([1, 2])
@@ -2269,12 +2283,14 @@ def render_dashboard_content(season_label, season_key):
                 jh_c = next((c for c in p_cmj_ov.columns if "jump" in c.lower() or "height" in c.lower()), None)
                 if jh_c:
                     p_cmj_ov["JH_Val"] = pd.to_numeric(p_cmj_ov[jh_c].astype(str).str.replace(r"[^0-9.]", "", regex=True), errors="coerce")
-                    best_cmj = p_cmj_ov.sort_values("JH_Val", ascending=False).iloc[0]
-                    records.append({
-                        "Category": "Countermovement Jump",
-                        "Best Test Value": f"{best_cmj['JH_Val']:.2f} cm",
-                        "Date Achieved": format_date_clean(best_cmj.get("Date"))
-                    })
+                    valid_cmj = p_cmj_ov.dropna(subset=["JH_Val"])
+                    if not valid_cmj.empty:
+                        best_cmj = valid_cmj.sort_values("JH_Val", ascending=False).iloc[0]
+                        records.append({
+                            "Category": "Countermovement Jump",
+                            "Best Test Value": f"{best_cmj['JH_Val']:.2f} cm",
+                            "Date Achieved": format_date_clean(best_cmj.get("Date"))
+                        })
 
             p_nord_ov = nordic_data[nordic_data["Name"] == selected_ov_athlete].copy() if not nordic_data.empty and "Name" in nordic_data.columns else pd.DataFrame()
             if not p_nord_ov.empty:
@@ -2348,10 +2364,10 @@ def render_dashboard_content(season_label, season_key):
 
             if records:
                 ov_df = pd.DataFrame(records)
-                st.markdown(f"### Peak Performance Snapshot for {selected_ov_athlete}")
+                st.markdown(f"### Peak Performance Snapshot for {selected_ov_athlete} ({season_label})")
                 st.markdown(render_vball_table(ov_df), unsafe_allow_html=True)
             else:
-                st.info(f"No testing records found across modules for {selected_ov_athlete}.")
+                st.info(f"No testing records found across modules for {selected_ov_athlete} in {season_label}.")
 
     # TAB 6: RECOVERY
     elif main_tab == "Recovery":
