@@ -443,7 +443,6 @@ def filter_by_season(df, season_name):
         return df
     season_col = next((c for c in df.columns if c.lower() in ["season", "phase"]), None)
     if season_col:
-        # Standardize matching for Summer vs Post-Summer / Post Summer
         target_norm = season_name.lower().replace("-", "").replace(" ", "").replace("_", "")
         series_norm = df[season_col].astype(str).str.lower().str.replace("-", "").str.replace(" ", "").str.replace("_", "")
         filtered = df[series_norm == target_norm]
@@ -527,7 +526,6 @@ def compute_practice_tables(player_name, session_date_str, v_source, i_source):
         else pd.DataFrame()
     )
 
-    # Calculate 14-day baseline specific to this active season
     if not v_all.empty and "Date" in v_all.columns and v_all["Date"].notna().any():
         start_date_v = v_all["Date"].min()
         v_base = v_all[v_all["Date"] <= start_date_v + pd.Timedelta(days=14)]
@@ -834,7 +832,6 @@ season_tab_summer, season_tab_post_summer = st.tabs(["Summer Phase", "Post-Summe
 def render_dashboard_content(season_label, season_key):
     st.markdown(f"<div style='font-weight:700; color:#64748B; margin-bottom:12px; font-size:0.9rem;'>CURRENT ACTIVE SEASON: <span style='color:#FF8200;'>{season_label.upper()}</span></div>", unsafe_allow_html=True)
     
-    # Filter datasets strictly for active season so jump records & tracking start fresh
     vol_data = filter_by_season(vol_raw, season_label)
     int_data = filter_by_season(int_raw, season_label)
     comp_data = filter_by_season(comp_raw, season_label)
@@ -1054,7 +1051,7 @@ def render_dashboard_content(season_label, season_key):
 
         st.divider()
 
-        # SECTION 3: CMJ (Starts over strictly for active season)
+        # SECTION 3: CMJ
         st.markdown(
             '<div class="vball-section-title">3. Jump Performance & RSI Tracking</div>',
             unsafe_allow_html=True,
@@ -1162,6 +1159,7 @@ def render_dashboard_content(season_label, season_key):
 
         st.divider()
 
+        # SECTION 4: WEEKLY DATA
         st.markdown(
             '<div class="vball-section-title">4. Weekly Output vs. Team Averages</div>',
             unsafe_allow_html=True,
@@ -1236,7 +1234,7 @@ def render_dashboard_content(season_label, season_key):
 
         st.divider()
 
-        # 5. ATHLETE RECOVERY LOG
+        # SECTION 5: ATHLETE RECOVERY LOG
         st.markdown(
             '<div class="vball-section-title">5. Athlete Recovery Log & Duration Summary</div>',
             unsafe_allow_html=True,
@@ -1351,7 +1349,7 @@ def render_dashboard_content(season_label, season_key):
 
         st.divider()
 
-        # 6. LIVE TRACKING SUMMARY
+        # SECTION 6: LIVE TRACKING SUMMARY (Updated to 4 metrics)
         st.markdown(
             '<div class="vball-section-title">6. In-Practice Live Tracking Summary</div>',
             unsafe_allow_html=True,
@@ -1389,17 +1387,20 @@ def render_dashboard_content(season_label, season_key):
 
         p_ind_track_wk = p_ind_track[p_ind_track["Week_Starting"] == sel_ind_mon_str] if not p_ind_track.empty else pd.DataFrame()
 
-        t_col1, t_col2, t_col3 = st.columns(3)
+        t_col1, t_col2, t_col3, t_col4 = st.columns(4)
         to_total = p_ind_track_wk[p_ind_track_wk["Metric"] == "Turnover"]["Count"].sum() if not p_ind_track_wk.empty else 0
-        orb_total = p_ind_track_wk[p_ind_track_wk["Metric"] == "Offensive Rebound"]["Count"].sum() if not p_ind_track_wk.empty else 0
-        bo_total = p_ind_track_wk[p_ind_track_wk["Metric"] == "Box Out"]["Count"].sum() if not p_ind_track_wk.empty else 0
+        nc_total = p_ind_track_wk[p_ind_track_wk["Metric"] == "Not Crashing"]["Count"].sum() if not p_ind_track_wk.empty else 0
+        nbo_total = p_ind_track_wk[p_ind_track_wk["Metric"] == "No Box Out"]["Count"].sum() if not p_ind_track_wk.empty else 0
+        ncb_total = p_ind_track_wk[p_ind_track_wk["Metric"] == "Not Calling Back"]["Count"].sum() if not p_ind_track_wk.empty else 0
 
         with t_col1:
             st.metric("Turnovers (Week)", int(to_total))
         with t_col2:
-            st.metric("Offensive Rebounds (Week)", int(orb_total))
+            st.metric("Not Crashing (Week)", int(nc_total))
         with t_col3:
-            st.metric("Box Outs (Week)", int(bo_total))
+            st.metric("No Box Outs (Week)", int(nbo_total))
+        with t_col4:
+            st.metric("Not Calling Back (Week)", int(ncb_total))
 
         if not p_ind_track_wk.empty:
             st.markdown(f"#### Daily Breakdown for Week of {sel_ind_mon_str}")
@@ -1417,7 +1418,7 @@ def render_dashboard_content(season_label, season_key):
 
         st.divider()
 
-        # 7. ASSESSMENT RECORDS
+        # SECTION 7: ASSESSMENT RECORDS
         st.markdown(
             '<div class="vball-section-title">7. Additional Assessment Records</div>',
             unsafe_allow_html=True,
@@ -1796,7 +1797,7 @@ def render_dashboard_content(season_label, season_key):
             )
             st.plotly_chart(fig_ind_dl, use_container_width=True, key=f"ind_dl_{season_key}")
 
-    # TAB 5: TESTING (CMJ & Physical Diagnostics Reset per Season)
+    # TAB 5: TESTING
     elif main_tab == "Testing":
         testing_tab_intake, testing_tab_cmj, testing_tab_overall = st.tabs(
             ["Intake Assessment", "CMJ", "Overall Profile"]
@@ -1980,7 +1981,7 @@ def render_dashboard_content(season_label, season_key):
                                 </div>
                                 <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
                                     <b>Hip Adduction:</b> Max L {ad_maxL:.1f}N | R {ad_maxR:.1f}N &nbsp;→&nbsp; <b>Recent:</b> L {render_val_with_arrow(ad_recL, ad_initL, '{:.1f}', 'N')} | R {render_val_with_arrow(ad_recR, ad_initR, '{:.1f}', 'N')}<br>
-                                    <b>Hip Abduction:</b> Max L {ab_maxL:.1f}N | R {ab_maxR:.1f}N &nbsp;→&nbsp; <b>Recent:</b> L {render_val_with_arrow(ab_recL, ad_initL, '{:.1f}', 'N')} | R {render_val_with_arrow(ab_recR, ad_initR, '{:.1f}', 'N')}
+                                    <b>Hip Abduction:</b> Max L {ab_maxL:.1f}N | R {ab_maxR:.1f}N &nbsp;→&nbsp; <b>Recent:</b> L {render_val_with_arrow(ab_recR, ad_initR, '{:.1f}', 'N')} | R {render_val_with_arrow(ab_recR, ad_initR, '{:.1f}', 'N')}
                                 </div>
                             </div>
                             """,
@@ -2120,7 +2121,7 @@ def render_dashboard_content(season_label, season_key):
                 else:
                     st.info(f"No Ankle Assessment records for {selected_intake_athlete} in {season_label}.")
 
-        # SECTION 5B: CMJ TAB (Independent timeline & baseline)
+        # SECTION 5B: CMJ TAB
         with testing_tab_cmj:
             st.markdown(
                 f'<div class="vball-section-title">CMJ History — {season_label}</div>',
@@ -2238,7 +2239,7 @@ def render_dashboard_content(season_label, season_key):
             else:
                 st.info(f"No Countermovement Jump (CMJ) logs found for {selected_player_t} in {season_label}.")
 
-        # SECTION 5C: OVERALL PROFILE (Peak snapshot per season)
+        # SECTION 5C: OVERALL PROFILE
         with testing_tab_overall:
             st.markdown(
                 f'<div class="vball-section-title">Master Athletic Performance Summary ({season_label})</div>',
@@ -2806,7 +2807,7 @@ def render_dashboard_content(season_label, season_key):
             else:
                 st.info(f"No recovery data recorded for the week of {summary_week_str}.")
 
-    # TAB 7: TRACKING
+    # TAB 7: TRACKING (Updated 4 metrics: Turnover, Not Crashing, No Box Out, Not Calling Back)
     elif main_tab == "Tracking":
         track_tab_live, track_tab_summary = st.tabs(
             ["Practice Live Tracker", "Weekly & Daily Summary"]
@@ -2934,14 +2935,14 @@ def render_dashboard_content(season_label, season_key):
                                 unsafe_allow_html=True,
                             )
 
-                            m_cols = st.columns(3)
-                            metrics = ["Turnover", "Offensive Rebound", "Box Out"]
+                            m_cols = st.columns(4)
+                            metrics = ["Turnover", "Not Crashing", "No Box Out", "Not Calling Back"]
                             for m_idx, metric_name in enumerate(metrics):
                                 key = f"{track_week_str}|{session_date_val}|{player}|{metric_name}"
                                 val = st.session_state.tracking_data.get(key, 0)
                                 with m_cols[m_idx]:
                                     st.markdown(
-                                        f"<div style='text-align:center; font-weight:700; font-size:0.8rem; color:#475569;'>{metric_name}</div>",
+                                        f"<div style='text-align:center; font-weight:700; font-size:0.75rem; color:#475569; min-height:34px; line-height:1.2;'>{metric_name}</div>",
                                         unsafe_allow_html=True,
                                     )
                                     b_col1, b_col2, b_col3 = st.columns([1, 1.2, 1])
@@ -2954,7 +2955,7 @@ def render_dashboard_content(season_label, season_key):
                                         )
                                     with b_col2:
                                         st.markdown(
-                                            f"<div style='text-align:center; font-size:1.2rem; font-weight:800; padding-top:2px;'>{val}</div>",
+                                            f"<div style='text-align:center; font-size:1.1rem; font-weight:800; padding-top:2px;'>{val}</div>",
                                             unsafe_allow_html=True,
                                         )
                                     with b_col3:
@@ -3080,7 +3081,7 @@ def render_dashboard_content(season_label, season_key):
                             except:
                                 day_name = next(
                                     (full for full, _ in days_order if full.lower() in raw_date.lower()),
-                                    raw_date
+                                    raw_date,
                                 )
 
                             if day_name not in day_metrics_map:
