@@ -673,19 +673,22 @@ def create_team_bar_athlete_line_chart(
     return fig
 
 
-def render_metric_subcard_html(p_comp, col_name, display_title, unit):
-    if p_comp.empty or col_name not in p_comp.columns:
+def render_metric_subcard_html(p_comp_season, p_comp_all, col_name, display_title, unit):
+    if p_comp_season.empty or col_name not in p_comp_season.columns:
         return ""
 
-    valid_df = p_comp.dropna(subset=[col_name])
-    if valid_df.empty:
+    valid_season_df = p_comp_season.dropna(subset=[col_name])
+    if valid_season_df.empty:
         return ""
 
-    all_time_max = valid_df[col_name].max()
-    max_row = valid_df[valid_df[col_name] == all_time_max].iloc[-1]
+    # All-time max benchmark across all history
+    valid_all_df = p_comp_all.dropna(subset=[col_name]) if not p_comp_all.empty and col_name in p_comp_all.columns else valid_season_df
+    all_time_max = valid_all_df[col_name].max() if not valid_all_df.empty else valid_season_df[col_name].max()
+    max_row = valid_all_df[valid_all_df[col_name] == all_time_max].iloc[-1]
     max_date = format_date_clean(max_row["Date_Str"])
 
-    recent_row = valid_df.iloc[-1]
+    # Recent value strictly within the active season
+    recent_row = valid_season_df.iloc[-1]
     recent_val = recent_row[col_name]
     recent_date = format_date_clean(recent_row["Date_Str"])
 
@@ -694,7 +697,7 @@ def render_metric_subcard_html(p_comp, col_name, display_title, unit):
         if all_time_max > 0
         else "-- %"
     )
-    days_since = (pd.to_datetime("today") - pd.to_datetime(max_date)).days
+    days_since = (pd.to_datetime("today") - pd.to_datetime(recent_date)).days
 
     badge_bg = "#BBF7D0" if days_since <= 7 else "#FFD6D6"
     badge_fg = "#166534" if days_since <= 7 else "#991B1B"
@@ -1148,22 +1151,30 @@ def render_dashboard_content(season_label, season_key):
             unsafe_allow_html=True,
         )
 
-        p_comp = (
+        p_comp_season = (
+            comp_data[comp_data["Player"] == selected_player].sort_values("Date")
+            if not comp_data.empty
+            else pd.DataFrame()
+        )
+        p_comp_all = (
             comp_raw[comp_raw["Player"] == selected_player].sort_values("Date")
             if not comp_raw.empty
             else pd.DataFrame()
         )
 
-        for row_idx in range(0, len(compliance_metrics), 2):
-            col1, col2 = st.columns(2)
-            cols = [col1, col2]
-            for j in range(2):
-                metric_idx = row_idx + j
-                if metric_idx < len(compliance_metrics):
-                    col_name, display_title, unit = compliance_metrics[metric_idx]
-                    subcard_html = render_metric_subcard_html(p_comp, col_name, display_title, unit)
-                    with cols[j]:
-                        st.markdown(subcard_html, unsafe_allow_html=True)
+        if not p_comp_season.empty:
+            for row_idx in range(0, len(compliance_metrics), 2):
+                col1, col2 = st.columns(2)
+                cols = [col1, col2]
+                for j in range(2):
+                    metric_idx = row_idx + j
+                    if metric_idx < len(compliance_metrics):
+                        col_name, display_title, unit = compliance_metrics[metric_idx]
+                        subcard_html = render_metric_subcard_html(p_comp_season, p_comp_all, col_name, display_title, unit)
+                        with cols[j]:
+                            st.markdown(subcard_html, unsafe_allow_html=True)
+        else:
+            st.info(f"No compliance and workload data recorded for {selected_player} in {season_label}.")
 
         st.divider()
 
