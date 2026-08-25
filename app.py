@@ -3721,19 +3721,7 @@ def render_team_wellness_content():
         """
         st.markdown(kpi_html, unsafe_allow_html=True)
 
-        team_tbl_html = """
-        <table class="vball-table" style="width:100%; border:1px solid #E2E8F0; background:#FFFFFF; margin-top:10px;">
-            <thead>
-                <tr>
-                    <th style="width:70px;">Athlete</th>
-                    <th style="text-align:left !important; padding-left:18px;">Name</th>
-                    <th>Position</th>
-                    <th>Wellness Score</th>
-                    <th>Readiness Status</th>
-                </tr>
-            </thead>
-            <tbody>
-        """
+        rows_html = ""
         for _, row in cmj_team_df.iterrows():
             r_val = row["Readiness %"]
             status_text = (
@@ -3746,7 +3734,7 @@ def render_team_wellness_content():
                 "#15803D" if r_val >= 90 else ("#B45309" if r_val >= 80 else "#B91C1C")
             )
 
-            team_tbl_html += f"""
+            rows_html += f"""
             <tr>
                 <td style="padding:6px;"><img src="{row['PhotoURL']}" style="width:40px; height:40px; border-radius:50%; object-fit:cover; border:2px solid #FF8200;"></td>
                 <td style="text-align:left !important; font-weight:800; padding-left:18px; font-size:0.92rem; color:#0F172A;">{row['Athlete']}</td>
@@ -3755,8 +3743,24 @@ def render_team_wellness_content():
                 <td><span style="background-color:{badge_bg}; color:{badge_fg}; padding:4px 10px; border-radius:12px; font-weight:700; font-size:0.75rem;">{status_text}</span></td>
             </tr>
             """
-        team_tbl_html += "</tbody></table>"
-        st.markdown(team_tbl_html, unsafe_allow_html=True)
+
+        complete_table_html = f"""
+        <table class="vball-table" style="width:100%; border:1px solid #E2E8F0; background:#FFFFFF; margin-top:10px;">
+            <thead>
+                <tr>
+                    <th style="width:70px;">Athlete</th>
+                    <th style="text-align:left !important; padding-left:18px;">Name</th>
+                    <th>Position</th>
+                    <th>Wellness Score</th>
+                    <th>Readiness Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {rows_html}
+            </tbody>
+        </table>
+        """
+        st.markdown(complete_table_html, unsafe_allow_html=True)
     else:
         st.info(f"No Countermovement Jump testing records logged on {format_date_clean(sel_team_cmj_date)}.")
 
