@@ -955,6 +955,15 @@ def render_cmj_tscore_standards(player_name, cmj_all_df, target_date_str=None, a
         </div>
         """
         st.markdown(legend_table_html, unsafe_allow_html=True)
+
+def get_season_default_monday(season_data_df, default_monday):
+    """Returns the latest Monday in the active season if available, otherwise falls back to the current Monday."""
+    if not season_data_df.empty and "Date" in season_data_df.columns:
+        valid_dates = season_data_df["Date"].dropna()
+        if not valid_dates.empty:
+            latest_dt = valid_dates.max()
+            return latest_dt.date() - datetime.timedelta(days=latest_dt.weekday())
+    return default_monday
         
 
 
@@ -1420,16 +1429,20 @@ def render_dashboard_content(season_label, season_key):
         today_rec_p = local_now_rec_p.date()
         current_mon_rec_p = today_rec_p - datetime.timedelta(days=today_rec_p.weekday())
 
+        # Fallback to the latest week recorded in this season if viewing an older season (e.g. Summer)
+        initial_rec_mon = get_season_default_monday(vol_data, current_mon_rec_p)
+
         c_rec_prof_wk, _ = st.columns([1, 2])
         with c_rec_prof_wk:
             sel_rec_prof_mon = st.date_input(
-                "Select Recovery Week Starting (Monday):",
-                value=current_mon_rec_p,
+                f"Select Recovery Week Starting ({season_label}):",
+                value=initial_rec_mon,
                 key=f"ind_prof_rec_week_picker_{season_key}",
             )
             if sel_rec_prof_mon.weekday() != 0:
                 sel_rec_prof_mon = sel_rec_prof_mon - datetime.timedelta(days=sel_rec_prof_mon.weekday())
             sel_rec_prof_mon_str = sel_rec_prof_mon.strftime("%Y-%m-%d")
+            
 
         p_rec_rows = []
         if "recovery_local_state" in st.session_state and isinstance(st.session_state.recovery_local_state, dict):
@@ -1526,40 +1539,28 @@ def render_dashboard_content(season_label, season_key):
         st.divider()
 
         # SECTION 6: LIVE TRACKING SUMMARY
+        # SECTION 6: LIVE TRACKING SUMMARY
         st.markdown(
             '<div class="vball-section-title">6. In-Practice Live Tracking Summary</div>',
             unsafe_allow_html=True,
         )
 
-        ind_track_rows = []
-        for k, v in st.session_state.tracking_data.items():
-            parts = k.split("|")
-            if len(parts) == 4 and v > 0:
-                ind_track_rows.append({
-                    "Week_Starting": parts[0],
-                    "Date": parts[1],
-                    "Athlete": parts[2],
-                    "Metric": parts[3],
-                    "Count": v
-                })
-
-        ind_track_df = pd.DataFrame(ind_track_rows) if ind_track_rows else pd.DataFrame(columns=["Week_Starting", "Date", "Athlete", "Metric", "Count"])
-        p_ind_track = ind_track_df[ind_track_df["Athlete"] == selected_player] if not ind_track_df.empty else pd.DataFrame()
-
         local_now_ind = get_eastern_now()
         today_ind = local_now_ind.date()
         current_mon_ind = today_ind - datetime.timedelta(days=today_ind.weekday())
+        initial_track_mon = get_season_default_monday(vol_data, current_mon_ind)
 
         c_tr_wk, _ = st.columns([1, 2])
         with c_tr_wk:
             sel_ind_mon = st.date_input(
-                "Select Week Starting (Monday):",
-                value=current_mon_ind,
+                f"Select Week Starting ({season_label}):",
+                value=initial_track_mon,
                 key=f"ind_prof_track_week_picker_{season_key}",
             )
             if sel_ind_mon.weekday() != 0:
                 sel_ind_mon = sel_ind_mon - datetime.timedelta(days=sel_ind_mon.weekday())
             sel_ind_mon_str = sel_ind_mon.strftime("%Y-%m-%d")
+            
 
         p_ind_track_wk = p_ind_track[p_ind_track["Week_Starting"] == sel_ind_mon_str] if not p_ind_track.empty else pd.DataFrame()
 
@@ -2632,24 +2633,30 @@ def render_dashboard_content(season_label, season_key):
         local_now = get_eastern_now()
         today = local_now.date()
         current_monday = today - datetime.timedelta(days=today.weekday())
+        
+        # Scopes initial week picker to the season's active dates
+        season_default_monday = get_season_default_monday(vol_data, current_monday)
 
-        live_rec_df = fetch_live_recovery_sheet()
+        with rec_tab_tracker:
+            st.markdown(
+                '<div class="vball-section-title">Athlete Recovery Checkbox Grid</div>',
+                unsafe_allow_html=True,
+            )
 
-        if "recovery_local_state" not in st.session_state:
-            st.session_state.recovery_local_state = {}
-
-        if not live_rec_df.empty:
-            for _, row in live_rec_df.iterrows():
-                wk_val = str(row.get("Week_Starting", "")).strip()
-                ath_val = str(row.get("Athlete", "")).strip()
-                stn_val = str(row.get("Station", "")).strip()
-                dy_val = str(row.get("Day", "")).strip()
-                dur_val = str(row.get("Duration_Minutes", "")).strip()
-                if wk_val and ath_val and stn_val and dy_val:
-                    key = f"{wk_val}|{ath_val}|{stn_val}|{dy_val}"
-                    if key not in st.session_state.recovery_local_state:
-                        st.session_state.recovery_local_state[key] = dur_val
-
+            c_rec1, c_rec2 = st.columns(2)
+            with c_rec1:
+                selected_rec_monday = st.date_input(
+                    f"Select Week Starting (Monday) — {season_label}:",
+                    value=season_default_monday,
+                    key=f"rec_week_picker_{season_key}",
+                )
+                if selected_rec_monday.weekday() != 0:
+                    selected_rec_monday = (
+                        selected_rec_monday
+                        - datetime.timedelta(days=selected_rec_monday.weekday())
+                    )
+                week_str = selected_rec_monday.strftime("%Y-%m-%d")
+                
         def send_recovery_update(ath_name, stn_label, wk_s, dy_s, action_val, duration=None):
             time_val = get_eastern_time_str() if action_val == "add" else ""
             payload = {
@@ -3069,6 +3076,9 @@ def render_dashboard_content(season_label, season_key):
         local_now = get_eastern_now()
         today = local_now.date()
         current_monday = today - datetime.timedelta(days=today.weekday())
+        
+        # Scopes initial week picker to the season's active dates
+        season_default_monday = get_season_default_monday(vol_data, current_monday)
 
         with track_tab_live:
             st.markdown(
@@ -3079,8 +3089,8 @@ def render_dashboard_content(season_label, season_key):
             col_tr1, col_tr2 = st.columns(2)
             with col_tr1:
                 selected_track_monday = st.date_input(
-                    "Select Week Starting (Monday):",
-                    value=current_monday,
+                    f"Select Week Starting (Monday) — {season_label}:",
+                    value=season_default_monday,
                     key=f"track_week_picker_{season_key}",
                 )
                 if selected_track_monday.weekday() != 0:
@@ -3089,7 +3099,7 @@ def render_dashboard_content(season_label, season_key):
                         - datetime.timedelta(days=selected_track_monday.weekday())
                     )
                 track_week_str = selected_track_monday.strftime("%Y-%m-%d")
-
+                
             with col_tr2:
                 track_days_options = [
                     (selected_track_monday + datetime.timedelta(days=i)).strftime("%Y-%m-%d (%A)")
