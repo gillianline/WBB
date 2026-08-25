@@ -10,6 +10,7 @@ import plotly.graph_objects as go
 import requests
 import streamlit as st
 import streamlit.components.v1 as components
+import textwrap
 
 EASTERN_TZ = ZoneInfo("America/New_York")
 
@@ -3538,6 +3539,7 @@ def render_combined_seasons_content():
     else:
         st.info("No combined practice data points calculated.")
 
+
 # -----------------------------------------------------------------------------
 # 9. TEAM WELLNESS ENGINE
 # -----------------------------------------------------------------------------
@@ -3692,10 +3694,10 @@ def render_team_wellness_content():
         cmj_team_df = pd.DataFrame(team_cmj_rows).sort_values("Readiness %", ascending=False)
         avg_team_readiness = cmj_team_df["Readiness %"].mean()
         peak_count = sum(1 for r in team_cmj_rows if r["Readiness %"] >= 90)
-        moderate_count = sum(1 for r in team_cmj_rows if 80 <= r["Readiness %"] < 90)
         fatigue_count = sum(1 for r in team_cmj_rows if r["Readiness %"] < 80)
 
-        kpi_html = f"""
+        # 4 KPI Summary Cards (Dedent to prevent markdown code block detection)
+        kpi_html = textwrap.dedent(f"""
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 10px; margin-bottom: 20px;">
             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #FF8200; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
                 <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Athletes Evaluated</div>
@@ -3718,10 +3720,11 @@ def render_team_wellness_content():
                 <div style="font-size: 0.68rem; color: #94A3B8;">Requires Recovery Attention</div>
             </div>
         </div>
-        """
+        """)
         st.markdown(kpi_html, unsafe_allow_html=True)
 
-        rows_html = ""
+        # Build table rows without multiline indentation
+        html_rows = []
         for _, row in cmj_team_df.iterrows():
             r_val = row["Readiness %"]
             status_text = (
@@ -3734,32 +3737,31 @@ def render_team_wellness_content():
                 "#15803D" if r_val >= 90 else ("#B45309" if r_val >= 80 else "#B91C1C")
             )
 
-            rows_html += f"""
-            <tr>
-                <td style="padding:6px;"><img src="{row['PhotoURL']}" style="width:40px; height:40px; border-radius:50%; object-fit:cover; border:2px solid #FF8200;"></td>
-                <td style="text-align:left !important; font-weight:800; padding-left:18px; font-size:0.92rem; color:#0F172A;">{row['Athlete']}</td>
-                <td style="font-weight:600; color:#64748B;">{row['Position']}</td>
-                <td style="font-weight:900; font-size:1.15rem; color:{row['Status_Color']};">{r_val}%</td>
-                <td><span style="background-color:{badge_bg}; color:{badge_fg}; padding:4px 10px; border-radius:12px; font-weight:700; font-size:0.75rem;">{status_text}</span></td>
-            </tr>
-            """
+            html_rows.append(
+                f'<tr>'
+                f'<td style="padding:6px;"><img src="{row["PhotoURL"]}" style="width:40px; height:40px; border-radius:50%; object-fit:cover; border:2px solid #FF8200;"></td>'
+                f'<td style="text-align:left !important; font-weight:800; padding-left:18px; font-size:0.92rem; color:#0F172A;">{row["Athlete"]}</td>'
+                f'<td style="font-weight:600; color:#64748B;">{row["Position"]}</td>'
+                f'<td style="font-weight:900; font-size:1.15rem; color:{row["Status_Color"]};">{r_val}%</td>'
+                f'<td><span style="background-color:{badge_bg}; color:{badge_fg}; padding:4px 10px; border-radius:12px; font-weight:700; font-size:0.75rem;">{status_text}</span></td>'
+                f'</tr>'
+            )
 
-        complete_table_html = f"""
-        <table class="vball-table" style="width:100%; border:1px solid #E2E8F0; background:#FFFFFF; margin-top:10px;">
-            <thead>
-                <tr>
-                    <th style="width:70px;">Athlete</th>
-                    <th style="text-align:left !important; padding-left:18px;">Name</th>
-                    <th>Position</th>
-                    <th>Wellness Score</th>
-                    <th>Readiness Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                {rows_html}
-            </tbody>
-        </table>
-        """
+        complete_table_html = (
+            '<table class="vball-table" style="width:100%; border:1px solid #E2E8F0; background:#FFFFFF; margin-top:10px;">'
+            '<thead>'
+            '<tr>'
+            '<th style="width:70px;">Athlete</th>'
+            '<th style="text-align:left !important; padding-left:18px;">Name</th>'
+            '<th>Position</th>'
+            '<th>Wellness Score</th>'
+            '<th>Readiness Status</th>'
+            '</tr>'
+            '</thead>'
+            '<tbody>'
+            + "".join(html_rows)
+            + '</tbody></table>'
+        )
         st.markdown(complete_table_html, unsafe_allow_html=True)
     else:
         st.info(f"No Countermovement Jump testing records logged on {format_date_clean(sel_team_cmj_date)}.")
