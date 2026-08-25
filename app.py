@@ -1793,9 +1793,10 @@ def render_dashboard_content(season_label, season_key):
             else "https://via.placeholder.com/60"
         )
 
+        # Use comp_raw (all-time unpartitioned dataset) across all seasons
         p_comp = (
-            comp_data[comp_data["Player"] == selected_player_comp].sort_values("Date")
-            if not comp_data.empty
+            comp_raw[comp_raw["Player"] == selected_player_comp].sort_values("Date")
+            if not comp_raw.empty
             else pd.DataFrame()
         )
 
