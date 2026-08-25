@@ -681,13 +681,13 @@ def render_metric_subcard_html(p_comp_season, p_comp_all, col_name, display_titl
     if valid_season_df.empty:
         return ""
 
-    # All-time max benchmark across all history
+    # All-time max benchmark
     valid_all_df = p_comp_all.dropna(subset=[col_name]) if not p_comp_all.empty and col_name in p_comp_all.columns else valid_season_df
     all_time_max = valid_all_df[col_name].max() if not valid_all_df.empty else valid_season_df[col_name].max()
     max_row = valid_all_df[valid_all_df[col_name] == all_time_max].iloc[-1]
     max_date = format_date_clean(max_row["Date_Str"])
 
-    # Recent value strictly within the active season
+    # Recent value strictly within active season
     recent_row = valid_season_df.iloc[-1]
     recent_val = recent_row[col_name]
     recent_date = format_date_clean(recent_row["Date_Str"])
@@ -697,10 +697,18 @@ def render_metric_subcard_html(p_comp_season, p_comp_all, col_name, display_titl
         if all_time_max > 0
         else "-- %"
     )
-    days_since = (pd.to_datetime("today") - pd.to_datetime(recent_date)).days
+    
+    # Calculate days elapsed using Eastern Time date
+    today_dt = get_eastern_now().date()
+    recent_dt = pd.to_datetime(recent_date).date()
+    max_dt = pd.to_datetime(max_date).date()
 
-    badge_bg = "#BBF7D0" if days_since <= 7 else "#FFD6D6"
-    badge_fg = "#166534" if days_since <= 7 else "#991B1B"
+    days_since_recent = max(0, (today_dt - recent_dt).days)
+    days_since_max = max(0, (today_dt - max_dt).days)
+
+    # Green if logged within 7 days, Red if older
+    badge_bg = "#BBF7D0" if days_since_recent <= 7 else "#FFD6D6"
+    badge_fg = "#166534" if days_since_recent <= 7 else "#991B1B"
 
     val_str = (
         f"{recent_val:.1f}{(' ' + unit) if unit else ''}"
@@ -718,7 +726,7 @@ def render_metric_subcard_html(p_comp_season, p_comp_all, col_name, display_titl
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
             <h5 style="margin:0; font-size:0.95rem; color:#0F172A; font-weight:700;">{display_title}</h5>
             <div style="background-color:{badge_bg}; color:{badge_fg}; font-weight:700; padding:2px 8px; border-radius:10px; font-size:0.7rem;">
-                {days_since} Days
+                {days_since_recent} Days Ago
             </div>
         </div>
         <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
@@ -738,9 +746,9 @@ def render_metric_subcard_html(p_comp_season, p_comp_all, col_name, display_titl
                 <div class="compliance-metric-sub">Recent vs. Peak</div>
             </div>
             <div class="compliance-metric-card">
-                <div class="compliance-metric-label">Recency Status</div>
-                <div class="compliance-metric-value">{days_since} Days</div>
-                <div class="compliance-metric-sub">Elapsed Threshold</div>
+                <div class="compliance-metric-label">Peak Recency</div>
+                <div class="compliance-metric-value">{days_since_max} Days</div>
+                <div class="compliance-metric-sub">Since Max Achieved</div>
             </div>
         </div>
     </div>
