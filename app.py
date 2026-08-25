@@ -742,25 +742,41 @@ def render_metric_subcard_html(p_comp, col_name, display_title, unit):
     </div>
     """
 
-def render_cmj_tscore_standards(player_name, cmj_all_df, target_date_str=None, widget_key_suffix=""):
+def render_cmj_tscore_standards(player_name, cmj_all_df, target_date_str=None, active_season_label=None, widget_key_suffix=""):
     if cmj_all_df.empty or "Name" not in cmj_all_df.columns:
         st.info("No Countermovement Jump (CMJ) dataset available.")
         return
 
     df = cmj_all_df.copy()
 
-    # Filter athlete jumps across all historical data
-    p_jumps = df[df["Name"] == player_name].sort_values("Date")
-    if p_jumps.empty:
+    # Base athlete jumps across all history (used for population norming)
+    p_all_jumps = df[df["Name"] == player_name].sort_values("Date")
+    if p_all_jumps.empty:
         st.info(f"No CMJ records found for {player_name}.")
         return
 
-    # Select jump by target date, fallback to latest jump
-    if target_date_str and target_date_str != "Latest":
-        jump_row_df = p_jumps[p_jumps["Date_Str"] == target_date_str]
-        active_jump = jump_row_df.iloc[-1] if not jump_row_df.empty else p_jumps.iloc[-1]
+    # Scope athlete jumps strictly within the active season
+    if active_season_label:
+        p_season_jumps = filter_by_season(p_all_jumps, active_season_label)
     else:
-        active_jump = p_jumps.iloc[-1]
+        p_season_jumps = p_all_jumps
+
+    # If athlete has no jumps in this season, stop here
+    if p_season_jumps.empty:
+        st.info(f"No Countermovement Jump (CMJ) records found for {player_name} in {active_season_label or 'this season'}.")
+        return
+
+    # Select jump by target date if it exists within the season, otherwise use latest in that season
+    if target_date_str and target_date_str != "Latest":
+        jump_row_df = p_season_jumps[p_season_jumps["Date_Str"] == target_date_str]
+        if not jump_row_df.empty:
+            active_jump = jump_row_df.iloc[-1]
+        else:
+            # Fall back to the latest jump recorded on or before the selected date within this season
+            prior_jumps = p_season_jumps[p_season_jumps["Date_Str"] <= target_date_str]
+            active_jump = prior_jumps.iloc[-1] if not prior_jumps.empty else p_season_jumps.iloc[-1]
+    else:
+        active_jump = p_season_jumps.iloc[-1]
 
     active_date_str = format_date_clean(active_jump.get("Date"))
 
