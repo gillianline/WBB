@@ -3151,12 +3151,12 @@ def render_combined_seasons_content():
     )
 
     st.markdown(
-        '<div class="vball-section-title">Team Daily Combined Practice Score Averages</div>',
+        '<div class="vball-section-title">Team Daily Practice Score Trends (Summer vs. Pre-Season)</div>',
         unsafe_allow_html=True,
     )
 
     if vol_raw.empty or int_raw.empty:
-        st.info("No practice session data available to calculate team combined scores.")
+        st.info("No practice session data available to calculate team practice scores.")
         return
 
     combined_dates_df = (
@@ -3174,14 +3174,20 @@ def render_combined_seasons_content():
 
     for (d_str, dt), group in combined_dates_df.groupby(["Date_Str", "Date"]):
         players = group["Player"].unique()
+        day_vol_scores = []
+        day_int_scores = []
         day_combined_scores = []
 
         for p in players:
-            _, _, _, _, comb_sc, _, _, _ = compute_practice_tables(p, d_str, vol_raw, int_raw)
+            _, _, vol_sc, int_sc, comb_sc, _, _, _ = compute_practice_tables(p, d_str, vol_raw, int_raw)
+            day_vol_scores.append(vol_sc)
+            day_int_scores.append(int_sc)
             day_combined_scores.append(comb_sc)
 
         if day_combined_scores:
-            avg_score = round(float(np.mean(day_combined_scores)), 1)
+            avg_vol = round(float(np.mean(day_vol_scores)), 1)
+            avg_int = round(float(np.mean(day_int_scores)), 1)
+            avg_comb = round(float(np.mean(day_combined_scores)), 1)
             
             phase = "Summer"
             if season_col and season_col in vol_raw.columns:
@@ -3195,7 +3201,9 @@ def render_combined_seasons_content():
                     "Date": dt,
                     "Date_Str": format_date_clean(d_str),
                     "Phase": phase,
-                    "Team Combined Score": avg_score,
+                    "Team Volume Score": avg_vol,
+                    "Team Intensity Score": avg_int,
+                    "Team Combined Score": avg_comb,
                 }
             )
 
@@ -3204,62 +3212,105 @@ def render_combined_seasons_content():
     if not df_comb_timeline.empty:
         color_map = {"Summer": "#FF8200", "Pre-Season": "#38BDF8"}
 
-        fig_combined = px.line(
-            df_comb_timeline,
-            x="Date",
-            y="Team Combined Score",
-            color="Phase",
-            markers=True,
-            color_discrete_map=color_map,
-            title="Team Average Daily Combined Practice Score (Summer vs. Pre-Season)",
+        def create_custom_timeline_chart(metric_col, title_label):
+            fig = px.line(
+                df_comb_timeline,
+                x="Date",
+                y=metric_col,
+                color="Phase",
+                markers=True,
+                color_discrete_map=color_map,
+                title=title_label,
+            )
+
+            fig.update_traces(
+                line=dict(width=3.5),
+                marker=dict(size=9, line=dict(width=1.5, color="#0F172A")),
+                hovertemplate="<b>Date:</b> %{x|%b %d, %Y}<br><b>Phase:</b> %{fullData.name}<br><b>Team Avg:</b> %{y:.1f}<extra></extra>",
+            )
+
+            fig.update_layout(
+                height=350,
+                margin=dict(l=40, r=40, t=75, b=40),
+                plot_bgcolor="rgba(0,0,0,0)",
+                paper_bgcolor="rgba(0,0,0,0)",
+                title=dict(
+                    text=title_label,
+                    font=dict(size=14, color="#0F172A"),
+                    x=0.01,
+                    y=0.98,
+                    xanchor="left",
+                    yanchor="top",
+                ),
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.04,
+                    xanchor="right",
+                    x=0.99,
+                    font=dict(size=12, color="#0F172A"),
+                    title=None,
+                ),
+                xaxis=dict(
+                    title=None,
+                    type="date",
+                    tickformat="%b %d\n%Y",
+                    showgrid=False,
+                    showline=True,
+                    linewidth=1.5,
+                    linecolor="#0F172A",
+                    tickfont=dict(color="#64748B", size=11),
+                ),
+                yaxis=dict(
+                    title="Score",
+                    showgrid=True,
+                    gridcolor="#F1F5F9",
+                    showline=True,
+                    linewidth=1.5,
+                    linecolor="#0F172A",
+                    tickfont=dict(color="#64748B", size=11),
+                    range=[0, 105],
+                ),
+            )
+            return fig
+
+        # 1. Main Combined Score Graph (Full Width)
+        fig_combined = create_custom_timeline_chart(
+            "Team Combined Score",
+            "Team Average Combined Practice Score (Summer vs. Pre-Season)",
         )
+        st.plotly_chart(fig_combined, use_container_width=True, key="comb_chart_combined")
 
-        fig_combined.update_traces(
-            line=dict(width=3.5),
-            marker=dict(size=9, line=dict(width=1.5, color="#0F172A")),
-            hovertemplate="<b>Date:</b> %{x|%b %d, %Y}<br><b>Phase:</b> %{fullData.name}<br><b>Team Avg:</b> %{y:.1f}<extra></extra>",
-        )
+        st.markdown("<br>", unsafe_allow_html=True)
 
-        fig_combined.update_layout(
-            height=380,
-            margin=dict(l=40, r=40, t=50, b=40),
-            plot_bgcolor="rgba(0,0,0,0)",
-            paper_bgcolor="rgba(0,0,0,0)",
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.04,
-                xanchor="left",
-                x=0.01,
-                font=dict(size=12, color="#0F172A"),
-            ),
-            xaxis=dict(
-                title=None,
-                type="date",
-                tickformat="%b %d\n%Y",
-                showgrid=False,
-                showline=True,
-                linewidth=1.5,
-                linecolor="#0F172A",
-                tickfont=dict(color="#64748B", size=11),
-            ),
-            yaxis=dict(
-                title="Score",
-                showgrid=True,
-                gridcolor="#F1F5F9",
-                showline=True,
-                linewidth=1.5,
-                linecolor="#0F172A",
-                tickfont=dict(color="#64748B", size=11),
-                range=[0, 105],
-            ),
-        )
+        # 2. Volume and Intensity Score Graphs (Side-by-Side)
+        col_v_g, col_i_g = st.columns(2)
 
-        st.plotly_chart(fig_combined, use_container_width=True, key="combined_practice_trend_chart")
+        with col_v_g:
+            fig_vol = create_custom_timeline_chart(
+                "Team Volume Score",
+                "Team Average Volume Score (Summer vs. Pre-Season)",
+            )
+            st.plotly_chart(fig_vol, use_container_width=True, key="comb_chart_vol")
 
-        with st.expander("View Daily Team Combined Practice Score Summary Table"):
-            display_tbl = df_comb_timeline[["Date_Str", "Phase", "Team Combined Score"]].rename(
-                columns={"Date_Str": "Date", "Team Combined Score": "Team Avg Combined Score"}
+        with col_i_g:
+            fig_int = create_custom_timeline_chart(
+                "Team Intensity Score",
+                "Team Average Intensity Score (Summer vs. Pre-Season)",
+            )
+            st.plotly_chart(fig_int, use_container_width=True, key="comb_chart_int")
+
+        # 3. Data Breakdown Table
+        with st.expander("View Daily Team Practice Score Summary Table"):
+            display_tbl = df_comb_timeline[
+                ["Date_Str", "Phase", "Team Volume Score", "Team Intensity Score", "Team Combined Score"]
+            ].rename(
+                columns={
+                    "Date_Str": "Date",
+                    "Team Volume Score": "Volume Avg",
+                    "Team Intensity Score": "Intensity Avg",
+                    "Team Combined Score": "Combined Avg",
+                }
             )
             st.markdown(render_vball_table(display_tbl), unsafe_allow_html=True)
     else:
