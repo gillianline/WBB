@@ -1075,22 +1075,22 @@ def render_dashboard_content(season_label, season_key):
                 "Select Athlete Profile:", roster_players, key=f"sel_player_{season_key}"
             )
 
-        # Retrieve unique dates across both practice and testing logs for this athlete
+        # Retrieve dates strictly within the active season (stops at the end of the season)
         ath_p_dates = (
             vol_data[vol_data["Player"] == selected_player]["Date_Str"].dropna().unique().tolist()
             if not vol_data.empty
             else []
         )
         ath_cmj_dates = (
-            cmj_raw[cmj_raw["Name"] == selected_player]["Date_Str"].dropna().unique().tolist()
-            if not cmj_raw.empty and "Name" in cmj_raw.columns
+            cmj_data[cmj_data["Name"] == selected_player]["Date_Str"].dropna().unique().tolist()
+            if not cmj_data.empty and "Name" in cmj_data.columns
             else []
         )
         combined_ath_dates = sorted(list(set(ath_p_dates + ath_cmj_dates)), reverse=True)
 
         with c_dt_top:
             selected_ind_date = st.selectbox(
-                "Select Profile Session Date:",
+                f"Select Session Date ({season_label}):",
                 options=combined_ath_dates if combined_ath_dates else ["No dates found"],
                 format_func=format_date_clean,
                 key=f"sel_ind_top_date_{season_key}",
