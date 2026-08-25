@@ -1369,7 +1369,14 @@ def render_dashboard_content(season_label, season_key):
                 display_cols_ind = [
                     c for c in p_cmj_ind.columns if c not in ["Name", "Date_Str", "Jump_Height_Clean", "RSI_Clean"]
                 ]
+                # Slice columns up to CMJ Stiffness
+                stiffness_col = next((c for c in display_cols_ind if "stiffness" in c.lower()), None)
+                if stiffness_col:
+                    end_idx = display_cols_ind.index(stiffness_col) + 1
+                    display_cols_ind = display_cols_ind[:end_idx]
+
                 st.markdown(render_vball_table(p_cmj_ind[display_cols_ind]), unsafe_allow_html=True)
+                
         else:
             st.info(f"No CMJ jump data recorded for {selected_player} during {season_label}.")
 
@@ -2454,8 +2461,15 @@ def render_dashboard_content(season_label, season_key):
                 display_cols = [
                     c for c in p_cmj.columns if c not in ["Name", "Date_Str", "Jump_Height_Clean", "RSI_Clean"]
                 ]
+                # Slice columns up to CMJ Stiffness
+                stiffness_col = next((c for c in display_cols if "stiffness" in c.lower()), None)
+                if stiffness_col:
+                    end_idx = display_cols.index(stiffness_col) + 1
+                    display_cols = display_cols[:end_idx]
+
                 st.markdown(f"### Jump History Logs for {selected_player_t} ({season_label})")
                 st.markdown(render_vball_table(p_cmj[display_cols]), unsafe_allow_html=True)
+                
             else:
                 st.info(f"No Countermovement Jump (CMJ) logs found for {selected_player_t} in {season_label}.")
 
