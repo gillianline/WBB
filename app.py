@@ -957,7 +957,6 @@ def render_cmj_tscore_standards(player_name, cmj_all_df, target_date_str=None, a
         st.markdown(legend_table_html, unsafe_allow_html=True)
 
 def get_season_default_monday(season_data_df, default_monday):
-    """Returns the latest Monday in the active season if available, otherwise falls back to the current Monday."""
     if not season_data_df.empty and "Date" in season_data_df.columns:
         valid_dates = season_data_df["Date"].dropna()
         if not valid_dates.empty:
@@ -1545,6 +1544,28 @@ def render_dashboard_content(season_label, season_key):
             unsafe_allow_html=True,
         )
 
+        ind_track_rows = []
+        for k, v in st.session_state.tracking_data.items():
+            parts = k.split("|")
+            if len(parts) == 4 and v > 0:
+                ind_track_rows.append({
+                    "Week_Starting": parts[0],
+                    "Date": parts[1],
+                    "Athlete": parts[2],
+                    "Metric": parts[3],
+                    "Count": v
+                })
+
+        ind_track_df = pd.DataFrame(ind_track_rows) if ind_track_rows else pd.DataFrame(
+            columns=["Week_Starting", "Date", "Athlete", "Metric", "Count"]
+        )
+        
+        p_ind_track = (
+            ind_track_df[ind_track_df["Athlete"] == selected_player] 
+            if not ind_track_df.empty 
+            else pd.DataFrame(columns=["Week_Starting", "Date", "Athlete", "Metric", "Count"])
+        )
+
         local_now_ind = get_eastern_now()
         today_ind = local_now_ind.date()
         current_mon_ind = today_ind - datetime.timedelta(days=today_ind.weekday())
@@ -1560,9 +1581,12 @@ def render_dashboard_content(season_label, season_key):
             if sel_ind_mon.weekday() != 0:
                 sel_ind_mon = sel_ind_mon - datetime.timedelta(days=sel_ind_mon.weekday())
             sel_ind_mon_str = sel_ind_mon.strftime("%Y-%m-%d")
-            
 
-        p_ind_track_wk = p_ind_track[p_ind_track["Week_Starting"] == sel_ind_mon_str] if not p_ind_track.empty else pd.DataFrame()
+        p_ind_track_wk = (
+            p_ind_track[p_ind_track["Week_Starting"] == sel_ind_mon_str] 
+            if not p_ind_track.empty 
+            else pd.DataFrame(columns=["Week_Starting", "Date", "Athlete", "Metric", "Count"])
+        )
 
         t_col1, t_col2, t_col3, t_col4 = st.columns(4)
         to_total = p_ind_track_wk[p_ind_track_wk["Metric"] == "Turnover"]["Count"].sum() if not p_ind_track_wk.empty else 0
