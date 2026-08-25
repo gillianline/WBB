@@ -515,6 +515,7 @@ def compute_practice_tables(player_name, session_date_str, v_source, i_source):
         & (i_source["Date_Str"] == str(session_date_str))
     ]
 
+    # Reference full unpartitioned athlete history
     v_all = (
         v_source[v_source["Player"] == player_name].sort_values("Date")
         if not v_source.empty
@@ -526,16 +527,23 @@ def compute_practice_tables(player_name, session_date_str, v_source, i_source):
         else pd.DataFrame()
     )
 
-    if not v_all.empty and "Date" in v_all.columns and v_all["Date"].notna().any():
-        start_date_v = v_all["Date"].min()
-        v_base = v_all[v_all["Date"] <= start_date_v + pd.Timedelta(days=14)]
+    current_dt = pd.to_datetime(session_date_str, errors="coerce")
+
+    # 30-day rolling baseline window leading up to session date
+    if pd.notna(current_dt):
+        window_start = current_dt - pd.Timedelta(days=30)
+        v_base = (
+            v_all[(v_all["Date"] >= window_start) & (v_all["Date"] <= current_dt)]
+            if not v_all.empty and "Date" in v_all.columns
+            else v_all
+        )
+        i_base = (
+            i_all[(i_all["Date"] >= window_start) & (i_all["Date"] <= current_dt)]
+            if not i_all.empty and "Date" in i_all.columns
+            else i_all
+        )
     else:
         v_base = v_all
-
-    if not i_all.empty and "Date" in i_all.columns and i_all["Date"].notna().any():
-        start_date_i = i_all["Date"].min()
-        i_base = i_all[i_all["Date"] <= start_date_i + pd.Timedelta(days=14)]
-    else:
         i_base = i_all
 
     vol_metrics = [
@@ -616,7 +624,6 @@ def compute_practice_tables(player_name, session_date_str, v_source, i_source):
         week_num,
         day_num,
     )
-
 
 def create_team_bar_athlete_line_chart(
     weeks,
@@ -714,7 +721,7 @@ def render_metric_subcard_html(p_comp, col_name, display_title, unit):
                 <div class="compliance-metric-sub">{recent_date}</div>
             </div>
             <div class="compliance-metric-card">
-                <div class="compliance-metric-label">Season Max</div>
+                <div class="compliance-metric-label">Overall Max</div>
                 <div class="compliance-metric-value">{max_str}</div>
                 <div class="compliance-metric-sub">{max_date}</div>
             </div>
@@ -897,14 +904,15 @@ def render_dashboard_content(season_label, season_key):
             unsafe_allow_html=True,
         )
 
+        # 1. Workload Exposure & Compliance Grid (Overall Maxes across all seasons)
         st.markdown(
             '<div class="vball-section-title">1. Workload Exposure & Compliance Grid</div>',
             unsafe_allow_html=True,
         )
 
         p_comp = (
-            comp_data[comp_data["Player"] == selected_player].sort_values("Date")
-            if not comp_data.empty
+            comp_raw[comp_raw["Player"] == selected_player].sort_values("Date")
+            if not comp_raw.empty
             else pd.DataFrame()
         )
 
@@ -921,6 +929,7 @@ def render_dashboard_content(season_label, season_key):
 
         st.divider()
 
+        # 2. Practice Performance & Score Trends (30-day rolling max across all historical data)
         st.markdown(
             '<div class="vball-section-title">2. Practice Performance & Score Trends</div>',
             unsafe_allow_html=True,
@@ -939,7 +948,7 @@ def render_dashboard_content(season_label, season_key):
                 score_history = []
                 for d_str in v_p["Date_Str"].unique():
                     _, _, v_sc, i_sc, c_sc, _, _, _ = compute_practice_tables(
-                        selected_player, d_str, vol_data, int_data
+                        selected_player, d_str, vol_raw, int_raw
                     )
                     score_history.append(
                         {
@@ -985,7 +994,7 @@ def render_dashboard_content(season_label, season_key):
 
         if pd.notna(latest_date_str):
             vol_df, int_df, vol_score, int_score, comb_score, mins, wk, dy = (
-                compute_practice_tables(selected_player, latest_date_str, vol_data, int_data)
+                compute_practice_tables(selected_player, latest_date_str, vol_raw, int_raw)
             )
 
             wk_str = str(wk).replace("Week ", "")
