@@ -1211,6 +1211,10 @@ def render_dashboard_content(season_label, season_key):
                     height=230,
                     plot_bgcolor="rgba(0,0,0,0)",
                     paper_bgcolor="rgba(0,0,0,0)",
+                    xaxis=dict(
+                        type="category",  # Forces discrete date strings without time intervals
+                        tickfont=dict(color="#64748B", size=11),
+                    ),
                     legend=dict(
                         orientation="h",
                         yanchor="bottom",
@@ -1220,7 +1224,11 @@ def render_dashboard_content(season_label, season_key):
                         title=None,
                     ),
                 )
-                st.plotly_chart(fig1, use_container_width=True, key=f"chart_trend_{season_key}")
+                st.plotly_chart(
+                    fig1,
+                    use_container_width=True,
+                    key=f"chart_trend_{season_key}",
+                )
             else:
                 st.info(f"No practice scores recorded for {selected_player} in {season_label}.")
 
