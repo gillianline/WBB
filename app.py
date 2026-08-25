@@ -742,6 +742,203 @@ def render_metric_subcard_html(p_comp, col_name, display_title, unit):
     </div>
     """
 
+def render_cmj_tscore_standards(player_name, cmj_all_df):
+    if cmj_all_df.empty or "Name" not in cmj_all_df.columns:
+        st.info("No Countermovement Jump (CMJ) dataset available.")
+        return
+
+    # Clean numeric columns across the entire master dataset (all seasons combined)
+    df = cmj_all_df.copy()
+
+    # Metric column mapping
+    metric_configs = [
+        ("Jump Height", ["Jump Height (cm)", "Jump Height", "Height"]),
+        ("Jump Momentum", ["Take-off Momentum [kg m/s]", "Take-off Momentum", "Jump Momentum"]),
+        ("Peak Velocity", ["Concentric Peak Velocity [m/s]", "Peak Velocity", "Concentric Peak Velocity"]),
+        ("Mean Con Force", ["Concentric Mean Force [N]", "Concentric Mean Force", "Mean Force"]),
+        ("Force @ 0 Velocity", ["Force at Zero Velocity [N]", "Force at Zero Velocity", "Force @ 0 Velocity"]),
+        ("Positive Impulse", ["Positive Impulse [N s]", "Positive Impulse"]),
+        ("P1 Con Impulse", ["P1 Concentric Impulse [N s]", "P1 Concentric Impulse"]),
+        ("P2 Con Impulse", ["P2 Concentric Impulse [N s]", "P2 Concentric Impulse"]),
+        ("CM Depth", ["Countermovement Depth [cm]", "CM Depth", "Depth"]),
+        ("Time to Takeoff", ["Time to Takeoff [s]", "Time to Take-off [s]", "Time to Takeoff", "Time to Take-off"]),
+    ]
+
+    resolved_metrics = []
+    for label, col_candidates in metric_configs:
+        found_col = next((c for c in df.columns for cand in col_candidates if cand.lower() == c.lower().strip()), None)
+        if not found_col:
+            found_col = next((c for c in df.columns for cand in col_candidates if cand.lower() in c.lower()), None)
+        if found_col:
+            df[found_col] = pd.to_numeric(
+                df[found_col].astype(str).str.replace(r"[^0-9.-]", "", regex=True),
+                errors="coerce",
+            )
+            resolved_metrics.append((label, found_col))
+
+    if not resolved_metrics:
+        st.info("CMJ metric columns not detected in the dataset.")
+        return
+
+    # Filter athlete's most recent jump across all time
+    p_jumps = df[df["Name"] == player_name].sort_values("Date")
+    if p_jumps.empty:
+        st.info(f"No CMJ records found for {player_name}.")
+        return
+
+    latest_jump = p_jumps.iloc[-1]
+    latest_date_str = format_date_clean(latest_jump.get("Date"))
+
+    labels, t_scores, text_labels = [], [], []
+
+    for label, col in resolved_metrics:
+        pop_mean = df[col].mean()
+        pop_std = df[col].std()
+        val = latest_jump[col]
+
+        if pd.notna(val) and pd.notna(pop_mean) and pd.notna(pop_std) and pop_std > 0:
+            # T-Score formula: 50 + 10 * Z-Score
+            t_score = 50.0 + 10.0 * ((val - pop_mean) / pop_std)
+            t_score = max(0.0, min(100.0, t_score))
+        else:
+            t_score = 50.0
+
+        labels.append(label)
+        t_scores.append(round(t_score, 1))
+        text_labels.append(f"{t_score:.1f}")
+
+    # Plotly Figure Layout
+    fig = go.Figure()
+
+    # Add background performance color bands
+    bands = [
+        (0, 20, "#8B0000"),    # Extremely Poor
+        (20, 30, "#E50000"),   # Very Poor
+        (30, 40, "#F25454"),   # Poor
+        (40, 45, "#FCA5A5"),   # Below Avg.
+        (45, 55, "#FFFFFF"),   # Average
+        (55, 60, "#BBF7D0"),   # Above Avg.
+        (60, 70, "#86EFAC"),   # Good
+        (70, 80, "#22C55E"),   # Very Good
+        (80, 100, "#15803D"),  # Excellent
+    ]
+
+    for y0, y1, color in bands:
+        fig.add_shape(
+            type="rect",
+            xref="paper",
+            x0=0,
+            x1=1,
+            yref="y",
+            y0=y0,
+            y1=y1,
+            fillcolor=color,
+            layer="below",
+            line_width=0,
+        )
+
+    # Add T-Score Bars
+    fig.add_trace(
+        go.Bar(
+            x=labels,
+            y=t_scores,
+            text=text_labels,
+            textposition="inside",
+            insidetextanchor="middle",
+            textfont=dict(color="#FFFFFF", size=11, family="Arial Black, sans-serif"),
+            marker=dict(
+                color="#2C3238",
+                line=dict(color="#0F172A", width=1.5),
+            ),
+            width=0.55,
+            hovertemplate="<b>%{x}</b><br>T-Score: %{y:.1f}<extra></extra>",
+        )
+    )
+
+    fig.update_layout(
+        height=420,
+        margin=dict(l=50, r=20, t=20, b=50),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        showlegend=False,
+        xaxis=dict(
+            tickmode="array",
+            tickvals=labels,
+            tickfont=dict(color="#0F172A", size=10, family="Arial, sans-serif"),
+            showline=True,
+            linewidth=2,
+            linecolor="#0F172A",
+            showgrid=False,
+            fixedrange=True,
+        ),
+        yaxis=dict(
+            title="Individual T-Score Performance Rating",
+            title_font=dict(size=11, color="#0F172A"),
+            range=[0, 100],
+            dtick=10,
+            showgrid=False,
+            showline=True,
+            linewidth=2,
+            linecolor="#0F172A",
+            tickfont=dict(color="#475569", size=10),
+            fixedrange=True,
+        ),
+    )
+
+    # Layout: Chart + Legend Side-by-Side
+    col_graph, col_legend = st.columns([3.8, 1.2])
+
+    with col_graph:
+        st.markdown(
+            f"""
+            <div style="border-bottom: 2px solid #FF8200; padding-bottom: 4px; margin-bottom: 8px;">
+                <span style="color:#0284C7; font-size:1.15rem; font-weight:900; letter-spacing:0.5px; text-transform:uppercase;">
+                    COUNTERMOVEMENT JUMP PERFORMANCE STANDARDS
+                </span>
+                <span style="color:#64748B; font-size:0.85rem; font-weight:600; margin-left:12px;">
+                    (Latest Jump: {latest_date_str})
+                </span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.plotly_chart(fig, use_container_width=True, key=f"cmj_tscore_fig_{player_name.replace(' ','_')}_{np.random.randint(100000)}")
+
+        # Category Grouping Badges under X-Axis
+        st.markdown(
+            """
+            <div style="display: flex; gap: 8px; width: 100%; margin-top: -30px; margin-bottom: 15px; padding-left: 45px;">
+                <div style="flex: 3; background: #FEE2E2; color: #991B1B; text-align: center; padding: 4px 0; font-weight: 700; font-size: 0.75rem; border-radius: 4px;">Speed</div>
+                <div style="flex: 3; background: #ECFCCB; color: #3F6212; text-align: center; padding: 4px 0; font-weight: 700; font-size: 0.75rem; border-radius: 4px;">Strength</div>
+                <div style="flex: 2; background: #E0F2FE; color: #0369A1; text-align: center; padding: 4px 0; font-weight: 700; font-size: 0.75rem; border-radius: 4px;">Power</div>
+                <div style="flex: 2; background: #F3E8FF; color: #6B21A8; text-align: center; padding: 4px 0; font-weight: 700; font-size: 0.75rem; border-radius: 4px;">Jump Strategy</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with col_legend:
+        legend_table_html = """
+        <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.04); margin-top: 15px;">
+            <div style="background: #0284C7; color: #FFFFFF; text-align: center; padding: 10px 8px; font-weight: 800; font-size: 0.85rem; line-height: 1.2;">
+                Performance Bands<br><span style="font-size: 0.72rem; font-weight: 600; opacity: 0.9;">T-Score Rating</span>
+            </div>
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.75rem; font-weight: 700; text-align: center;">
+                <tr style="background: #15803D; color: #FFFFFF;"><td style="padding: 6px;">Excellent</td><td style="padding: 6px;">&gt; 80</td></tr>
+                <tr style="background: #22C55E; color: #FFFFFF;"><td style="padding: 6px;">Very Good</td><td style="padding: 6px;">70 - 80</td></tr>
+                <tr style="background: #86EFAC; color: #0F172A;"><td style="padding: 6px;">Good</td><td style="padding: 6px;">60 - 70</td></tr>
+                <tr style="background: #BBF7D0; color: #0F172A;"><td style="padding: 6px;">Above Avg.</td><td style="padding: 6px;">55 - 60</td></tr>
+                <tr style="background: #FFFFFF; color: #0F172A; border-top: 1px solid #E2E8F0; border-bottom: 1px solid #E2E8F0;"><td style="padding: 6px;">Average</td><td style="padding: 6px;">45 - 55</td></tr>
+                <tr style="background: #FCA5A5; color: #0F172A;"><td style="padding: 6px;">Below Avg.</td><td style="padding: 6px;">40 - 45</td></tr>
+                <tr style="background: #F25454; color: #FFFFFF;"><td style="padding: 6px;">Poor</td><td style="padding: 6px;">30 - 40</td></tr>
+                <tr style="background: #E50000; color: #FFFFFF;"><td style="padding: 6px;">Very Poor</td><td style="padding: 6px;">20 - 30</td></tr>
+                <tr style="background: #8B0000; color: #FFFFFF;"><td style="padding: 6px;">Extremely Poor</td><td style="padding: 6px;">&lt; 20</td></tr>
+            </table>
+        </div>
+        """
+        st.markdown(legend_table_html, unsafe_allow_html=True)
+        
+
 
 # -----------------------------------------------------------------------------
 # 5. SIDEBAR NAVIGATION (DYNAMIC ROLES)
@@ -1071,11 +1268,16 @@ def render_dashboard_content(season_label, season_key):
             unsafe_allow_html=True,
         )
 
+        # Insert CMJ Performance Standards Chart
+        render_cmj_tscore_standards(selected_player, cmj_raw)
+        st.markdown("<br>", unsafe_allow_html=True)
+
         p_cmj_ind = (
             cmj_data[cmj_data["Name"] == selected_player].sort_values("Date").copy()
             if not cmj_data.empty
             else pd.DataFrame()
         )
+        
         jump_cols_ind = [c for c in p_cmj_ind.columns if "jump" in c.lower() or "height" in c.lower()]
         j_col_ind = jump_cols_ind[0] if jump_cols_ind else None
         rsi_cols_ind = [c for c in p_cmj_ind.columns if "rsi" in c.lower()]
@@ -2147,6 +2349,10 @@ def render_dashboard_content(season_label, season_key):
                 selected_player_t = st.selectbox(
                     "Select Athlete:", roster_players, key=f"cmj_player_select_{season_key}"
                 )
+
+            # Insert CMJ Performance Standards Chart
+            render_cmj_tscore_standards(selected_player_t, cmj_raw)
+            st.markdown("<br>", unsafe_allow_html=True)
 
             p_cmj = (
                 cmj_data[cmj_data["Name"] == selected_player_t]
