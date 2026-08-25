@@ -823,7 +823,7 @@ components.html(
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-season_tab_summer, season_tab_post_summer = st.tabs(["Summer Phase", "Post-Summer Phase"])
+season_tab_summer, season_tab_post_summer = st.tabs(["Summer", "Pre-Season"])
 
 
 # -----------------------------------------------------------------------------
@@ -3133,4 +3133,4 @@ with season_tab_summer:
     render_dashboard_content("Summer", "summer")
 
 with season_tab_post_summer:
-    render_dashboard_content("Post-Summer", "post_summer")
+    render_dashboard_content("Pre-Season", "pre_season")
