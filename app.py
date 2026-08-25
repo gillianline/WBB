@@ -1674,7 +1674,7 @@ def render_dashboard_content(season_label, season_key):
         else:
             st.info(f"No additional assessment logs found for {selected_player} in {season_label}.")
 
-    # TAB 2: PRACTICE SCORE
+   # TAB 2: PRACTICE SCORE
     elif main_tab == "Practice Score":
         c_d, _ = st.columns([1, 3])
         with c_d:
@@ -1683,7 +1683,12 @@ def render_dashboard_content(season_label, season_key):
                 if not vol_data.empty
                 else []
             )
-            session_date = st.selectbox("Select Session Date:", available_dates, format_func=format_date_clean, key=f"sel_ps_date_{season_key}")
+            session_date = st.selectbox(
+                "Select Session Date:",
+                available_dates,
+                format_func=format_date_clean,
+                key=f"sel_ps_date_{season_key}",
+            )
 
         st.markdown("<br>", unsafe_allow_html=True)
 
@@ -1704,8 +1709,9 @@ def render_dashboard_content(season_label, season_key):
                 else "https://via.placeholder.com/70"
             )
 
+            # Pass vol_raw and int_raw so the 30-day rolling window reaches back into Summer
             vol_df, int_df, vol_score, int_score, comb_score, mins, wk, dy = (
-                compute_practice_tables(player_name, str(session_date), vol_data, int_data)
+                compute_practice_tables(player_name, str(session_date), vol_raw, int_raw)
             )
 
             vol_html_table = render_vball_table(vol_df)
@@ -1753,7 +1759,7 @@ def render_dashboard_content(season_label, season_key):
                     </div>
                 </div>
                 <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:6px; text-align:center; margin-top:10px;">
-                    <div style="font-weight:700; color:58595B; font-size:0.75rem;">COMBINED PRACTICE SCORE</div>
+                    <div style="font-weight:700; color:#58595B; font-size:0.75rem;">COMBINED PRACTICE SCORE</div>
                     <div style="font-size:1.4rem; font-weight:800; padding:2px 0; border-radius:6px; background-color:{c_bg}; color:{c_fg}; margin-top:2px; max-width: 200px; margin-left: auto; margin-right: auto;">{comb_score}</div>
                 </div>
             </div>
