@@ -3607,7 +3607,6 @@ def render_team_wellness_content():
     elif "Test Date" in cmj_df.columns:
         cmj_df["Test Date"] = pd.to_datetime(cmj_df["Test Date"], errors="coerce")
 
-    # Available test dates formatted
     team_cmj_dates = (
         cmj_df["Test Date"]
         .dropna()
@@ -3669,7 +3668,6 @@ def render_team_wellness_content():
 
         target_row = ath_date_match.iloc[-1]
 
-        # Look up athlete's chronological previous jump test
         all_indices = list(ath_sub_cmj.index)
         if target_row.name in all_indices:
             cur_pos = all_indices.index(target_row.name)
@@ -3697,7 +3695,6 @@ def render_team_wellness_content():
         moderate_count = sum(1 for r in team_cmj_rows if 80 <= r["Readiness %"] < 90)
         fatigue_count = sum(1 for r in team_cmj_rows if r["Readiness %"] < 80)
 
-        # 4 KPI Summary Cards
         kpi_html = f"""
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 10px; margin-bottom: 20px;">
             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #FF8200; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
@@ -3724,9 +3721,8 @@ def render_team_wellness_content():
         """
         st.markdown(kpi_html, unsafe_allow_html=True)
 
-        # Team Readiness Table
         team_tbl_html = """
-        <table class="vball-table" style="width:100%; border:1px solid #E2E8F0; background:white; margin-top:10px;">
+        <table class="vball-table" style="width:100%; border:1px solid #E2E8F0; background:#FFFFFF; margin-top:10px;">
             <thead>
                 <tr>
                     <th style="width:70px;">Athlete</th>
@@ -3763,8 +3759,6 @@ def render_team_wellness_content():
         st.markdown(team_tbl_html, unsafe_allow_html=True)
     else:
         st.info(f"No Countermovement Jump testing records logged on {format_date_clean(sel_team_cmj_date)}.")
-        
-
 
 # -----------------------------------------------------------------------------
 # 9. TAB ROUTING
