@@ -3218,6 +3218,7 @@ def render_combined_seasons_content():
                 x="Date",
                 y=metric_col,
                 color="Phase",
+                text=metric_col,  # Pass the numeric values as labels
                 markers=True,
                 color_discrete_map=color_map,
                 title=title_label,
@@ -3226,11 +3227,13 @@ def render_combined_seasons_content():
             fig.update_traces(
                 line=dict(width=3.5),
                 marker=dict(size=9, line=dict(width=1.5, color="#0F172A")),
+                textposition="top center",  # Places the number directly above the circle
+                textfont=dict(size=11, color="#0F172A", weight="bold"),
                 hovertemplate="<b>Date:</b> %{x|%b %d, %Y}<br><b>Phase:</b> %{fullData.name}<br><b>Team Avg:</b> %{y:.1f}<extra></extra>",
             )
 
             fig.update_layout(
-                height=350,
+                height=370,
                 margin=dict(l=40, r=40, t=75, b=40),
                 plot_bgcolor="rgba(0,0,0,0)",
                 paper_bgcolor="rgba(0,0,0,0)",
@@ -3269,7 +3272,7 @@ def render_combined_seasons_content():
                     linewidth=1.5,
                     linecolor="#0F172A",
                     tickfont=dict(color="#64748B", size=11),
-                    range=[0, 105],
+                    range=[0, 115],  # Expanded range to prevent top labels from clipping
                 ),
             )
             return fig
