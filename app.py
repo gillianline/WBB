@@ -957,7 +957,7 @@ def render_cmj_tscore_standards(player_name, cmj_all_df, target_date_str=None, a
         st.markdown(legend_table_html, unsafe_allow_html=True)
 
 def get_season_mondays(season_df):
-    """Returns a list of unique Monday date objects that exist within the season data, sorted newest first."""
+    """Returns a sorted list (newest first) of Monday dates present in the season dataset."""
     if not season_df.empty and "Date" in season_df.columns:
         valid_dates = pd.to_datetime(season_df["Date"], errors="coerce").dropna()
         if not valid_dates.empty:
@@ -969,6 +969,24 @@ def get_season_mondays(season_df):
             )
             return sorted(mondays, reverse=True)
     return []
+
+
+def get_season_default_monday(season_data_df, default_monday):
+    """Returns the latest Monday in the season dataset, falling back to default_monday if empty."""
+    mondays = get_season_mondays(season_data_df)
+    return mondays[0] if mondays else default_monday
+
+
+def filter_by_season(df, season_name):
+    if df.empty:
+        return df
+    season_col = next((c for c in df.columns if c.lower() in ["season", "phase"]), None)
+    if season_col:
+        target_norm = season_name.lower().replace("-", "").replace(" ", "").replace("_", "")
+        series_norm = df[season_col].astype(str).str.lower().str.replace("-", "").str.replace(" ", "").str.replace("_", "")
+        filtered = df[series_norm == target_norm]
+        return filtered if not filtered.empty else pd.DataFrame(columns=df.columns)
+    return df
         
 
 
