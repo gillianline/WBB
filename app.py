@@ -1044,8 +1044,8 @@ components.html(
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-season_tab_summer, season_tab_post_summer, season_tab_combined = st.tabs(
-    ["Summer", "Pre-Season", "Combined Seasons"]
+season_tab_summer, season_tab_post_summer, season_tab_combined, season_tab_wellness = st.tabs(
+    ["Summer", "Pre-Season", "Combined Seasons", "Team Wellness"]
 )
 
 
@@ -3538,6 +3538,233 @@ def render_combined_seasons_content():
     else:
         st.info("No combined practice data points calculated.")
 
+# -----------------------------------------------------------------------------
+# 9. TEAM WELLNESS ENGINE
+# -----------------------------------------------------------------------------
+def get_readiness_color(pct_score):
+    if pct_score >= 95:
+        return "#15803D"
+    elif pct_score >= 90:
+        return "#65A30D"
+    elif pct_score >= 80:
+        return "#D97706"
+    elif pct_score >= 70:
+        return "#EA580C"
+    else:
+        return "#B91C1C"
+
+
+readiness_metrics_ref = [
+    {"label": "mRSI", "col": "RSI-modified [m/s]", "alt_col": "RSI [m/s]", "invert": False},
+    {"label": "ECC RFD", "col": "Eccentric Deceleration RFD [N/s]", "alt_col": "Eccentric RFD [N/s]", "invert": False},
+    {"label": "Force @ 0 Velo", "col": "Force at Zero Velocity [N]", "invert": False},
+    {"label": "TTO", "col": "Contraction Time [ms]", "alt_col": "Time to Takeoff [s]", "invert": True},
+    {"label": "ECC Peak Velo", "col": "Eccentric Peak Velocity [m/s]", "invert": False},
+    {"label": "Ecc Peak Power", "col": "Eccentric Peak Power [W]", "invert": False},
+    {"label": "P2:P1 Con Impulse", "col": "P2 Concentric Impulse:P1 Concentric Impulse", "invert": True},
+]
+
+
+def compute_excel_readiness_score(curr_row, prev_row):
+    sub_scores = []
+    for rm in readiness_metrics_ref:
+        c_name = rm["col"] if rm["col"] in curr_row else rm.get("alt_col", rm["col"])
+        if c_name in curr_row and c_name in prev_row:
+            try:
+                t_val = abs(float(pd.to_numeric(curr_row.get(c_name, 0.0), errors="coerce")))
+                s_val = abs(float(pd.to_numeric(prev_row.get(c_name, 0.0), errors="coerce")))
+                if s_val > 0 and t_val > 0:
+                    pct_diff = ((t_val - s_val) / s_val) * 100.0
+                    score = (100.0 - pct_diff) if rm["invert"] else (100.0 + pct_diff)
+                    score = min(100.0, score)
+                    sub_scores.append(max(0.0, score))
+            except Exception:
+                continue
+    if sub_scores:
+        return sum(sub_scores) / len(sub_scores)
+    return 100.0
+
+
+def render_team_wellness_content():
+    st.markdown(
+        "<div style='font-weight:700; color:#64748B; margin-bottom:12px; font-size:0.9rem;'>"
+        "VIEW: <span style='color:#FF8200;'>TEAM READINESS & WELLNESS OVERVIEW</span></div>",
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        '<div class="vball-section-title">Team Wellness & CMJ Readiness Dashboard</div>',
+        unsafe_allow_html=True,
+    )
+
+    if cmj_raw.empty or "Name" not in cmj_raw.columns:
+        st.info("No Countermovement Jump (CMJ) testing dataset available for wellness calculation.")
+        return
+
+    cmj_df = cmj_raw.copy()
+    if "Date" in cmj_df.columns:
+        cmj_df["Test Date"] = pd.to_datetime(cmj_df["Date"], errors="coerce")
+    elif "Test Date" in cmj_df.columns:
+        cmj_df["Test Date"] = pd.to_datetime(cmj_df["Test Date"], errors="coerce")
+
+    # Available test dates formatted
+    team_cmj_dates = (
+        cmj_df["Test Date"]
+        .dropna()
+        .drop_duplicates()
+        .sort_values(ascending=False)
+        .dt.strftime("%Y-%m-%d")
+        .tolist()
+    )
+
+    if not team_cmj_dates:
+        st.info("No valid CMJ testing dates found.")
+        return
+
+    c_sum_d1, c_sum_d2 = st.columns([1.5, 2])
+    with c_sum_d1:
+        sel_team_cmj_date = st.selectbox(
+            "Evaluation Test Date:",
+            team_cmj_dates,
+            index=0,
+            format_func=format_date_clean,
+            key="team_wellness_eval_date",
+        )
+    with c_sum_d2:
+        available_positions = (
+            sorted([p for p in roster_raw["Position"].dropna().unique() if p != "N/A"])
+            if not roster_raw.empty and "Position" in roster_raw.columns
+            else []
+        )
+        team_pos_f = st.selectbox(
+            "Filter by Position:",
+            ["All Positions"] + available_positions,
+            key="team_wellness_pos_filter",
+        )
+
+    team_cmj_rows = []
+    for ath_name in sorted(cmj_df["Name"].dropna().unique()):
+        ath_sub_cmj = cmj_df[cmj_df["Name"] == ath_name].sort_values("Test Date")
+        if ath_sub_cmj.empty:
+            continue
+
+        meta_row = (
+            roster_raw[roster_raw["Name"] == ath_name]
+            if not roster_raw.empty
+            else pd.DataFrame()
+        )
+        pos_str = meta_row["Position"].iloc[0] if not meta_row.empty and "Position" in meta_row else "Athlete"
+        photo_url = (
+            meta_row["Picture"].iloc[0]
+            if not meta_row.empty and "Picture" in meta_row and pd.notna(meta_row["Picture"].iloc[0])
+            else "https://via.placeholder.com/60"
+        )
+
+        if team_pos_f != "All Positions" and pos_str != team_pos_f:
+            continue
+
+        ath_date_match = ath_sub_cmj[ath_sub_cmj["Test Date"].dt.strftime("%Y-%m-%d") == sel_team_cmj_date]
+        if ath_date_match.empty:
+            continue
+
+        target_row = ath_date_match.iloc[-1]
+
+        # Look up athlete's chronological previous jump test
+        all_indices = list(ath_sub_cmj.index)
+        if target_row.name in all_indices:
+            cur_pos = all_indices.index(target_row.name)
+            prev_row = ath_sub_cmj.iloc[max(0, cur_pos - 1)]
+        else:
+            prev_row = target_row
+
+        readiness_pct = int(round(compute_excel_readiness_score(target_row, prev_row)))
+        z_color = get_readiness_color(readiness_pct)
+
+        team_cmj_rows.append(
+            {
+                "Athlete": ath_name,
+                "PhotoURL": photo_url,
+                "Position": pos_str,
+                "Readiness %": readiness_pct,
+                "Status_Color": z_color,
+            }
+        )
+
+    if team_cmj_rows:
+        cmj_team_df = pd.DataFrame(team_cmj_rows).sort_values("Readiness %", ascending=False)
+        avg_team_readiness = cmj_team_df["Readiness %"].mean()
+        peak_count = sum(1 for r in team_cmj_rows if r["Readiness %"] >= 90)
+        moderate_count = sum(1 for r in team_cmj_rows if 80 <= r["Readiness %"] < 90)
+        fatigue_count = sum(1 for r in team_cmj_rows if r["Readiness %"] < 80)
+
+        # 4 KPI Summary Cards
+        kpi_html = f"""
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 10px; margin-bottom: 20px;">
+            <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #FF8200; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Athletes Evaluated</div>
+                <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{len(team_cmj_rows)}</div>
+                <div style="font-size: 0.68rem; color: #94A3B8;">Tested on {format_date_clean(sel_team_cmj_date)}</div>
+            </div>
+            <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #38BDF8; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Team Mean Wellness</div>
+                <div style="font-size: 1.8rem; font-weight: 800; color: {get_readiness_color(avg_team_readiness)}; margin-top: 4px;">{avg_team_readiness:.1f}%</div>
+                <div style="font-size: 0.68rem; color: #94A3B8;">Average Readiness</div>
+            </div>
+            <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #22C55E; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Optimal (≥90%)</div>
+                <div style="font-size: 1.8rem; font-weight: 800; color: #15803D; margin-top: 4px;">{peak_count}</div>
+                <div style="font-size: 0.68rem; color: #94A3B8;">Peak Neuromuscular Output</div>
+            </div>
+            <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #EF4444; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Fatigued (&lt;80%)</div>
+                <div style="font-size: 1.8rem; font-weight: 800; color: #B91C1C; margin-top: 4px;">{fatigue_count}</div>
+                <div style="font-size: 0.68rem; color: #94A3B8;">Requires Recovery Attention</div>
+            </div>
+        </div>
+        """
+        st.markdown(kpi_html, unsafe_allow_html=True)
+
+        # Team Readiness Table
+        team_tbl_html = """
+        <table class="vball-table" style="width:100%; border:1px solid #E2E8F0; background:white; margin-top:10px;">
+            <thead>
+                <tr>
+                    <th style="width:70px;">Athlete</th>
+                    <th style="text-align:left !important; padding-left:18px;">Name</th>
+                    <th>Position</th>
+                    <th>Wellness Score</th>
+                    <th>Readiness Status</th>
+                </tr>
+            </thead>
+            <tbody>
+        """
+        for _, row in cmj_team_df.iterrows():
+            r_val = row["Readiness %"]
+            status_text = (
+                "Optimal Readiness" if r_val >= 90 else ("Moderate Fatigue" if r_val >= 80 else "High Fatigue Risk")
+            )
+            badge_bg = (
+                "#DCFCE7" if r_val >= 90 else ("#FEF3C7" if r_val >= 80 else "#FEE2E2")
+            )
+            badge_fg = (
+                "#15803D" if r_val >= 90 else ("#B45309" if r_val >= 80 else "#B91C1C")
+            )
+
+            team_tbl_html += f"""
+            <tr>
+                <td style="padding:6px;"><img src="{row['PhotoURL']}" style="width:40px; height:40px; border-radius:50%; object-fit:cover; border:2px solid #FF8200;"></td>
+                <td style="text-align:left !important; font-weight:800; padding-left:18px; font-size:0.92rem; color:#0F172A;">{row['Athlete']}</td>
+                <td style="font-weight:600; color:#64748B;">{row['Position']}</td>
+                <td style="font-weight:900; font-size:1.15rem; color:{row['Status_Color']};">{r_val}%</td>
+                <td><span style="background-color:{badge_bg}; color:{badge_fg}; padding:4px 10px; border-radius:12px; font-weight:700; font-size:0.75rem;">{status_text}</span></td>
+            </tr>
+            """
+        team_tbl_html += "</tbody></table>"
+        st.markdown(team_tbl_html, unsafe_allow_html=True)
+    else:
+        st.info(f"No Countermovement Jump testing records logged on {format_date_clean(sel_team_cmj_date)}.")
+        
+
 
 # -----------------------------------------------------------------------------
 # 9. TAB ROUTING
@@ -3550,3 +3777,6 @@ with season_tab_post_summer:
 
 with season_tab_combined:
     render_combined_seasons_content()
+
+with season_tab_wellness:
+    render_team_wellness_content()
