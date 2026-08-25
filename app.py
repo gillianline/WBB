@@ -742,15 +742,28 @@ def render_metric_subcard_html(p_comp, col_name, display_title, unit):
     </div>
     """
 
-def render_cmj_tscore_standards(player_name, cmj_all_df):
+def render_cmj_tscore_standards(player_name, cmj_all_df, target_date_str=None, widget_key_suffix=""):
     if cmj_all_df.empty or "Name" not in cmj_all_df.columns:
         st.info("No Countermovement Jump (CMJ) dataset available.")
         return
 
-    # Clean numeric columns across the entire master dataset (all seasons combined)
     df = cmj_all_df.copy()
 
-    # Metric column mapping
+    # Filter athlete jumps across all historical data
+    p_jumps = df[df["Name"] == player_name].sort_values("Date")
+    if p_jumps.empty:
+        st.info(f"No CMJ records found for {player_name}.")
+        return
+
+    # Select jump by target date, fallback to latest jump
+    if target_date_str and target_date_str != "Latest":
+        jump_row_df = p_jumps[p_jumps["Date_Str"] == target_date_str]
+        active_jump = jump_row_df.iloc[-1] if not jump_row_df.empty else p_jumps.iloc[-1]
+    else:
+        active_jump = p_jumps.iloc[-1]
+
+    active_date_str = format_date_clean(active_jump.get("Date"))
+
     metric_configs = [
         ("Jump Height", ["Jump Height (cm)", "Jump Height", "Height"]),
         ("Jump Momentum", ["Take-off Momentum [kg m/s]", "Take-off Momentum", "Jump Momentum"]),
@@ -780,24 +793,14 @@ def render_cmj_tscore_standards(player_name, cmj_all_df):
         st.info("CMJ metric columns not detected in the dataset.")
         return
 
-    # Filter athlete's most recent jump across all time
-    p_jumps = df[df["Name"] == player_name].sort_values("Date")
-    if p_jumps.empty:
-        st.info(f"No CMJ records found for {player_name}.")
-        return
-
-    latest_jump = p_jumps.iloc[-1]
-    latest_date_str = format_date_clean(latest_jump.get("Date"))
-
     labels, t_scores, text_labels = [], [], []
 
     for label, col in resolved_metrics:
         pop_mean = df[col].mean()
         pop_std = df[col].std()
-        val = latest_jump[col]
+        val = active_jump[col]
 
         if pd.notna(val) and pd.notna(pop_mean) and pd.notna(pop_std) and pop_std > 0:
-            # T-Score formula: 50 + 10 * Z-Score
             t_score = 50.0 + 10.0 * ((val - pop_mean) / pop_std)
             t_score = max(0.0, min(100.0, t_score))
         else:
@@ -807,20 +810,18 @@ def render_cmj_tscore_standards(player_name, cmj_all_df):
         t_scores.append(round(t_score, 1))
         text_labels.append(f"{t_score:.1f}")
 
-    # Plotly Figure Layout
     fig = go.Figure()
 
-    # Add background performance color bands
     bands = [
-        (0, 20, "#8B0000"),    # Extremely Poor
-        (20, 30, "#E50000"),   # Very Poor
-        (30, 40, "#F25454"),   # Poor
-        (40, 45, "#FCA5A5"),   # Below Avg.
-        (45, 55, "#FFFFFF"),   # Average
-        (55, 60, "#BBF7D0"),   # Above Avg.
-        (60, 70, "#86EFAC"),   # Good
-        (70, 80, "#22C55E"),   # Very Good
-        (80, 100, "#15803D"),  # Excellent
+        (0, 20, "#8B0000"),
+        (20, 30, "#E50000"),
+        (30, 40, "#F25454"),
+        (40, 45, "#FCA5A5"),
+        (45, 55, "#FFFFFF"),
+        (55, 60, "#BBF7D0"),
+        (60, 70, "#86EFAC"),
+        (70, 80, "#22C55E"),
+        (80, 100, "#15803D"),
     ]
 
     for y0, y1, color in bands:
@@ -837,7 +838,6 @@ def render_cmj_tscore_standards(player_name, cmj_all_df):
             line_width=0,
         )
 
-    # Add T-Score Bars
     fig.add_trace(
         go.Bar(
             x=labels,
@@ -885,7 +885,6 @@ def render_cmj_tscore_standards(player_name, cmj_all_df):
         ),
     )
 
-    # Layout: Chart + Legend Side-by-Side
     col_graph, col_legend = st.columns([3.8, 1.2])
 
     with col_graph:
@@ -896,15 +895,14 @@ def render_cmj_tscore_standards(player_name, cmj_all_df):
                     COUNTERMOVEMENT JUMP PERFORMANCE STANDARDS
                 </span>
                 <span style="color:#64748B; font-size:0.85rem; font-weight:600; margin-left:12px;">
-                    (Latest Jump: {latest_date_str})
+                    (Session Date: {active_date_str})
                 </span>
             </div>
             """,
             unsafe_allow_html=True,
         )
-        st.plotly_chart(fig, use_container_width=True, key=f"cmj_tscore_fig_{player_name.replace(' ','_')}_{np.random.randint(100000)}")
+        st.plotly_chart(fig, use_container_width=True, key=f"cmj_tscore_fig_{player_name.replace(' ','_')}_{widget_key_suffix}")
 
-        # Category Grouping Badges under X-Axis
         st.markdown(
             """
             <div style="display: flex; gap: 8px; width: 100%; margin-top: -30px; margin-bottom: 15px; padding-left: 45px;">
@@ -1071,10 +1069,31 @@ def render_dashboard_content(season_label, season_key):
 
     # TAB 1: INDIVIDUAL PROFILE
     if main_tab == "Individual Profile":
-        c_sel, _ = st.columns([1, 2])
+        c_sel, c_dt_top = st.columns(2)
         with c_sel:
             selected_player = st.selectbox(
                 "Select Athlete Profile:", roster_players, key=f"sel_player_{season_key}"
+            )
+
+        # Retrieve unique dates across both practice and testing logs for this athlete
+        ath_p_dates = (
+            vol_data[vol_data["Player"] == selected_player]["Date_Str"].dropna().unique().tolist()
+            if not vol_data.empty
+            else []
+        )
+        ath_cmj_dates = (
+            cmj_raw[cmj_raw["Name"] == selected_player]["Date_Str"].dropna().unique().tolist()
+            if not cmj_raw.empty and "Name" in cmj_raw.columns
+            else []
+        )
+        combined_ath_dates = sorted(list(set(ath_p_dates + ath_cmj_dates)), reverse=True)
+
+        with c_dt_top:
+            selected_ind_date = st.selectbox(
+                "Select Profile Session Date:",
+                options=combined_ath_dates if combined_ath_dates else ["No dates found"],
+                format_func=format_date_clean,
+                key=f"sel_ind_top_date_{season_key}",
             )
 
         p_row = (
@@ -1106,7 +1125,7 @@ def render_dashboard_content(season_label, season_key):
             unsafe_allow_html=True,
         )
 
-        # 1. Workload Exposure & Compliance Grid (Overall Maxes across all seasons)
+        # 1. Workload Exposure & Compliance Grid
         st.markdown(
             '<div class="vball-section-title">1. Workload Exposure & Compliance Grid</div>',
             unsafe_allow_html=True,
@@ -1188,23 +1207,24 @@ def render_dashboard_content(season_label, season_key):
             else:
                 st.info(f"No practice scores recorded for {selected_player} in {season_label}.")
 
-        latest_date_str = (
-            vol_data[vol_data["Player"] == selected_player]["Date_Str"].max()
-            if not vol_data.empty
-            else None
+        # Active date for practice table (uses top date selector if recorded, or latest available)
+        active_p_date = (
+            selected_ind_date
+            if selected_ind_date in ath_p_dates
+            else (ath_p_dates[0] if ath_p_dates else None)
         )
 
-        if pd.notna(latest_date_str):
+        if active_p_date:
             vol_df, int_df, vol_score, int_score, comb_score, mins, wk, dy = (
-                compute_practice_tables(selected_player, latest_date_str, vol_raw, int_raw)
+                compute_practice_tables(selected_player, active_p_date, vol_raw, int_raw)
             )
 
             wk_str = str(wk).replace("Week ", "")
             dy_str = str(dy).replace("Day ", "")
-            clean_date = format_date_clean(latest_date_str)
+            clean_date = format_date_clean(active_p_date)
 
             with col_g2:
-                st.markdown(f"#### Latest Practice Metrics ({clean_date})")
+                st.markdown(f"#### Practice Metrics ({clean_date})")
                 st.markdown(
                     f"""
                         <div style="margin-bottom: 12px; display: flex; gap: 10px;">
@@ -1268,117 +1288,14 @@ def render_dashboard_content(season_label, season_key):
             unsafe_allow_html=True,
         )
 
-        # Insert CMJ Performance Standards Chart
-        render_cmj_tscore_standards(selected_player, cmj_raw)
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        p_cmj_ind = (
-            cmj_data[cmj_data["Name"] == selected_player].sort_values("Date").copy()
-            if not cmj_data.empty
-            else pd.DataFrame()
+        # CMJ Standards driven by the top date selector
+        render_cmj_tscore_standards(
+            selected_player,
+            cmj_raw,
+            target_date_str=selected_ind_date,
+            widget_key_suffix=f"ind_{season_key}"
         )
-        
-        jump_cols_ind = [c for c in p_cmj_ind.columns if "jump" in c.lower() or "height" in c.lower()]
-        j_col_ind = jump_cols_ind[0] if jump_cols_ind else None
-        rsi_cols_ind = [c for c in p_cmj_ind.columns if "rsi" in c.lower()]
-        rsi_col_ind = rsi_cols_ind[0] if rsi_cols_ind else None
-
-        if not p_cmj_ind.empty and j_col_ind:
-            p_cmj_ind["Jump_Height_Clean"] = pd.to_numeric(
-                p_cmj_ind[j_col_ind].astype(str).str.replace(r"[^0-9.]", "", regex=True),
-                errors="coerce",
-            )
-
-            fig_jump_trend = go.Figure()
-            fig_jump_trend.add_trace(
-                go.Scatter(
-                    x=p_cmj_ind["Date"],
-                    y=p_cmj_ind["Jump_Height_Clean"],
-                    name="Jump Height",
-                    mode="lines+markers",
-                    connectgaps=True,
-                    yaxis="y",
-                    line=dict(color="#FF8200", width=4),
-                    marker=dict(size=8, color="#FF8200"),
-                )
-            )
-
-            if rsi_col_ind:
-                p_cmj_ind["RSI_Clean"] = pd.to_numeric(
-                    p_cmj_ind[rsi_col_ind].astype(str).str.replace(r"[^0-9.]", "", regex=True),
-                    errors="coerce",
-                )
-                fig_jump_trend.add_trace(
-                    go.Scatter(
-                        x=p_cmj_ind["Date"],
-                        y=p_cmj_ind["RSI_Clean"],
-                        name="RSI Modified",
-                        mode="lines+markers",
-                        connectgaps=True,
-                        yaxis="y2",
-                        line=dict(color="#38BDF8", width=3, dash="dot"),
-                        marker=dict(size=8, color="#38BDF8"),
-                    )
-                )
-
-            fig_jump_trend.update_layout(
-                height=300,
-                margin=dict(l=40, r=40, t=40, b=40),
-                plot_bgcolor="rgba(0,0,0,0)",
-                paper_bgcolor="rgba(0,0,0,0)",
-                legend=dict(
-                    orientation="h",
-                    yanchor="bottom",
-                    y=1.08,
-                    xanchor="left",
-                    x=0.01,
-                    font=dict(size=13, color="#0F172A"),
-                ),
-                xaxis=dict(
-                    title=None,
-                    type="date",
-                    tickformat="%b %d\n%Y",
-                    showgrid=False,
-                    showline=True,
-                    linewidth=1.5,
-                    linecolor="#0F172A",
-                    tickfont=dict(color="#64748B", size=12),
-                ),
-                yaxis=dict(
-                    showgrid=False,
-                    showline=True,
-                    linewidth=1.5,
-                    linecolor="#0F172A",
-                    tickfont=dict(color="#64748B", size=12),
-                    side="left",
-                ),
-                yaxis2=dict(
-                    showgrid=False,
-                    showline=True,
-                    linewidth=1.5,
-                    linecolor="#0F172A",
-                    tickfont=dict(color="#64748B", size=12),
-                    overlaying="y",
-                    side="right",
-                    anchor="x",
-                ),
-            )
-            st.plotly_chart(fig_jump_trend, use_container_width=True, key=f"jump_chart_{season_key}")
-
-            with st.expander(f"View Raw CMJ Data Log for {selected_player} ({season_label})"):
-                display_cols_ind = [
-                    c for c in p_cmj_ind.columns if c not in ["Name", "Date_Str", "Jump_Height_Clean", "RSI_Clean"]
-                ]
-                # Slice columns up to CMJ Stiffness
-                stiffness_col = next((c for c in display_cols_ind if "stiffness" in c.lower()), None)
-                if stiffness_col:
-                    end_idx = display_cols_ind.index(stiffness_col) + 1
-                    display_cols_ind = display_cols_ind[:end_idx]
-
-                st.markdown(render_vball_table(p_cmj_ind[display_cols_ind]), unsafe_allow_html=True)
-                
-        else:
-            st.info(f"No CMJ jump data recorded for {selected_player} during {season_label}.")
+        st.markdown("<br>", unsafe_allow_html=True)
 
         st.divider()
 
@@ -2347,18 +2264,39 @@ def render_dashboard_content(season_label, season_key):
         # SECTION 5B: CMJ TAB
         with testing_tab_cmj:
             st.markdown(
-                f'<div class="vball-section-title">CMJ History — {season_label}</div>',
+                f'<div class="vball-section-title">CMJ Performance Standards & History — {season_label}</div>',
                 unsafe_allow_html=True,
             )
 
-            c_filter, _ = st.columns([1, 2])
+            c_filter, c_cmj_dt = st.columns(2)
             with c_filter:
                 selected_player_t = st.selectbox(
                     "Select Athlete:", roster_players, key=f"cmj_player_select_{season_key}"
                 )
 
-            # Insert CMJ Performance Standards Chart
-            render_cmj_tscore_standards(selected_player_t, cmj_raw)
+            # Available CMJ jump dates for the selected athlete across all time
+            ath_all_jumps = (
+                cmj_raw[cmj_raw["Name"] == selected_player_t].sort_values("Date")
+                if not cmj_raw.empty and "Name" in cmj_raw.columns
+                else pd.DataFrame()
+            )
+            avail_cmj_dates = ath_all_jumps["Date_Str"].dropna().unique().tolist()[::-1] if not ath_all_jumps.empty else []
+
+            with c_cmj_dt:
+                selected_cmj_test_date = st.selectbox(
+                    "Select CMJ Test Date:",
+                    options=avail_cmj_dates if avail_cmj_dates else ["No jumps recorded"],
+                    format_func=format_date_clean,
+                    key=f"cmj_test_top_date_sel_{season_key}",
+                )
+
+            # Render CMJ Performance Standards Chart driven by the selected date
+            render_cmj_tscore_standards(
+                selected_player_t,
+                cmj_raw,
+                target_date_str=selected_cmj_test_date,
+                widget_key_suffix=f"testing_{season_key}"
+            )
             st.markdown("<br>", unsafe_allow_html=True)
 
             p_cmj = (
@@ -2461,7 +2399,6 @@ def render_dashboard_content(season_label, season_key):
                 display_cols = [
                     c for c in p_cmj.columns if c not in ["Name", "Date_Str", "Jump_Height_Clean", "RSI_Clean"]
                 ]
-                # Slice columns up to CMJ Stiffness
                 stiffness_col = next((c for c in display_cols if "stiffness" in c.lower()), None)
                 if stiffness_col:
                     end_idx = display_cols.index(stiffness_col) + 1
@@ -2469,9 +2406,9 @@ def render_dashboard_content(season_label, season_key):
 
                 st.markdown(f"### Jump History Logs for {selected_player_t} ({season_label})")
                 st.markdown(render_vball_table(p_cmj[display_cols]), unsafe_allow_html=True)
-                
             else:
                 st.info(f"No Countermovement Jump (CMJ) logs found for {selected_player_t} in {season_label}.")
+                
 
         # SECTION 5C: OVERALL PROFILE
         with testing_tab_overall:
