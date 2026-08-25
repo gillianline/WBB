@@ -681,7 +681,7 @@ def render_metric_subcard_html(p_comp_season, p_comp_all, col_name, display_titl
     if valid_season_df.empty:
         return ""
 
-    # All-time max benchmark
+    # All-time max benchmark across all history
     valid_all_df = p_comp_all.dropna(subset=[col_name]) if not p_comp_all.empty and col_name in p_comp_all.columns else valid_season_df
     all_time_max = valid_all_df[col_name].max() if not valid_all_df.empty else valid_season_df[col_name].max()
     max_row = valid_all_df[valid_all_df[col_name] == all_time_max].iloc[-1]
@@ -697,18 +697,19 @@ def render_metric_subcard_html(p_comp_season, p_comp_all, col_name, display_titl
         if all_time_max > 0
         else "-- %"
     )
-    
-    # Calculate days elapsed using Eastern Time date
-    today_dt = get_eastern_now().date()
-    recent_dt = pd.to_datetime(recent_date).date()
-    max_dt = pd.to_datetime(max_date).date()
 
-    days_since_recent = max(0, (today_dt - recent_dt).days)
-    days_since_max = max(0, (today_dt - max_dt).days)
+    # Calculate days elapsed between the Max date and Recent date
+    recent_dt = pd.to_datetime(recent_date, errors="coerce")
+    max_dt = pd.to_datetime(max_date, errors="coerce")
 
-    # Green if logged within 7 days, Red if older
-    badge_bg = "#BBF7D0" if days_since_recent <= 7 else "#FFD6D6"
-    badge_fg = "#166534" if days_since_recent <= 7 else "#991B1B"
+    if pd.notna(recent_dt) and pd.notna(max_dt):
+        days_gap = abs((recent_dt - max_dt).days)
+    else:
+        days_gap = 0
+
+    # Green if recent session matches max or occurred within 7 days of max
+    badge_bg = "#BBF7D0" if days_gap <= 7 else "#FFD6D6"
+    badge_fg = "#166534" if days_gap <= 7 else "#991B1B"
 
     val_str = (
         f"{recent_val:.1f}{(' ' + unit) if unit else ''}"
@@ -726,7 +727,7 @@ def render_metric_subcard_html(p_comp_season, p_comp_all, col_name, display_titl
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
             <h5 style="margin:0; font-size:0.95rem; color:#0F172A; font-weight:700;">{display_title}</h5>
             <div style="background-color:{badge_bg}; color:{badge_fg}; font-weight:700; padding:2px 8px; border-radius:10px; font-size:0.7rem;">
-                {days_since_recent} Days Ago
+                {days_gap} Days
             </div>
         </div>
         <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
@@ -746,14 +747,14 @@ def render_metric_subcard_html(p_comp_season, p_comp_all, col_name, display_titl
                 <div class="compliance-metric-sub">Recent vs. Peak</div>
             </div>
             <div class="compliance-metric-card">
-                <div class="compliance-metric-label">Peak Recency</div>
-                <div class="compliance-metric-value">{days_since_max} Days</div>
-                <div class="compliance-metric-sub">Since Max Achieved</div>
+                <div class="compliance-metric-label">Recency Status</div>
+                <div class="compliance-metric-value">{days_gap} Days</div>
+                <div class="compliance-metric-sub">Elapsed Threshold</div>
             </div>
         </div>
     </div>
     """
-
+    
 def render_cmj_tscore_standards(player_name, cmj_all_df, target_date_str=None, active_season_label=None, widget_key_suffix=""):
     if cmj_all_df.empty or "Name" not in cmj_all_df.columns:
         st.info("No Countermovement Jump (CMJ) dataset available.")
