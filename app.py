@@ -1560,6 +1560,8 @@ def render_dashboard_content(season_label, season_key):
 
         if not p_ind_track_wk.empty:
             st.markdown(f"#### Daily Breakdown for Week of {sel_ind_mon_str}")
+            
+            # Pivot data: Rows = Metric, Columns = Date
             pivot_ind_track = p_ind_track_wk.pivot_table(
                 index="Metric",
                 columns="Date",
@@ -1567,11 +1569,48 @@ def render_dashboard_content(season_label, season_key):
                 aggfunc="sum",
                 fill_value=0
             )
+            
+            # Add Total Column
             pivot_ind_track["Total"] = pivot_ind_track.sum(axis=1)
-            st.dataframe(pivot_ind_track, use_container_width=True)
+            
+            # Format Date Columns to "Day (MM/DD)"
+            formatted_cols = {}
+            for col in pivot_ind_track.columns:
+                if col != "Total":
+                    try:
+                        formatted_cols[col] = pd.to_datetime(col).strftime("%a (%m/%d)")
+                    except Exception:
+                        formatted_cols[col] = str(col)
+                else:
+                    formatted_cols[col] = "Total"
+                    
+            pivot_display = pivot_ind_track.rename(columns=formatted_cols).reset_index()
+
+            # Generate Styled Custom HTML Table
+            html_table = '<table class="vball-table" style="margin-top: 10px;"><thead><tr>'
+            for col in pivot_display.columns:
+                bg_style = "background-color: #FF8200; color: #FFFFFF;" if col == "Total" else "background-color: #F1F5F9; color: #475569;"
+                html_table += f'<th style="{bg_style}">{col}</th>'
+            html_table += "</tr></thead><tbody>"
+
+            for _, row in pivot_display.iterrows():
+                html_table += "<tr>"
+                for col in pivot_display.columns:
+                    val = row[col]
+                    if col == "Metric":
+                        html_table += f'<td style="font-weight: 700; text-align: left !important; padding-left: 16px;">{val}</td>'
+                    elif col == "Total":
+                        html_table += f'<td><span style="background-color: #FF8200; color: #FFFFFF; font-weight: 800; padding: 2px 10px; border-radius: 6px;">{val}</span></td>'
+                    else:
+                        val_display = f'<span style="font-weight: 600; color: #0F172A;">{val}</span>' if val > 0 else '<span style="color: #94A3B8;">0</span>'
+                        html_table += f"<td>{val_display}</td>"
+                html_table += "</tr>"
+            html_table += "</tbody></table>"
+
+            st.markdown(html_table, unsafe_allow_html=True)
         else:
             st.info(f"No in-practice tracking metrics logged for {selected_player} during the week of {sel_ind_mon_str}.")
-
+            
         st.divider()
 
         # SECTION 7: ASSESSMENT RECORDS
