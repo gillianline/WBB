@@ -830,7 +830,9 @@ components.html(
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-season_tab_summer, season_tab_post_summer = st.tabs(["Summer", "Pre-Season"])
+season_tab_summer, season_tab_post_summer, season_tab_combined = st.tabs(
+    ["Summer", "Pre-Season", "Combined Seasons"]
+)
 
 
 # -----------------------------------------------------------------------------
@@ -3134,6 +3136,130 @@ def render_dashboard_content(season_label, season_key):
             else:
                 st.info(f"No tracking data recorded for the week of {track_week_str}.")
 
+                def render_combined_seasons_content():
+    st.markdown(
+        "<div style='font-weight:700; color:#64748B; margin-bottom:12px; font-size:0.9rem;'>"
+        "VIEW: <span style='color:#FF8200;'>COMBINED SEASONS (SUMMER & PRE-SEASON)</span></div>",
+        unsafe_allow_html=True,
+    )
+
+    # 1. Practice Score Daily Team Averages Graph
+    st.markdown(
+        '<div class="vball-section-title">Team Daily Combined Practice Score Averages</div>',
+        unsafe_allow_html=True,
+    )
+
+    if vol_raw.empty or int_raw.empty:
+        st.info("No practice session data available to calculate team combined scores.")
+        return
+
+    # Combine practice volume and intensity dates
+    combined_dates_df = (
+        vol_raw[["Date", "Date_Str", "Player"]].dropna(subset=["Date", "Date_Str"]).drop_duplicates()
+    )
+
+    if combined_dates_df.empty:
+        st.info("No session records found.")
+        return
+
+    daily_team_scores = []
+    season_col = next((c for c in vol_raw.columns if c.lower() in ["season", "phase"]), None)
+
+    for (d_str, dt), group in combined_dates_df.groupby(["Date_Str", "Date"]):
+        players = group["Player"].unique()
+        day_combined_scores = []
+
+        for p in players:
+            _, _, _, _, comb_sc, _, _, _ = compute_practice_tables(p, d_str, vol_raw, int_raw)
+            day_combined_scores.append(comb_sc)
+
+        if day_combined_scores:
+            avg_score = round(float(np.mean(day_combined_scores)), 1)
+            
+            # Determine Phase/Season
+            phase = "Summer"
+            if season_col and season_col in vol_raw.columns:
+                phase_vals = vol_raw[vol_raw["Date_Str"] == d_str][season_col].dropna().values
+                if len(phase_vals) > 0:
+                    raw_p = str(phase_vals[0]).lower().replace("-", "").replace(" ", "")
+                    phase = "Pre-Season" if "pre" in raw_p else "Summer"
+
+            daily_team_scores.append(
+                {
+                    "Date": dt,
+                    "Date_Str": format_date_clean(d_str),
+                    "Phase": phase,
+                    "Team Combined Score": avg_score,
+                }
+            )
+
+    df_comb_timeline = pd.DataFrame(daily_team_scores).sort_values("Date")
+
+    if not df_comb_timeline.empty:
+        # High-definition color mapping: Summer (Tennessee Orange) vs Pre-Season (Tennessee Sky Blue)
+        color_map = {"Summer": "#FF8200", "Pre-Season": "#38BDF8"}
+
+        fig_combined = px.line(
+            df_comb_timeline,
+            x="Date",
+            y="Team Combined Score",
+            color="Phase",
+            markers=True,
+            color_discrete_map=color_map,
+            title="Team Average Daily Combined Practice Score (Summer vs. Pre-Season)",
+        )
+
+        fig_combined.update_traces(
+            line=dict(width=3.5),
+            marker=dict(size=9, line=dict(width=1.5, color="#0F172A")),
+            hovertemplate="<b>Date:</b> %{x|%b %d, %Y}<br><b>Phase:</b> %{fullData.name}<br><b>Team Avg:</b> %{y:.1f}<extra></extra>",
+        )
+
+        fig_combined.update_layout(
+            height=380,
+            margin=dict(l=40, r=40, t=50, b=40),
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)",
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.04,
+                xanchor="left",
+                x=0.01,
+                font=dict(size=12, color="#0F172A", weight="bold"),
+            ),
+            xaxis=dict(
+                title=None,
+                type="date",
+                tickformat="%b %d\n%Y",
+                showgrid=False,
+                showline=True,
+                linewidth=1.5,
+                linecolor="#0F172A",
+                tickfont=dict(color="#64748B", size=11),
+            ),
+            yaxis=dict(
+                title="Score",
+                showgrid=True,
+                gridcolor="#F1F5F9",
+                showline=True,
+                linewidth=1.5,
+                linecolor="#0F172A",
+                tickfont=dict(color="#64748B", size=11),
+                range=[0, 105],
+            ),
+        )
+
+        st.plotly_chart(fig_combined, use_container_width=True, key="combined_practice_trend_chart")
+
+        with st.expander("View Daily Team Combined Practice Score Summary Table"):
+            display_tbl = df_comb_timeline[["Date_Str", "Phase", "Team Combined Score"]].rename(
+                columns={"Date_Str": "Date", "Team Combined Score": "Team Avg Combined Score"}
+            )
+            st.markdown(render_vball_table(display_tbl), unsafe_allow_html=True)
+    else:
+        st.info("No combined practice data points calculated.")
+
 
 # -----------------------------------------------------------------------------
 # 8. TAB ROUTING
@@ -3143,3 +3269,6 @@ with season_tab_summer:
 
 with season_tab_post_summer:
     render_dashboard_content("Pre-Season", "pre_season")
+
+with season_tab_combined:
+    render_combined_seasons_content()
