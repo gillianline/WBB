@@ -3559,54 +3559,46 @@ def render_combined_seasons_content():
     df_comb_timeline = pd.DataFrame(daily_team_scores).sort_values("Date")
 
     if not df_comb_timeline.empty:
-        line_color_map = {"Summer": "#FF8200", "Pre-Season": "#38BDF8"}
-        marker_color_map = {"Practice": "#10B981", "Conditioning": "#8B5CF6"}
+        # Markers: Orange for Practice, Blue for Conditioning
+        marker_color_map = {"Practice": "#FF8200", "Conditioning": "#38BDF8"}
 
         def create_custom_timeline_chart(metric_col, title_label):
             fig = go.Figure()
 
-            for phase_name, p_group in df_comb_timeline.groupby("Phase"):
-                line_color = line_color_map.get(phase_name, "#64748B")
-                point_colors = [marker_color_map.get(t, "#10B981") for t in p_group["Type"]]
+            # Main black line connecting all session points
+            fig.add_trace(
+                go.Scatter(
+                    x=df_comb_timeline["Date"],
+                    y=df_comb_timeline[metric_col],
+                    mode="lines",
+                    line=dict(color="#0F172A", width=3),
+                    showlegend=False,
+                    hoverinfo="skip",
+                )
+            )
+
+            # Scatter points categorized by Type for clean color grouping & legend
+            for type_name, t_group in df_comb_timeline.groupby("Type"):
+                pt_color = marker_color_map.get(type_name, "#FF8200")
 
                 fig.add_trace(
                     go.Scatter(
-                        x=p_group["Date"],
-                        y=p_group[metric_col],
-                        name=f"{phase_name}",
-                        mode="lines+markers+text",
-                        line=dict(color=line_color, width=3.5),
+                        x=t_group["Date"],
+                        y=t_group[metric_col],
+                        name=f"{type_name}",
+                        mode="markers+text",
                         marker=dict(
-                            size=11,
-                            color=point_colors,
+                            size=12,
+                            color=pt_color,
                             line=dict(width=2, color="#0F172A"),
                         ),
-                        text=p_group[metric_col],
+                        text=t_group[metric_col],
                         textposition="top center",
                         textfont=dict(size=11, color="#0F172A", family="Arial Black, sans-serif"),
-                        customdata=p_group[["Phase", "Type"]],
-                        hovertemplate="<b>Date:</b> %{x|%b %d, %Y}<br><b>Phase:</b> %{customdata[0]}<br><b>Type:</b> %{customdata[1]}<br><b>Team Avg:</b> %{y:.1f}<extra></extra>",
+                        customdata=t_group[["Phase", "Type"]],
+                        hovertemplate="<b>Date:</b> %{x|%b %d, %Y}<br><b>Phase:</b> %{customdata[0]}<br><b>Type:</b> %{customdata[1]}<br><b>Score:</b> %{y:.1f}<extra></extra>",
                     )
                 )
-
-            fig.add_trace(
-                go.Scatter(
-                    x=[None], y=[None],
-                    mode="markers",
-                    name="Practice",
-                    marker=dict(size=10, color=marker_color_map["Practice"], line=dict(width=1.5, color="#0F172A")),
-                    showlegend=True,
-                )
-            )
-            fig.add_trace(
-                go.Scatter(
-                    x=[None], y=[None],
-                    mode="markers",
-                    name="Conditioning",
-                    marker=dict(size=10, color=marker_color_map["Conditioning"], line=dict(width=1.5, color="#0F172A")),
-                    showlegend=True,
-                )
-            )
 
             fig.update_layout(
                 height=370,
@@ -3652,6 +3644,7 @@ def render_combined_seasons_content():
             )
             return fig
 
+        # 1. Main Combined Score Graph (Full Width)
         fig_combined = create_custom_timeline_chart(
             "Team Combined Score",
             "Team Average Combined Practice Score (Summer vs. Pre-Season)",
@@ -3660,6 +3653,7 @@ def render_combined_seasons_content():
 
         st.markdown("<br>", unsafe_allow_html=True)
 
+        # 2. Volume and Intensity Score Graphs (Side-by-Side)
         col_v_g, col_i_g = st.columns(2)
 
         with col_v_g:
@@ -3676,6 +3670,7 @@ def render_combined_seasons_content():
             )
             st.plotly_chart(fig_int, use_container_width=True, key="comb_chart_int")
 
+        # 3. Data Breakdown Table
         with st.expander("View Daily Team Practice Score Summary Table"):
             display_tbl = df_comb_timeline[
                 ["Date_Str", "Phase", "Type", "Team Volume Score", "Team Intensity Score", "Team Combined Score"]
@@ -3692,7 +3687,6 @@ def render_combined_seasons_content():
             st.markdown(render_vball_table(display_tbl), unsafe_allow_html=True)
     else:
         st.info("No combined practice data points calculated.")
-
 
 # -----------------------------------------------------------------------------
 # 9. TEAM WELLNESS ENGINE
