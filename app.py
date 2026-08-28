@@ -1244,7 +1244,7 @@ def render_dashboard_content(season_label, season_key):
             if not v_p.empty:
                 score_history = []
                 for d_str in v_p["Date_Str"].unique():
-                    _, _, v_sc, i_sc, c_sc, _, _, _ = compute_practice_tables(
+                    _, _, v_sc, i_sc, c_sc, _, _, _, _ = compute_practice_tables(
                         selected_player, d_str, vol_raw, int_raw
                     )
                     score_history.append(
