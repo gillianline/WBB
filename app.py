@@ -616,6 +616,13 @@ def compute_practice_tables(player_name, session_date_str, v_source, i_source):
         if not v_player.empty and "Day" in v_player
         else "--"
     )
+    # Checks case-insensitively for a Type column (e.g. Type, Session Type, Activity Type)
+    type_col = next((c for c in v_player.columns if "type" in c.lower()), None) if not v_player.empty else None
+    session_type = (
+        v_player[type_col].values[0]
+        if type_col and pd.notna(v_player[type_col].values[0]) and str(v_player[type_col].values[0]).strip() != ""
+        else "Practice"
+    )
 
     return (
         vol_df_out,
@@ -626,8 +633,8 @@ def compute_practice_tables(player_name, session_date_str, v_source, i_source):
         minutes,
         week_num,
         day_num,
+        session_type,
     )
-
 
 def create_team_bar_athlete_line_chart(
     weeks,
@@ -1292,7 +1299,7 @@ def render_dashboard_content(season_label, season_key):
         )
 
         if active_p_date:
-            vol_df, int_df, vol_score, int_score, comb_score, mins, wk, dy = (
+            vol_df, int_df, vol_score, int_score, comb_score, mins, wk, dy, sess_type = (
                 compute_practice_tables(selected_player, active_p_date, vol_raw, int_raw)
             )
 
@@ -1304,10 +1311,11 @@ def render_dashboard_content(season_label, season_key):
                 st.markdown(f"#### Practice Metrics ({clean_date})")
                 st.markdown(
                     f"""
-                        <div style="margin-bottom: 12px; display: flex; gap: 10px;">
+                        <div style="margin-bottom: 12px; display: flex; gap: 10px; align-items: center;">
                             <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Minutes: {mins}</span>
                             <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Week {wk_str}</span>
                             <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:4px 10px; border-radius:6px; font-weight:600; font-size:0.8rem;">Day {dy_str}</span>
+                            <span style="background:#EFF6FF; border:1px solid #BFDBFE; color:#1D4ED8; padding:4px 10px; border-radius:6px; font-weight:700; font-size:0.8rem;">{sess_type}</span>
                         </div>
                     """,
                     unsafe_allow_html=True,
@@ -1821,7 +1829,7 @@ def render_dashboard_content(season_label, season_key):
             )
 
             # Pass vol_raw and int_raw so the 30-day rolling window reaches back into Summer
-            vol_df, int_df, vol_score, int_score, comb_score, mins, wk, dy = (
+            vol_df, int_df, vol_score, int_score, comb_score, mins, wk, dy, sess_type = (
                 compute_practice_tables(player_name, str(session_date), vol_raw, int_raw)
             )
 
@@ -1845,10 +1853,11 @@ def render_dashboard_content(season_label, season_key):
                             <span style="color:#64748B; font-size:0.8rem;">{p_pos}</span>
                         </div>
                     </div>
-                    <div style="display: flex; gap: 6px;">
+                    <div style="display: flex; gap: 6px; align-items: center;">
                         <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:3px 8px; border-radius:6px; font-weight:600; font-size:0.75rem;">Minutes: {mins}</span>
                         <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:3px 8px; border-radius:6px; font-weight:600; font-size:0.75rem;">Week {wk_str}</span>
                         <span style="background:#F1F5F9; border:1px solid #E2E8F0; color:#475569; padding:3px 8px; border-radius:6px; font-weight:600; font-size:0.75rem;">Day {dy_str}</span>
+                        <span style="background:#EFF6FF; border:1px solid #BFDBFE; color:#1D4ED8; padding:3px 8px; border-radius:6px; font-weight:700; font-size:0.75rem;">{sess_type}</span>
                     </div>
                 </div>
                 <div style="display: flex; gap: 16px; width: 100%;">
