@@ -616,7 +616,7 @@ def compute_practice_tables(player_name, session_date_str, v_source, i_source):
         if not v_player.empty and "Day" in v_player
         else "--"
     )
-    # Checks case-insensitively for a Type column (e.g. Type, Session Type, Activity Type)
+
     type_col = next((c for c in v_player.columns if "type" in c.lower()), None) if not v_player.empty else None
     session_type = (
         v_player[type_col].values[0]
@@ -635,6 +635,7 @@ def compute_practice_tables(player_name, session_date_str, v_source, i_source):
         day_num,
         session_type,
     )
+
 
 def create_team_bar_athlete_line_chart(
     weeks,
@@ -688,13 +689,11 @@ def render_metric_subcard_html(p_comp_season, p_comp_all, col_name, display_titl
     if valid_season_df.empty:
         return ""
 
-    # All-time max benchmark across all history
     valid_all_df = p_comp_all.dropna(subset=[col_name]) if not p_comp_all.empty and col_name in p_comp_all.columns else valid_season_df
     all_time_max = valid_all_df[col_name].max() if not valid_all_df.empty else valid_season_df[col_name].max()
     max_row = valid_all_df[valid_all_df[col_name] == all_time_max].iloc[-1]
     max_date = format_date_clean(max_row["Date_Str"])
 
-    # Recent value strictly within active season
     recent_row = valid_season_df.iloc[-1]
     recent_val = recent_row[col_name]
     recent_date = format_date_clean(recent_row["Date_Str"])
@@ -705,7 +704,6 @@ def render_metric_subcard_html(p_comp_season, p_comp_all, col_name, display_titl
         else "-- %"
     )
 
-    # Calculate days elapsed between the Max date and Recent date
     recent_dt = pd.to_datetime(recent_date, errors="coerce")
     max_dt = pd.to_datetime(max_date, errors="coerce")
 
@@ -714,7 +712,6 @@ def render_metric_subcard_html(p_comp_season, p_comp_all, col_name, display_titl
     else:
         days_gap = 0
 
-    # Green if recent session matches max or occurred within 7 days of max
     badge_bg = "#BBF7D0" if days_gap <= 7 else "#FFD6D6"
     badge_fg = "#166534" if days_gap <= 7 else "#991B1B"
 
@@ -761,38 +758,33 @@ def render_metric_subcard_html(p_comp_season, p_comp_all, col_name, display_titl
         </div>
     </div>
     """
-    
+
+
 def render_cmj_tscore_standards(player_name, cmj_all_df, target_date_str=None, active_season_label=None, widget_key_suffix=""):
     if cmj_all_df.empty or "Name" not in cmj_all_df.columns:
         st.info("No Countermovement Jump (CMJ) dataset available.")
         return
 
     df = cmj_all_df.copy()
-
-    # Base athlete jumps across all history (used for population norming)
     p_all_jumps = df[df["Name"] == player_name].sort_values("Date")
     if p_all_jumps.empty:
         st.info(f"No CMJ records found for {player_name}.")
         return
 
-    # Scope athlete jumps strictly within the active season
     if active_season_label:
         p_season_jumps = filter_by_season(p_all_jumps, active_season_label)
     else:
         p_season_jumps = p_all_jumps
 
-    # If athlete has no jumps in this season, stop here
     if p_season_jumps.empty:
         st.info(f"No Countermovement Jump (CMJ) records found for {player_name} in {active_season_label or 'this season'}.")
         return
 
-    # Select jump by target date if it exists within the season, otherwise use latest in that season
     if target_date_str and target_date_str != "Latest":
         jump_row_df = p_season_jumps[p_season_jumps["Date_Str"] == target_date_str]
         if not jump_row_df.empty:
             active_jump = jump_row_df.iloc[-1]
         else:
-            # Fall back to the latest jump recorded on or before the selected date within this season
             prior_jumps = p_season_jumps[p_season_jumps["Date_Str"] <= target_date_str]
             active_jump = prior_jumps.iloc[-1] if not prior_jumps.empty else p_season_jumps.iloc[-1]
     else:
@@ -972,8 +964,8 @@ def render_cmj_tscore_standards(player_name, cmj_all_df, target_date_str=None, a
         """
         st.markdown(legend_table_html, unsafe_allow_html=True)
 
+
 def get_season_mondays(season_df):
-    """Returns a sorted list (newest first) of Monday dates present in the season dataset."""
     if not season_df.empty and "Date" in season_df.columns:
         valid_dates = pd.to_datetime(season_df["Date"], errors="coerce").dropna()
         if not valid_dates.empty:
@@ -988,22 +980,8 @@ def get_season_mondays(season_df):
 
 
 def get_season_default_monday(season_data_df, default_monday):
-    """Returns the latest Monday in the season dataset, falling back to default_monday if empty."""
     mondays = get_season_mondays(season_data_df)
     return mondays[0] if mondays else default_monday
-
-
-def filter_by_season(df, season_name):
-    if df.empty:
-        return df
-    season_col = next((c for c in df.columns if c.lower() in ["season", "phase"]), None)
-    if season_col:
-        target_norm = season_name.lower().replace("-", "").replace(" ", "").replace("_", "")
-        series_norm = df[season_col].astype(str).str.lower().str.replace("-", "").str.replace(" ", "").str.replace("_", "")
-        filtered = df[series_norm == target_norm]
-        return filtered if not filtered.empty else pd.DataFrame(columns=df.columns)
-    return df
-        
 
 
 # -----------------------------------------------------------------------------
@@ -1096,8 +1074,24 @@ components.html(
 
 st.markdown("<br>", unsafe_allow_html=True)
 
+# Determine current active season to set dynamic default tab
+tabs_list = ["Summer", "Pre-Season", "Combined Seasons", "Team Wellness"]
+detected_season_idx = 0
+if not vol_raw.empty and "Date" in vol_raw.columns:
+    s_col = next((c for c in vol_raw.columns if c.lower() in ["season", "phase"]), None)
+    if s_col:
+        latest_row = vol_raw.dropna(subset=["Date"]).sort_values("Date").iloc[-1]
+        latest_val = str(latest_row[s_col]).lower().replace("-", "").replace(" ", "").replace("_", "")
+        if "pre" in latest_val:
+            detected_season_idx = 1
+        elif "summer" in latest_val:
+            detected_season_idx = 0
+
+if "active_season_tab_idx" not in st.session_state:
+    st.session_state["active_season_tab_idx"] = detected_season_idx
+
 season_tab_summer, season_tab_post_summer, season_tab_combined, season_tab_wellness = st.tabs(
-    ["Summer", "Pre-Season", "Combined Seasons", "Team Wellness"]
+    tabs_list
 )
 
 
@@ -1143,7 +1137,6 @@ def render_dashboard_content(season_label, season_key):
                 "Select Athlete Profile:", roster_players, key=f"sel_player_{season_key}"
             )
 
-        # Retrieve dates strictly within the active season (stops at the end of the season)
         ath_p_dates = (
             vol_data[vol_data["Player"] == selected_player]["Date_Str"].dropna().unique().tolist()
             if not vol_data.empty
@@ -1244,7 +1237,7 @@ def render_dashboard_content(season_label, season_key):
             if not v_p.empty:
                 score_history = []
                 for d_str in v_p["Date_Str"].unique():
-                    _, _, v_sc, i_sc, c_sc, _, _, _, _ = compute_practice_tables(
+                    _, _, v_sc, i_sc, c_sc, *_ = compute_practice_tables(
                         selected_player, d_str, vol_raw, int_raw
                     )
                     score_history.append(
@@ -1271,7 +1264,7 @@ def render_dashboard_content(season_label, season_key):
                     plot_bgcolor="rgba(0,0,0,0)",
                     paper_bgcolor="rgba(0,0,0,0)",
                     xaxis=dict(
-                        type="category",  # Forces discrete date strings without time intervals
+                        type="category",
                         tickfont=dict(color="#64748B", size=11),
                     ),
                     legend=dict(
@@ -1291,7 +1284,6 @@ def render_dashboard_content(season_label, season_key):
             else:
                 st.info(f"No practice scores recorded for {selected_player} in {season_label}.")
 
-        # Active date for practice table (uses top date selector if recorded, or latest available)
         active_p_date = (
             selected_ind_date
             if selected_ind_date in ath_p_dates
@@ -1373,7 +1365,6 @@ def render_dashboard_content(season_label, season_key):
             unsafe_allow_html=True,
         )
 
-        # CMJ Standards driven by the top date selector
         render_cmj_tscore_standards(
             selected_player,
             cmj_raw,
@@ -1469,7 +1460,6 @@ def render_dashboard_content(season_label, season_key):
         today_rec_p = local_now_rec_p.date()
         current_mon_rec_p = today_rec_p - datetime.timedelta(days=today_rec_p.weekday())
 
-        # Fallback to the latest week recorded in this season if viewing an older season (e.g. Summer)
         initial_rec_mon = get_season_default_monday(vol_data, current_mon_rec_p)
 
         c_rec_prof_wk, _ = st.columns([1, 2])
@@ -1482,7 +1472,6 @@ def render_dashboard_content(season_label, season_key):
             if sel_rec_prof_mon.weekday() != 0:
                 sel_rec_prof_mon = sel_rec_prof_mon - datetime.timedelta(days=sel_rec_prof_mon.weekday())
             sel_rec_prof_mon_str = sel_rec_prof_mon.strftime("%Y-%m-%d")
-            
 
         p_rec_rows = []
         if "recovery_local_state" in st.session_state and isinstance(st.session_state.recovery_local_state, dict):
@@ -1690,7 +1679,6 @@ def render_dashboard_content(season_label, season_key):
             else:
                 st.info(f"No in-practice tracking metrics logged for {selected_player} during the week of {sel_ind_mon_str}.")
                 
-            
         st.divider()
 
         # SECTION 7: ASSESSMENT RECORDS
@@ -1793,7 +1781,7 @@ def render_dashboard_content(season_label, season_key):
         else:
             st.info(f"No additional assessment logs found for {selected_player} in {season_label}.")
 
-   # TAB 2: PRACTICE SCORE
+    # TAB 2: PRACTICE SCORE
     elif main_tab == "Practice Score":
         c_d, _ = st.columns([1, 3])
         with c_d:
@@ -1828,7 +1816,6 @@ def render_dashboard_content(season_label, season_key):
                 else "https://via.placeholder.com/70"
             )
 
-            # Pass vol_raw and int_raw so the 30-day rolling window reaches back into Summer
             vol_df, int_df, vol_score, int_score, comb_score, mins, wk, dy, sess_type = (
                 compute_practice_tables(player_name, str(session_date), vol_raw, int_raw)
             )
@@ -1913,7 +1900,6 @@ def render_dashboard_content(season_label, season_key):
             else "https://via.placeholder.com/60"
         )
 
-        # Use comp_raw (all-time unpartitioned dataset) across all seasons
         p_comp = (
             comp_raw[comp_raw["Player"] == selected_player_comp].sort_values("Date")
             if not comp_raw.empty
@@ -1940,7 +1926,7 @@ def render_dashboard_content(season_label, season_key):
                 metric_idx = row_idx + j
                 if metric_idx < len(compliance_metrics):
                     col_name, display_title, unit = compliance_metrics[metric_idx]
-                    subcard_html = render_metric_subcard_html(p_comp, col_name, display_title, unit)
+                    subcard_html = render_metric_subcard_html(p_comp, p_comp, col_name, display_title, unit)
                     with cols[j]:
                         st.markdown(subcard_html, unsafe_allow_html=True)
 
@@ -2417,7 +2403,6 @@ def render_dashboard_content(season_label, season_key):
                     "Select Athlete:", roster_players, key=f"cmj_player_select_{season_key}"
                 )
 
-            # Available CMJ jump dates for the selected athlete across all time
             ath_all_jumps = (
                 cmj_raw[cmj_raw["Name"] == selected_player_t].sort_values("Date")
                 if not cmj_raw.empty and "Name" in cmj_raw.columns
@@ -2433,7 +2418,6 @@ def render_dashboard_content(season_label, season_key):
                     key=f"cmj_test_top_date_sel_{season_key}",
                 )
 
-            # Render CMJ Performance Standards Chart driven by the selected date
             render_cmj_tscore_standards(
                 selected_player_t,
                 cmj_raw,
@@ -2551,7 +2535,6 @@ def render_dashboard_content(season_label, season_key):
                 st.markdown(render_vball_table(p_cmj[display_cols]), unsafe_allow_html=True)
             else:
                 st.info(f"No Countermovement Jump (CMJ) logs found for {selected_player_t} in {season_label}.")
-                
 
         # SECTION 5C: OVERALL PROFILE
         with testing_tab_overall:
@@ -2694,9 +2677,7 @@ def render_dashboard_content(season_label, season_key):
         today = local_now.date()
         current_monday = today - datetime.timedelta(days=today.weekday())
 
-        # Scope the default Monday to the active season dates
         season_default_monday = get_season_default_monday(vol_data, current_monday)
-
         live_rec_df = fetch_live_recovery_sheet()
 
         if "recovery_local_state" not in st.session_state:
@@ -3215,7 +3196,6 @@ def render_dashboard_content(season_label, season_key):
                 )
                 track_week_str = selected_track_monday.strftime("%Y-%m-%d")
 
-            # Only show valid session dates recorded in this week for this season
             week_start_dt = pd.to_datetime(selected_track_monday)
             week_end_dt = week_start_dt + pd.Timedelta(days=6)
             
@@ -3297,7 +3277,7 @@ def render_dashboard_content(season_label, season_key):
                             st.markdown(
                                 f"""
                                 <div class="rec-grid-card">
-                                    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 8px;">
+                                    <div style="display: flex mechanical align-items: center; gap: 15px; margin-bottom: 8px;">
                                         <img src="{p_img}" class="athlete-avatar" style="width: 55px; height: 55px;">
                                         <div>
                                             <h4 style="margin: 0; color: #0F172A; font-weight: 700;">{player}</h4>
@@ -3498,7 +3478,7 @@ def render_dashboard_content(season_label, season_key):
                     st.info("No athlete tracking data available.")
             else:
                 st.info(f"No tracking data recorded for the week of {track_week_str}.")
-                
+
 
 # -----------------------------------------------------------------------------
 # 8. COMBINED SEASONS DASHBOARD RENDER ENGINE
@@ -3531,6 +3511,7 @@ def render_combined_seasons_content():
 
     daily_team_scores = []
     season_col = next((c for c in vol_raw.columns if c.lower() in ["season", "phase"]), None)
+    type_col = next((c for c in vol_raw.columns if "type" in c.lower()), None)
 
     for (d_str, dt), group in combined_dates_df.groupby(["Date_Str", "Date"]):
         players = group["Player"].unique()
@@ -3539,7 +3520,7 @@ def render_combined_seasons_content():
         day_combined_scores = []
 
         for p in players:
-            _, _, vol_sc, int_sc, comb_sc, _, _, _ = compute_practice_tables(p, d_str, vol_raw, int_raw)
+            _, _, vol_sc, int_sc, comb_sc, *_ = compute_practice_tables(p, d_str, vol_raw, int_raw)
             day_vol_scores.append(vol_sc)
             day_int_scores.append(int_sc)
             day_combined_scores.append(comb_sc)
@@ -3548,7 +3529,7 @@ def render_combined_seasons_content():
             avg_vol = round(float(np.mean(day_vol_scores)), 1)
             avg_int = round(float(np.mean(day_int_scores)), 1)
             avg_comb = round(float(np.mean(day_combined_scores)), 1)
-            
+
             phase = "Summer"
             if season_col and season_col in vol_raw.columns:
                 phase_vals = vol_raw[vol_raw["Date_Str"] == d_str][season_col].dropna().values
@@ -3556,11 +3537,19 @@ def render_combined_seasons_content():
                     raw_p = str(phase_vals[0]).lower().replace("-", "").replace(" ", "").replace("_", "")
                     phase = "Pre-Season" if "pre" in raw_p else "Summer"
 
+            sess_type = "Practice"
+            if type_col and type_col in vol_raw.columns:
+                type_vals = vol_raw[vol_raw["Date_Str"] == d_str][type_col].dropna().values
+                if len(type_vals) > 0:
+                    raw_t = str(type_vals[0]).strip().title()
+                    sess_type = "Conditioning" if "cond" in raw_t.lower() else "Practice"
+
             daily_team_scores.append(
                 {
                     "Date": dt,
                     "Date_Str": format_date_clean(d_str),
                     "Phase": phase,
+                    "Type": sess_type,
                     "Team Volume Score": avg_vol,
                     "Team Intensity Score": avg_int,
                     "Team Combined Score": avg_comb,
@@ -3570,26 +3559,53 @@ def render_combined_seasons_content():
     df_comb_timeline = pd.DataFrame(daily_team_scores).sort_values("Date")
 
     if not df_comb_timeline.empty:
-        color_map = {"Summer": "#FF8200", "Pre-Season": "#38BDF8"}
+        line_color_map = {"Summer": "#FF8200", "Pre-Season": "#38BDF8"}
+        marker_color_map = {"Practice": "#10B981", "Conditioning": "#8B5CF6"}
 
         def create_custom_timeline_chart(metric_col, title_label):
-            fig = px.line(
-                df_comb_timeline,
-                x="Date",
-                y=metric_col,
-                color="Phase",
-                text=metric_col,  # Pass the numeric values as labels
-                markers=True,
-                color_discrete_map=color_map,
-                title=title_label,
-            )
+            fig = go.Figure()
 
-            fig.update_traces(
-                line=dict(width=3.5),
-                marker=dict(size=9, line=dict(width=1.5, color="#0F172A")),
-                textposition="top center",  # Places the number directly above the circle
-                textfont=dict(size=11, color="#0F172A", weight="bold"),
-                hovertemplate="<b>Date:</b> %{x|%b %d, %Y}<br><b>Phase:</b> %{fullData.name}<br><b>Team Avg:</b> %{y:.1f}<extra></extra>",
+            for phase_name, p_group in df_comb_timeline.groupby("Phase"):
+                line_color = line_color_map.get(phase_name, "#64748B")
+                point_colors = [marker_color_map.get(t, "#10B981") for t in p_group["Type"]]
+
+                fig.add_trace(
+                    go.Scatter(
+                        x=p_group["Date"],
+                        y=p_group[metric_col],
+                        name=f"{phase_name}",
+                        mode="lines+markers+text",
+                        line=dict(color=line_color, width=3.5),
+                        marker=dict(
+                            size=11,
+                            color=point_colors,
+                            line=dict(width=2, color="#0F172A"),
+                        ),
+                        text=p_group[metric_col],
+                        textposition="top center",
+                        textfont=dict(size=11, color="#0F172A", family="Arial Black, sans-serif"),
+                        customdata=p_group[["Phase", "Type"]],
+                        hovertemplate="<b>Date:</b> %{x|%b %d, %Y}<br><b>Phase:</b> %{customdata[0]}<br><b>Type:</b> %{customdata[1]}<br><b>Team Avg:</b> %{y:.1f}<extra></extra>",
+                    )
+                )
+
+            fig.add_trace(
+                go.Scatter(
+                    x=[None], y=[None],
+                    mode="markers",
+                    name="Practice",
+                    marker=dict(size=10, color=marker_color_map["Practice"], line=dict(width=1.5, color="#0F172A")),
+                    showlegend=True,
+                )
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=[None], y=[None],
+                    mode="markers",
+                    name="Conditioning",
+                    marker=dict(size=10, color=marker_color_map["Conditioning"], line=dict(width=1.5, color="#0F172A")),
+                    showlegend=True,
+                )
             )
 
             fig.update_layout(
@@ -3612,7 +3628,6 @@ def render_combined_seasons_content():
                     xanchor="right",
                     x=0.99,
                     font=dict(size=12, color="#0F172A"),
-                    title=None,
                 ),
                 xaxis=dict(
                     title=None,
@@ -3632,12 +3647,11 @@ def render_combined_seasons_content():
                     linewidth=1.5,
                     linecolor="#0F172A",
                     tickfont=dict(color="#64748B", size=11),
-                    range=[0, 115],  # Expanded range to prevent top labels from clipping
+                    range=[0, 115],
                 ),
             )
             return fig
 
-        # 1. Main Combined Score Graph (Full Width)
         fig_combined = create_custom_timeline_chart(
             "Team Combined Score",
             "Team Average Combined Practice Score (Summer vs. Pre-Season)",
@@ -3646,7 +3660,6 @@ def render_combined_seasons_content():
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # 2. Volume and Intensity Score Graphs (Side-by-Side)
         col_v_g, col_i_g = st.columns(2)
 
         with col_v_g:
@@ -3663,13 +3676,14 @@ def render_combined_seasons_content():
             )
             st.plotly_chart(fig_int, use_container_width=True, key="comb_chart_int")
 
-        # 3. Data Breakdown Table
         with st.expander("View Daily Team Practice Score Summary Table"):
             display_tbl = df_comb_timeline[
-                ["Date_Str", "Phase", "Team Volume Score", "Team Intensity Score", "Team Combined Score"]
+                ["Date_Str", "Phase", "Type", "Team Volume Score", "Team Intensity Score", "Team Combined Score"]
             ].rename(
                 columns={
                     "Date_Str": "Date",
+                    "Phase": "Phase",
+                    "Type": "Session Type",
                     "Team Volume Score": "Volume Avg",
                     "Team Intensity Score": "Intensity Avg",
                     "Team Combined Score": "Combined Avg",
@@ -3836,7 +3850,6 @@ def render_team_wellness_content():
         peak_count = sum(1 for r in team_cmj_rows if r["Readiness %"] >= 90)
         fatigue_count = sum(1 for r in team_cmj_rows if r["Readiness %"] < 80)
 
-        # 4 KPI Summary Cards (Dedent to prevent markdown code block detection)
         kpi_html = textwrap.dedent(f"""
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 10px; margin-bottom: 20px;">
             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #FF8200; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
@@ -3863,7 +3876,6 @@ def render_team_wellness_content():
         """)
         st.markdown(kpi_html, unsafe_allow_html=True)
 
-        # Build table rows without multiline indentation
         html_rows = []
         for _, row in cmj_team_df.iterrows():
             r_val = row["Readiness %"]
@@ -3906,8 +3918,9 @@ def render_team_wellness_content():
     else:
         st.info(f"No Countermovement Jump testing records logged on {format_date_clean(sel_team_cmj_date)}.")
 
+
 # -----------------------------------------------------------------------------
-# 9. TAB ROUTING
+# 10. TAB ROUTING
 # -----------------------------------------------------------------------------
 with season_tab_summer:
     render_dashboard_content("Summer", "summer")
