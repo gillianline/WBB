@@ -685,23 +685,23 @@ def render_metric_subcard_html(p_comp_season, p_comp_all, col_name, display_titl
     if p_comp_season.empty or col_name not in p_comp_season.columns:
         return ""
 
-    valid_season_df = p_comp_season.dropna(subset=[col_name])
+    # Ensure numeric values and filter out non-exposures (NaNs, 0s, and negative values)
+    comp_season_clean = p_comp_season.copy()
+    comp_season_clean[col_name] = pd.to_numeric(comp_season_clean[col_name], errors="coerce")
+    valid_season_df = comp_season_clean[comp_season_clean[col_name] > 0]
+
     if valid_season_df.empty:
         return ""
 
-    valid_all_df = (
-        p_comp_all.dropna(subset=[col_name])
-        if not p_comp_all.empty and col_name in p_comp_all.columns
-        else valid_season_df
-    )
-    all_time_max = (
-        valid_all_df[col_name].max()
-        if not valid_all_df.empty
-        else valid_season_df[col_name].max()
-    )
+    comp_all_clean = p_comp_all.copy() if not p_comp_all.empty and col_name in p_comp_all.columns else comp_season_clean
+    comp_all_clean[col_name] = pd.to_numeric(comp_all_clean[col_name], errors="coerce")
+    valid_all_df = comp_all_clean[comp_all_clean[col_name] > 0]
+
+    all_time_max = valid_all_df[col_name].max() if not valid_all_df.empty else valid_season_df[col_name].max()
     max_row = valid_all_df[valid_all_df[col_name] == all_time_max].iloc[-1]
     max_date = format_date_clean(max_row["Date_Str"])
 
+    # Grab the true last session where the athlete had active metric exposure
     recent_row = valid_season_df.iloc[-1]
     recent_val = recent_row[col_name]
     recent_date = format_date_clean(recent_row["Date_Str"])
@@ -712,7 +712,7 @@ def render_metric_subcard_html(p_comp_season, p_comp_all, col_name, display_titl
         else "-- %"
     )
 
-    # Calculate days elapsed since the most recent session relative to today (including off days)
+    # Calculate actual calendar days elapsed from the last non-zero exposure to today
     recent_dt = pd.to_datetime(recent_date, errors="coerce")
     today_dt = pd.to_datetime(get_eastern_now().date())
 
@@ -767,7 +767,6 @@ def render_metric_subcard_html(p_comp_season, p_comp_all, col_name, display_titl
         </div>
     </div>
     """
-
 
 def render_cmj_tscore_standards(player_name, cmj_all_df, target_date_str=None, active_season_label=None, widget_key_suffix=""):
     if cmj_all_df.empty or "Name" not in cmj_all_df.columns:
