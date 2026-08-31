@@ -685,7 +685,6 @@ def render_metric_subcard_html(p_comp_season, p_comp_all, col_name, display_titl
     if p_comp_season.empty or col_name not in p_comp_season.columns:
         return ""
 
-    # Ensure numeric values and filter out non-exposures (NaNs, 0s, and negative values)
     comp_season_clean = p_comp_season.copy()
     comp_season_clean[col_name] = pd.to_numeric(comp_season_clean[col_name], errors="coerce")
     valid_season_df = comp_season_clean[comp_season_clean[col_name] > 0]
@@ -701,7 +700,6 @@ def render_metric_subcard_html(p_comp_season, p_comp_all, col_name, display_titl
     max_row = valid_all_df[valid_all_df[col_name] == all_time_max].iloc[-1]
     max_date = format_date_clean(max_row["Date_Str"])
 
-    # Grab the true last session where the athlete had active metric exposure
     recent_row = valid_season_df.iloc[-1]
     recent_val = recent_row[col_name]
     recent_date = format_date_clean(recent_row["Date_Str"])
@@ -712,12 +710,12 @@ def render_metric_subcard_html(p_comp_season, p_comp_all, col_name, display_titl
         else "-- %"
     )
 
-    # Calculate actual calendar days elapsed from the last non-zero exposure to today
+    # Calendar days elapsed between the peak output date and the recent session date (including all off days)
     recent_dt = pd.to_datetime(recent_date, errors="coerce")
-    today_dt = pd.to_datetime(get_eastern_now().date())
+    max_dt = pd.to_datetime(max_date, errors="coerce")
 
-    if pd.notna(recent_dt):
-        days_gap = max(0, (today_dt - recent_dt).days)
+    if pd.notna(recent_dt) and pd.notna(max_dt):
+        days_gap = abs((recent_dt - max_dt).days)
     else:
         days_gap = 0
 
@@ -740,7 +738,7 @@ def render_metric_subcard_html(p_comp_season, p_comp_all, col_name, display_titl
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
             <h5 style="margin:0; font-size:0.95rem; color:#0F172A; font-weight:700;">{display_title}</h5>
             <div style="background-color:{badge_bg}; color:{badge_fg}; font-weight:700; padding:2px 8px; border-radius:10px; font-size:0.7rem;">
-                {days_gap} Days Since Last
+                {days_gap} Days
             </div>
         </div>
         <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
@@ -760,14 +758,14 @@ def render_metric_subcard_html(p_comp_season, p_comp_all, col_name, display_titl
                 <div class="compliance-metric-sub">Recent vs. Peak</div>
             </div>
             <div class="compliance-metric-card">
-                <div class="compliance-metric-label">Days Since Exposure</div>
+                <div class="compliance-metric-label">Recency Status</div>
                 <div class="compliance-metric-value">{days_gap} Days</div>
-                <div class="compliance-metric-sub">Elapsed (Inc. Off Days)</div>
+                <div class="compliance-metric-sub">Elapsed Threshold</div>
             </div>
         </div>
     </div>
     """
-
+    
 def render_cmj_tscore_standards(player_name, cmj_all_df, target_date_str=None, active_season_label=None, widget_key_suffix=""):
     if cmj_all_df.empty or "Name" not in cmj_all_df.columns:
         st.info("No Countermovement Jump (CMJ) dataset available.")
