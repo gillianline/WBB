@@ -689,8 +689,16 @@ def render_metric_subcard_html(p_comp_season, p_comp_all, col_name, display_titl
     if valid_season_df.empty:
         return ""
 
-    valid_all_df = p_comp_all.dropna(subset=[col_name]) if not p_comp_all.empty and col_name in p_comp_all.columns else valid_season_df
-    all_time_max = valid_all_df[col_name].max() if not valid_all_df.empty else valid_season_df[col_name].max()
+    valid_all_df = (
+        p_comp_all.dropna(subset=[col_name])
+        if not p_comp_all.empty and col_name in p_comp_all.columns
+        else valid_season_df
+    )
+    all_time_max = (
+        valid_all_df[col_name].max()
+        if not valid_all_df.empty
+        else valid_season_df[col_name].max()
+    )
     max_row = valid_all_df[valid_all_df[col_name] == all_time_max].iloc[-1]
     max_date = format_date_clean(max_row["Date_Str"])
 
@@ -704,11 +712,12 @@ def render_metric_subcard_html(p_comp_season, p_comp_all, col_name, display_titl
         else "-- %"
     )
 
+    # Calculate days elapsed since the most recent session relative to today (including off days)
     recent_dt = pd.to_datetime(recent_date, errors="coerce")
-    max_dt = pd.to_datetime(max_date, errors="coerce")
+    today_dt = pd.to_datetime(get_eastern_now().date())
 
-    if pd.notna(recent_dt) and pd.notna(max_dt):
-        days_gap = abs((recent_dt - max_dt).days)
+    if pd.notna(recent_dt):
+        days_gap = max(0, (today_dt - recent_dt).days)
     else:
         days_gap = 0
 
@@ -731,7 +740,7 @@ def render_metric_subcard_html(p_comp_season, p_comp_all, col_name, display_titl
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
             <h5 style="margin:0; font-size:0.95rem; color:#0F172A; font-weight:700;">{display_title}</h5>
             <div style="background-color:{badge_bg}; color:{badge_fg}; font-weight:700; padding:2px 8px; border-radius:10px; font-size:0.7rem;">
-                {days_gap} Days
+                {days_gap} Days Since Last
             </div>
         </div>
         <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
@@ -751,9 +760,9 @@ def render_metric_subcard_html(p_comp_season, p_comp_all, col_name, display_titl
                 <div class="compliance-metric-sub">Recent vs. Peak</div>
             </div>
             <div class="compliance-metric-card">
-                <div class="compliance-metric-label">Recency Status</div>
+                <div class="compliance-metric-label">Days Since Exposure</div>
                 <div class="compliance-metric-value">{days_gap} Days</div>
-                <div class="compliance-metric-sub">Elapsed Threshold</div>
+                <div class="compliance-metric-sub">Elapsed (Inc. Off Days)</div>
             </div>
         </div>
     </div>
