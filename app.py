@@ -3526,7 +3526,14 @@ def render_combined_seasons_content():
         day_combined_scores = []
 
         for p in players:
-            _, _, vol_sc, int_sc, comb_sc, *_ = compute_practice_tables(p, d_str, vol_raw, int_raw)
+            _, _, vol_sc, int_sc, comb_sc, *_ = compute_practice_tables(
+                p, d_str, vol_raw, int_raw
+            )
+
+            # Skip athletes who have 0s across their practice scores (DNP / zero load)
+            if vol_sc == 0 and int_sc == 0 and comb_sc == 0:
+                continue
+
             day_vol_scores.append(vol_sc)
             day_int_scores.append(int_sc)
             day_combined_scores.append(comb_sc)
