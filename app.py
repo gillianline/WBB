@@ -3697,7 +3697,14 @@ def render_combined_seasons_content():
         # 3. Data Breakdown Table
         with st.expander("View Daily Team Practice Score Summary Table"):
             display_tbl = df_comb_timeline[
-                ["Date_Str", "Phase", "Type", "Team Volume Score", "Team Intensity Score", "Team Combined Score"]
+                [
+                    "Date_Str",
+                    "Phase",
+                    "Type",
+                    "Team Volume Score",
+                    "Team Intensity Score",
+                    "Team Combined Score",
+                ]
             ].rename(
                 columns={
                     "Date_Str": "Date",
@@ -3708,7 +3715,29 @@ def render_combined_seasons_content():
                     "Team Combined Score": "Combined Avg",
                 }
             )
-            st.markdown(render_vball_table(display_tbl), unsafe_allow_html=True)
+
+            html = '<table class="vball-table"><thead><tr>'
+            for col in display_tbl.columns:
+                html += f"<th>{col}</th>"
+            html += "</tr></thead><tbody>"
+
+            for _, row in display_tbl.iterrows():
+                html += "<tr>"
+                for col in display_tbl.columns:
+                    val = row[col]
+                    if col in ["Volume Avg", "Intensity Avg", "Combined Avg"]:
+                        bg_c, fg_c = get_vball_color(val)
+                        html += (
+                            f'<td><span class="grade-badge" '
+                            f'style="background-color:{bg_c}; color:{fg_c}; font-weight:800; padding:2px 10px; border-radius:6px;">'
+                            f"{val:.1f}</span></td>"
+                        )
+                    else:
+                        html += f"<td>{val}</td>"
+                html += "</tr>"
+            html += "</tbody></table>"
+
+            st.markdown(html, unsafe_allow_html=True)
     else:
         st.info("No combined practice data points calculated.")
 
