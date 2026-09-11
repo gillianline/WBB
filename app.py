@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import requests
 import streamlit as st
 import streamlit.components.v1 as components
 import textwrap
@@ -3569,7 +3568,9 @@ def render_combined_seasons_content():
         # Markers: Orange for Practice, Blue for Conditioning
         marker_color_map = {"Practice": "#FF8200", "Conditioning": "#38BDF8"}
 
-        def create_custom_timeline_chart(metric_col, title_label):
+        def create_custom_timeline_chart(
+            metric_col, title_label, show_text=True
+        ):
             fig = go.Figure()
 
             # Main black line connecting all session points
@@ -3584,28 +3585,34 @@ def render_combined_seasons_content():
                 )
             )
 
-            # Scatter points categorized by Type for clean color grouping & legend
+            # Scatter points categorized by Type
             for type_name, t_group in df_comb_timeline.groupby("Type"):
                 pt_color = marker_color_map.get(type_name, "#FF8200")
 
-                fig.add_trace(
-                    go.Scatter(
-                        x=t_group["Date"],
-                        y=t_group[metric_col],
-                        name=f"{type_name}",
-                        mode="markers+text",
-                        marker=dict(
-                            size=12,
-                            color=pt_color,
-                            line=dict(width=2, color="#0F172A"),
-                        ),
-                        text=t_group[metric_col],
-                        textposition="top center",
-                        textfont=dict(size=11, color="#0F172A", family="Arial Black, sans-serif"),
-                        customdata=t_group[["Phase", "Type"]],
-                        hovertemplate="<b>Date:</b> %{x|%b %d, %Y}<br><b>Phase:</b> %{customdata[0]}<br><b>Type:</b> %{customdata[1]}<br><b>Score:</b> %{y:.1f}<extra></extra>",
-                    )
+                scatter_kwargs = dict(
+                    x=t_group["Date"],
+                    y=t_group[metric_col],
+                    name=f"{type_name}",
+                    mode="markers+text" if show_text else "markers",
+                    marker=dict(
+                        size=12,
+                        color=pt_color,
+                        line=dict(width=2, color="#0F172A"),
+                    ),
+                    customdata=t_group[["Phase", "Type"]],
+                    hovertemplate="<b>Date:</b> %{x|%b %d, %Y}<br><b>Phase:</b> %{customdata[0]}<br><b>Type:</b> %{customdata[1]}<br><b>Score:</b> %{y:.1f}<extra></extra>",
                 )
+
+                if show_text:
+                    scatter_kwargs["text"] = t_group[metric_col]
+                    scatter_kwargs["textposition"] = "top center"
+                    scatter_kwargs["textfont"] = dict(
+                        size=11,
+                        color="#0F172A",
+                        family="Arial Black, sans-serif",
+                    )
+
+                fig.add_trace(go.Scatter(**scatter_kwargs))
 
             fig.update_layout(
                 height=370,
@@ -3651,31 +3658,41 @@ def render_combined_seasons_content():
             )
             return fig
 
-        # 1. Main Combined Score Graph (Full Width)
+
+        # 1. Main Combined Score Graph (Numbers kept)
         fig_combined = create_custom_timeline_chart(
             "Team Combined Score",
             "Team Average Combined Practice Score (Summer vs. Pre-Season)",
+            show_text=True,
         )
-        st.plotly_chart(fig_combined, use_container_width=True, key="comb_chart_combined")
+        st.plotly_chart(
+            fig_combined, use_container_width=True, key="comb_chart_combined"
+        )
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # 2. Volume and Intensity Score Graphs (Side-by-Side)
+        # 2. Volume and Intensity Score Graphs (Numbers removed)
         col_v_g, col_i_g = st.columns(2)
 
         with col_v_g:
             fig_vol = create_custom_timeline_chart(
                 "Team Volume Score",
                 "Team Average Volume Score (Summer vs. Pre-Season)",
+                show_text=False,
             )
-            st.plotly_chart(fig_vol, use_container_width=True, key="comb_chart_vol")
+            st.plotly_chart(
+                fig_vol, use_container_width=True, key="comb_chart_vol"
+            )
 
         with col_i_g:
             fig_int = create_custom_timeline_chart(
                 "Team Intensity Score",
                 "Team Average Intensity Score (Summer vs. Pre-Season)",
+                show_text=False,
             )
-            st.plotly_chart(fig_int, use_container_width=True, key="comb_chart_int")
+            st.plotly_chart(
+                fig_int, use_container_width=True, key="comb_chart_int"
+            )
 
         # 3. Data Breakdown Table
         with st.expander("View Daily Team Practice Score Summary Table"):
