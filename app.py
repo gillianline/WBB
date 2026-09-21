@@ -445,11 +445,31 @@ if "tracking_data" not in st.session_state or not st.session_state.get("tracking
 def filter_by_season(df, season_name):
     if df.empty:
         return df
-    season_col = next((c for c in df.columns if c.lower() in ["season", "phase"]), None)
+
+    # In-Season date cutoff rule starting September 21, 2026
+    norm_name = (
+        season_name.lower().replace("-", "").replace(" ", "").replace("_", "")
+    )
+    if norm_name == "inseason":
+        in_season_start = pd.to_datetime("2026-09-21")
+        if "Date" in df.columns:
+            filtered_df = df[df["Date"] >= in_season_start]
+            if not filtered_df.empty:
+                return filtered_df
+
+    season_col = next(
+        (c for c in df.columns if c.lower() in ["season", "phase"]), None
+    )
     if season_col:
-        target_norm = season_name.lower().replace("-", "").replace(" ", "").replace("_", "")
-        series_norm = df[season_col].astype(str).str.lower().str.replace("-", "").str.replace(" ", "").str.replace("_", "")
-        filtered = df[series_norm == target_norm]
+        series_norm = (
+            df[season_col]
+            .astype(str)
+            .str.lower()
+            .str.replace("-", "")
+            .str.replace(" ", "")
+            .str.replace("_", "")
+        )
+        filtered = df[series_norm == norm_name]
         return filtered if not filtered.empty else pd.DataFrame(columns=df.columns)
     return df
 
@@ -1080,24 +1100,50 @@ components.html(
 st.markdown("<br>", unsafe_allow_html=True)
 
 # Determine current active season to set dynamic default tab
-tabs_list = ["Summer", "Pre-Season", "Combined Seasons", "Team Wellness"]
+# Determine current active season to set dynamic default tab
+tabs_list = [
+    "Summer",
+    "Pre-Season",
+    "In-Season",
+    "Combined Seasons",
+    "Team Wellness",
+]
 detected_season_idx = 0
+
+# Check latest session dates and phase
 if not vol_raw.empty and "Date" in vol_raw.columns:
-    s_col = next((c for c in vol_raw.columns if c.lower() in ["season", "phase"]), None)
-    if s_col:
-        latest_row = vol_raw.dropna(subset=["Date"]).sort_values("Date").iloc[-1]
-        latest_val = str(latest_row[s_col]).lower().replace("-", "").replace(" ", "").replace("_", "")
-        if "pre" in latest_val:
-            detected_season_idx = 1
-        elif "summer" in latest_val:
-            detected_season_idx = 0
+    latest_row = vol_raw.dropna(subset=["Date"]).sort_values("Date").iloc[-1]
+    latest_dt = latest_row["Date"]
+    s_col = next(
+        (c for c in vol_raw.columns if c.lower() in ["season", "phase"]), None
+    )
+    latest_val = (
+        str(latest_row[s_col])
+        .lower()
+        .replace("-", "")
+        .replace(" ", "")
+        .replace("_", "")
+        if s_col
+        else ""
+    )
+
+    if latest_dt >= pd.to_datetime("2026-09-21") or "in" in latest_val:
+        detected_season_idx = 2
+    elif "pre" in latest_val:
+        detected_season_idx = 1
+    elif "summer" in latest_val:
+        detected_season_idx = 0
 
 if "active_season_tab_idx" not in st.session_state:
     st.session_state["active_season_tab_idx"] = detected_season_idx
 
-season_tab_summer, season_tab_post_summer, season_tab_combined, season_tab_wellness = st.tabs(
-    tabs_list
-)
+(
+    season_tab_summer,
+    season_tab_preseason,
+    season_tab_inseason,
+    season_tab_combined,
+    season_tab_wellness,
+) = st.tabs(tabs_list)
 
 
 # -----------------------------------------------------------------------------
@@ -3979,8 +4025,11 @@ def render_team_wellness_content():
 with season_tab_summer:
     render_dashboard_content("Summer", "summer")
 
-with season_tab_post_summer:
+with season_tab_preseason:
     render_dashboard_content("Pre-Season", "pre_season")
+
+with season_tab_inseason:
+    render_dashboard_content("In-Season", "in_season")
 
 with season_tab_combined:
     render_combined_seasons_content()
