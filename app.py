@@ -1001,7 +1001,11 @@ def get_season_mondays(season_df):
                 .tolist()
             )
             return sorted(mondays, reverse=True)
-    return []
+            
+    # Fallback so In-Season can track live before files are uploaded
+    today = get_eastern_now().date()
+    cur_mon = today - datetime.timedelta(days=today.weekday())
+    return [cur_mon - datetime.timedelta(weeks=w) for w in range(4)]
 
 
 def get_season_default_monday(season_data_df, default_monday):
