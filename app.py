@@ -3290,6 +3290,7 @@ def render_dashboard_content(season_label, season_key):
                 )
 
 # TAB 7: TRACKING
+    import datetime as dt
     elif main_tab == "Tracking":
         track_tab_live, track_tab_summary = st.tabs(
             ["Practice Live Tracker", "Weekly & Daily Summary"]
