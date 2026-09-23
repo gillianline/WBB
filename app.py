@@ -2428,17 +2428,17 @@ def render_dashboard_content(season_label, season_key):
                             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #22C55E; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
                                 <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Optimal (0.80 - 1.30)</div>
                                 <div style="font-size: 1.8rem; font-weight: 800; color: #166534; margin-top: 4px;">{sweet_count}</div>
-                                <div style="font-size: 0.68rem; color: #94A3B8;">Sweet Spot Workload</div>
+                                #<div style="font-size: 0.68rem; color: #94A3B8;">Sweet Spot Workload</div>
                             </div>
                             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #EAB308; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
                                 <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Underloaded (&lt; 0.80)</div>
                                 <div style="font-size: 1.8rem; font-weight: 800; color: #854D0E; margin-top: 4px;">{under_count}</div>
-                                <div style="font-size: 0.68rem; color: #94A3B8;">Building Chronic Capacity</div>
+                                #<div style="font-size: 0.68rem; color: #94A3B8;">Building Chronic Capacity</div>
                             </div>
                             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #EF4444; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
                                 <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">High Spikes (&gt; 1.50)</div>
                                 <div style="font-size: 1.8rem; font-weight: 800; color: #991B1B; margin-top: 4px;">{spike_count}</div>
-                                <div style="font-size: 0.68rem; color: #94A3B8;">Elevated Fatigue / Injury Risk</div>
+                                #<div style="font-size: 0.68rem; color: #94A3B8;">Elevated Fatigue / Injury Risk</div>
                             </div>
                         </div>
                         """,
@@ -2448,8 +2448,8 @@ def render_dashboard_content(season_label, season_key):
                     st.markdown(f"#### Team Workload Ratios on {format_date_clean(sel_eval_date_str)}")
 
                     header_cells = "".join([f"<th>{metric_display_names.get(m, m)}</th>" for m in bball_acwr_metrics])
+                    
                     table_rows = []
-
                     for _, r in team_summary_df.iterrows():
                         c_acwr = r["Composite ACWR"]
                         c_col = r["Status_Color"]
@@ -2462,33 +2462,34 @@ def render_dashboard_content(season_label, season_key):
                         ])
 
                         table_rows.append(
-                            f"""
-                            <tr>
-                                <td style="padding:6px;"><img src="{r['PhotoURL']}" style="width:36px; height:36px; border-radius:50%; object-fit:cover; border:2px solid #FF8200;"></td>
-                                <td style="font-weight:800; text-align:left !important; padding-left:14px; color:#0F172A;">{r['Athlete']}</td>
-                                <td style="color:#64748B; font-weight:600;">{r['Position']}</td>
-                                <td style="font-weight:900; font-size:1.05rem; color:{c_col};">{c_acwr:.2f}</td>
-                                <td><span style="background-color:{c_bg}; color:{c_col}; font-weight:700; padding:2px 8px; border-radius:4px; font-size:0.75rem;">{c_stat}</span></td>
-                                {metric_tds}
-                            </tr>
-                            """
+                            f"<tr>"
+                            f"<td style='padding:6px;'><img src='{r['PhotoURL']}' style='width:36px; height:36px; border-radius:50%; object-fit:cover; border:2px solid #FF8200;'></td>"
+                            f"<td style='font-weight:800; text-align:left !important; padding-left:14px; color:#0F172A; white-space:nowrap;'>{r['Athlete']}</td>"
+                            f"<td style='color:#64748B; font-weight:600;'>{r['Position']}</td>"
+                            f"<td style='font-weight:900; font-size:1.05rem; color:{c_col};'>{c_acwr:.2f}</td>"
+                            f"<td><span style='background-color:{c_bg}; color:{c_col}; font-weight:700; padding:2px 8px; border-radius:4px; font-size:0.75rem; white-space:nowrap;'>{c_stat}</span></td>"
+                            f"{metric_tds}"
+                            f"</tr>"
                         )
 
-                    complete_html = f"""
-                    <table class="vball-table" style="width:100%; border:1px solid #E2E8F0; background:#FFFFFF; margin-top:10px;">
-                        <thead>
-                            <tr style="background:#F1F5F9; color:#475569;">
-                                <th style="width:45px;">Photo</th>
-                                <th style="text-align:left !important; padding-left:14px;">Athlete</th>
-                                <th>Position</th>
-                                <th>Composite ACWR</th>
-                                <th>Workload Zone</th>
-                                {header_cells}
-                            </tr>
-                        </thead>
-                        <tbody>{"".join(table_rows)}</tbody>
-                    </table>
-                    """
+                    complete_html = textwrap.dedent(f"""
+                    <div style="width:100%; overflow-x:auto; margin-top:12px; border:1px solid #E2E8F0; border-radius:8px; background:#FFFFFF;">
+                        <table class="vball-table" style="width:100%; border-collapse:collapse; margin-bottom:0;">
+                            <thead>
+                                <tr style="background:#F1F5F9; color:#475569;">
+                                    <th style="width:45px;">Photo</th>
+                                    <th style="text-align:left !important; padding-left:14px;">Athlete</th>
+                                    <th>Position</th>
+                                    <th>Composite ACWR</th>
+                                    <th>Workload Zone</th>
+                                    {header_cells}
+                                </tr>
+                            </thead>
+                            <tbody>{"".join(table_rows)}</tbody>
+                        </table>
+                    </div>
+                    """)
+
                     st.markdown(complete_html, unsafe_allow_html=True)
                 else:
                     st.info(f"No active athlete practice records found in the 7 days prior to {format_date_clean(sel_eval_date_str)}.")
