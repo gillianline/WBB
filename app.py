@@ -3289,17 +3289,27 @@ def render_dashboard_content(season_label, season_key):
                     f"No recovery data recorded for the week of {summary_week_str}."
                 )
 
-    # TAB 7: TRACKING
+# TAB 7: TRACKING
     elif main_tab == "Tracking":
         track_tab_live, track_tab_summary = st.tabs(
             ["Practice Live Tracker", "Weekly & Daily Summary"]
         )
 
-        season_mondays = get_season_mondays(vol_data)
+        # 1. Build Mondays list: Guarantee current week/today is always present
+        today = dt.date.today()
+        current_monday = today - dt.timedelta(days=today.weekday())
 
-        if not season_mondays:
-            st.info(f"No practice session records found to track in {season_label}.")
-            return
+        season_mondays_raw = (
+            get_season_mondays(vol_data)
+            if "vol_data" in locals() and vol_data is not None
+            else []
+        )
+
+        # Merge season dates with today's monday, remove dupes, sort newest first
+        season_mondays = sorted(
+            list(set(season_mondays_raw + [current_monday])),
+            reverse=True,
+        )
 
         with track_tab_live:
             st.markdown(
@@ -3312,33 +3322,42 @@ def render_dashboard_content(season_label, season_key):
                 selected_track_monday = st.selectbox(
                     f"Select Week Starting ({season_label}):",
                     options=season_mondays,
-                    format_func=lambda d: d.strftime("%Y-%m-%d (Monday)"),
+                    index=0,
+                    format_func=lambda d: f"{d.strftime('%Y-%m-%d')} (Current Week)" if d == current_monday else d.strftime("%Y-%m-%d (Monday)"),
                     key=f"track_week_picker_{season_key}",
                 )
                 track_week_str = selected_track_monday.strftime("%Y-%m-%d")
 
             week_start_dt = pd.to_datetime(selected_track_monday)
             week_end_dt = week_start_dt + pd.Timedelta(days=6)
-            
-            season_dates_in_week = (
-                vol_data[(vol_data["Date"] >= week_start_dt) & (vol_data["Date"] <= week_end_dt)]["Date_Str"]
-                .dropna()
-                .unique()
-                .tolist()
-            )
 
-            if season_dates_in_week:
-                track_days_options = sorted(season_dates_in_week)
-            else:
-                track_days_options = [
-                    (selected_track_monday + datetime.timedelta(days=i)).strftime("%Y-%m-%d")
-                    for i in range(7)
-                ]
+            season_dates_in_week = []
+            if "vol_data" in locals() and vol_data is not None and not vol_data.empty and "Date" in vol_data.columns and "Date_Str" in vol_data.columns:
+                season_dates_in_week = (
+                    vol_data[(vol_data["Date"] >= week_start_dt) & (vol_data["Date"] <= week_end_dt)]["Date_Str"]
+                    .dropna()
+                    .unique()
+                    .tolist()
+                )
+
+            # Build all 7 calendar days for the week
+            full_week_dates = [
+                (selected_track_monday + dt.timedelta(days=i)).strftime("%Y-%m-%d")
+                for i in range(7)
+            ]
+
+            # Merge any explicit season dates with full week dates so every day is trackable
+            track_days_options = sorted(list(set(season_dates_in_week + full_week_dates)))
+
+            # Default date picker to today if it's within the week; otherwise default to Monday
+            today_str = today.strftime("%Y-%m-%d")
+            default_day_idx = track_days_options.index(today_str) if today_str in track_days_options else 0
 
             with col_tr2:
                 selected_track_day = st.selectbox(
                     "Select Practice Date:",
                     track_days_options,
+                    index=default_day_idx,
                     format_func=lambda d: pd.to_datetime(d).strftime("%Y-%m-%d (%A)"),
                     key=f"track_day_picker_{season_key}",
                 )
@@ -3385,21 +3404,24 @@ def render_dashboard_content(season_label, season_key):
                     except Exception as ex:
                         print(f"Tracking auto-sync POST failed: {ex}")
 
+            # 5 metrics tracked in vertical stack inside each player's card
+            metrics = ["Turnovers", "Not Crashing", "No Box Outs", "Not Calling Back", "Fouls"]
+
             for i in range(0, len(roster_players), 2):
                 grid_cols = st.columns(2)
                 for j in range(2):
                     if i + j < len(roster_players):
                         player = roster_players[i + j]
                         p_row = roster_raw[roster_raw["Name"] == player] if not roster_raw.empty else pd.DataFrame()
-                        p_pos = p_row["Position"].values[0] if not p_row.empty else "Athlete"
-                        p_img = p_row["Picture"].values[0] if not p_row.empty else "https://via.placeholder.com/70"
+                        p_pos = p_row["Position"].values[0] if not p_row.empty and "Position" in p_row.columns else "Athlete"
+                        p_img = p_row["Picture"].values[0] if not p_row.empty and "Picture" in p_row.columns else "https://via.placeholder.com/70"
 
                         with grid_cols[j]:
                             st.markdown(
                                 f"""
-                                <div class="rec-grid-card">
-                                    <div style="display: flex mechanical align-items: center; gap: 15px; margin-bottom: 8px;">
-                                        <img src="{p_img}" class="athlete-avatar" style="width: 55px; height: 55px;">
+                                <div class="rec-grid-card" style="padding-bottom: 4px;">
+                                    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 8px;">
+                                        <img src="{p_img}" class="athlete-avatar" style="width: 50px; height: 50px; border-radius: 50%;">
                                         <div>
                                             <h4 style="margin: 0; color: #0F172A; font-weight: 700;">{player}</h4>
                                             <span style="color: #64748B; font-size: 0.85rem;">{p_pos}</span>
@@ -3410,38 +3432,56 @@ def render_dashboard_content(season_label, season_key):
                                 unsafe_allow_html=True,
                             )
 
-                            m_cols = st.columns(4)
-                            metrics = ["Turnover", "Not Crashing", "No Box Out", "Not Calling Back", "Fouls"]
-                            for m_idx, metric_name in enumerate(metrics):
+                            # STACKED METRIC CONTROLS (Vertical Column) - Eliminates IndexError
+                            for metric_name in metrics:
                                 key = f"{track_week_str}|{session_date_val}|{player}|{metric_name}"
                                 val = st.session_state.tracking_data.get(key, 0)
-                                with m_cols[m_idx]:
+
+                                c_lbl, c_dec, c_val, c_inc = st.columns([3, 1, 1.2, 1])
+
+                                with c_lbl:
                                     st.markdown(
-                                        f"<div style='text-align:center; font-weight:700; font-size:0.75rem; color:#475569; min-height:34px; line-height:1.2;'>{metric_name}</div>",
+                                        f"""
+                                        <div style="font-weight: 600; font-size: 0.85rem; color: #334155; padding-top: 6px;">
+                                            {metric_name}
+                                        </div>
+                                        """,
                                         unsafe_allow_html=True,
                                     )
-                                    b_col1, b_col2, b_col3 = st.columns([1, 1.2, 1])
-                                    with b_col1:
-                                        st.button(
-                                            "−",
-                                            key=f"dec_{season_key}_{player}_{metric_name}_{session_date_val}",
-                                            on_click=modify_counter,
-                                            args=(player, metric_name, -1, track_week_str, session_date_val),
-                                        )
-                                    with b_col2:
-                                        st.markdown(
-                                            f"<div style='text-align:center; font-size:1.1rem; font-weight:800; padding-top:2px;'>{val}</div>",
-                                            unsafe_allow_html=True,
-                                        )
-                                    with b_col3:
-                                        st.button(
-                                            "+",
-                                            key=f"inc_{season_key}_{player}_{metric_name}_{session_date_val}",
-                                            on_click=modify_counter,
-                                            args=(player, metric_name, 1, track_week_str, session_date_val),
-                                        )
 
-                            st.markdown("<br>", unsafe_allow_html=True)
+                                with c_dec:
+                                    st.button(
+                                        "−",
+                                        key=f"dec_{season_key}_{player}_{metric_name}_{session_date_val}",
+                                        on_click=modify_counter,
+                                        args=(player, metric_name, -1, track_week_str, session_date_val),
+                                        use_container_width=True,
+                                    )
+
+                                with c_val:
+                                    bg_cnt = "#FF8200" if val > 0 else "#F1F5F9"
+                                    txt_cnt = "#FFFFFF" if val > 0 else "#64748B"
+                                    st.markdown(
+                                        f"""
+                                        <div style="text-align: center; font-size: 0.95rem; font-weight: 800; 
+                                                    background-color: {bg_cnt}; color: {txt_cnt}; 
+                                                    padding: 4px 0; border-radius: 6px; margin-top: 2px;">
+                                            {val}
+                                        </div>
+                                        """,
+                                        unsafe_allow_html=True,
+                                    )
+
+                                with c_inc:
+                                    st.button(
+                                        "+",
+                                        key=f"inc_{season_key}_{player}_{metric_name}_{session_date_val}",
+                                        on_click=modify_counter,
+                                        args=(player, metric_name, 1, track_week_str, session_date_val),
+                                        use_container_width=True,
+                                    )
+
+                            st.markdown("<hr style='margin: 14px 0; border-color: #E2E8F0;'>", unsafe_allow_html=True)
 
         with track_tab_summary:
             st.markdown(
@@ -3454,10 +3494,10 @@ def render_dashboard_content(season_label, season_key):
                 parts = k.split("|")
                 if len(parts) == 4 and v > 0:
                     t_rows.append({
-                        "Week_Starting": parts[0],
-                        "Date": parts[1],
-                        "Athlete": parts[2],
-                        "Metric": parts[3],
+                        "Week_Starting": parts[0].strip(),
+                        "Date": parts[1].strip(),
+                        "Athlete": parts[2].strip(),
+                        "Metric": parts[3].strip(),
                         "Count": v,
                     })
 
@@ -3468,12 +3508,14 @@ def render_dashboard_content(season_label, season_key):
             if not track_df.empty:
                 filtered_wk_df = track_df[track_df["Week_Starting"] == track_week_str]
 
-                total_tracking = int(filtered_wk_df["Count"].sum())
-                active_athletes = filtered_wk_df["Athlete"].nunique()
+                total_tracking = int(filtered_wk_df["Count"].sum()) if not filtered_wk_df.empty else 0
+                active_athletes = filtered_wk_df["Athlete"].nunique() if not filtered_wk_df.empty else 0
                 metric_counts = (
                     filtered_wk_df.groupby("Metric")["Count"]
                     .sum()
                     .sort_values(ascending=False)
+                    if not filtered_wk_df.empty
+                    else pd.Series(dtype=int)
                 )
                 top_metric = metric_counts.index[0] if not metric_counts.empty else "N/A"
 
@@ -3524,7 +3566,7 @@ def render_dashboard_content(season_label, season_key):
                         hide_index=True,
                     )
                 else:
-                    st.info("No stats recorded for the selected date.")
+                    st.info(f"No stats recorded for {session_date_val}.")
 
                 st.divider()
 
@@ -3533,7 +3575,7 @@ def render_dashboard_content(season_label, season_key):
                     unsafe_allow_html=True,
                 )
 
-                if "Athlete" in filtered_wk_df.columns:
+                if "Athlete" in filtered_wk_df.columns and not filtered_wk_df.empty:
                     ath_grouped = filtered_wk_df.groupby("Athlete")
                     days_order = [
                         ("Monday", "Mon"),
@@ -3596,10 +3638,9 @@ def render_dashboard_content(season_label, season_key):
                         )
                         st.markdown(card_html, unsafe_allow_html=True)
                 else:
-                    st.info("No athlete tracking data available.")
+                    st.info("No athlete tracking data available for this week.")
             else:
                 st.info(f"No tracking data recorded for the week of {track_week_str}.")
-
 
 # -----------------------------------------------------------------------------
 # 8. COMBINED SEASONS DASHBOARD RENDER ENGINE
