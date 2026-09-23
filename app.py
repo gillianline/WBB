@@ -4335,13 +4335,10 @@ def render_cumulative_content(season_label="In-Season", season_key="cumul"):
 
     # 1. TOP TEAM AVERAGES KPI CARDS
     ath_count = player_vol_totals["Player"].nunique() if not player_vol_totals.empty else 0
-    avg_sessions = round(player_vol_totals["Sessions"].mean(), 1) if not player_vol_totals.empty else 0.0
+    avg_sessions = round(player_vol_totals["High Speed Distance (mi)"].mean(), 1) if not player_vol_totals.empty else 0.0
     avg_dist = player_vol_totals["Distance (mi)"].mean() if "Distance (mi)" in player_vol_totals.columns else 0.0
-    avg_jumps = player_vol_totals["Jump Load (J)"].mean() if "Jump Load (J)" in player_vol_totals.columns else 0.0
-    avg_mech = (
-        (player_vol_totals["Accels"].mean() + player_vol_totals["Decels"].mean())
-        if ("Accels" in player_vol_totals.columns and "Decels" in player_vol_totals.columns)
-        else 0.0
+    avg_jumps = player_vol_totals["Accels"].mean() if "Accels)" in player_vol_totals.columns else 0.0
+    avg_mech = player_vol_totals["Decels"].mean() if ("Decels" in player_vol_totals.columns) else 0.0
     )
 
     st.markdown(
