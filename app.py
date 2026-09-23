@@ -1,4 +1,4 @@
-import datetime
+import datetime as dt
 import io
 import json
 import urllib.request
