@@ -3740,6 +3740,8 @@ def render_combined_seasons_content():
                     sess_type = "SEC Game"
                 else:
                     sess_type = "Non-Conference Game"
+            elif "skill" in combined_str_context:
+                sess_type = "Skill"
             elif "cond" in combined_str_context:
                 sess_type = "Conditioning"
             else:
@@ -3766,7 +3768,10 @@ def render_combined_seasons_content():
             "Non-Conference Game": "#94A3B8",
             "Practice": "#FF8200",
             "Conditioning": "#38BDF8",
+            "Skill": "#8B5CF6",  # Distinct purple circle marker for Skill
         }
+
+        category_order = ["Practice", "Skill", "Conditioning", "Non-Conference Game", "SEC Game"]
 
         # Desired ordering in Plotly chart legend
         category_order = ["Practice", "Conditioning", "Non-Conference Game", "SEC Game"]
