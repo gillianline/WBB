@@ -4374,17 +4374,14 @@ def render_cumulative_content(season_label="In-Season", season_key="cumul"):
             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #FF8200; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
                 <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Team Avg High Speed Dist</div>
                 <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{avg_hsd:.2f} mi</div>
-                <div style="font-size: 0.68rem; color: #94A3B8;">Athlete Weekly Mean</div>
             </div>
             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #22C55E; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
                 <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Team Avg Accels</div>
                 <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{avg_accels:,.0f}</div>
-                <div style="font-size: 0.68rem; color: #94A3B8;">Athlete Weekly Mean</div>
             </div>
             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #6366F1; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
                 <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Team Avg Decels</div>
                 <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{avg_decels:,.0f}</div>
-                <div style="font-size: 0.68rem; color: #94A3B8;">Athlete Weekly Mean</div>
             </div>
         </div>
         """,
