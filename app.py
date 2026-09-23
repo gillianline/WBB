@@ -319,33 +319,29 @@ def load_sheet_data():
                 df["Date"] = pd.to_datetime(df[date_col[0]], errors="coerce")
                 df["Date_Str"] = df["Date"].dt.strftime("%Y-%m-%d")
 
-                # Detect session column or calculate sequence per athlete per date
-                sess_col = next(
-                    (
-                        c
-                        for c in df.columns
-                        if c.lower()
-                        in [
-                            "session",
-                            "session_name",
-                            "session name",
-                            "session_id",
-                            "period",
-                            "time",
-                        ]
-                    ),
-                    None,
-                )
-                if sess_col:
-                    df["Session_Label"] = df[sess_col].astype(str).str.strip()
-                elif "Player" in df.columns or "Name" in df.columns:
-                    p_col = "Player" if "Player" in df.columns else "Name"
-                    df["Session_Num"] = (
-                        df.groupby(["Date_Str", p_col]).cumcount() + 1
-                    )
-                    df["Session_Label"] = "Session " + df[
-                        "Session_Num"
-                    ].astype(str)
+                # Detect session name using the Type column
+                type_c = next((c for c in df.columns if "type" in c.lower()), None)
+                p_c = "Player" if "Player" in df.columns else ("Name" if "Name" in df.columns else None)
+
+                if type_c:
+                    # Clean type name (e.g., 'Practice', 'Shootaround')
+                    df["Base_Type"] = df[type_c].fillna("Session").astype(str).str.strip()
+                    df["Base_Type"] = df["Base_Type"].replace({"": "Session", "nan": "Session"})
+                    
+                    if p_c:
+                        # Count duplicate types on the same date for the athlete
+                        type_counts = df.groupby(["Date_Str", p_c, "Base_Type"])["Base_Type"].transform("count")
+                        cum_idx = df.groupby(["Date_Str", p_c, "Base_Type"]).cumcount() + 1
+                        df["Session_Label"] = np.where(
+                            type_counts > 1,
+                            df["Base_Type"] + " " + cum_idx.astype(str),
+                            df["Base_Type"]
+                        )
+                    else:
+                        df["Session_Label"] = df["Base_Type"]
+                elif p_c:
+                    cum_idx = df.groupby(["Date_Str", p_c]).cumcount() + 1
+                    df["Session_Label"] = "Session " + cum_idx.astype(str)
                 else:
                     df["Session_Label"] = "Session 1"
 
@@ -562,11 +558,7 @@ def create_clean_bar_chart(x_vals, y_vals, title_text, bar_color="#38BDF8"):
 
 
 def compute_practice_tables(
-    player_name,
-    session_date_str,
-    v_source,
-    i_source,
-    session_select="Combined",
+    player_name, session_date_str, v_source, i_source, session_select="Combined"
 ):
     v_player = v_source[
         (v_source["Player"] == player_name)
@@ -590,6 +582,10 @@ def compute_practice_tables(
             for col in num_v.index:
                 first_v[col] = num_v[col]
             first_v["Session_Label"] = "Combined"
+            # Combine the distinct types into a clean label
+            if "Session_Label" in v_source.columns:
+                unique_types = [str(x) for x in v_source[(v_source["Player"] == player_name) & (v_source["Date_Str"] == str(session_date_str))]["Session_Label"].unique() if pd.notna(x)]
+                first_v["Type"] = " + ".join(unique_types) if unique_types else "Combined"
             v_player = pd.DataFrame([first_v])
 
         if not i_player.empty:
@@ -622,16 +618,12 @@ def compute_practice_tables(
     if pd.notna(current_dt):
         window_start = current_dt - pd.Timedelta(days=30)
         v_base = (
-            v_all[
-                (v_all["Date"] >= window_start) & (v_all["Date"] <= current_dt)
-            ]
+            v_all[(v_all["Date"] >= window_start) & (v_all["Date"] <= current_dt)]
             if not v_all.empty and "Date" in v_all.columns
             else v_all
         )
         i_base = (
-            i_all[
-                (i_all["Date"] >= window_start) & (i_all["Date"] <= current_dt)
-            ]
+            i_all[(i_all["Date"] >= window_start) & (i_all["Date"] <= current_dt)]
             if not i_all.empty and "Date" in i_all.columns
             else i_all
         )
@@ -707,17 +699,11 @@ def compute_practice_tables(
         else "--"
     )
 
-    type_col = (
-        next((c for c in v_player.columns if "type" in c.lower()), None)
-        if not v_player.empty
-        else None
-    )
+    type_col = next((c for c in v_player.columns if "type" in c.lower()), None) if not v_player.empty else None
     session_type = (
         v_player[type_col].values[0]
-        if type_col
-        and pd.notna(v_player[type_col].values[0])
-        and str(v_player[type_col].values[0]).strip() != ""
-        else "Practice"
+        if type_col and pd.notna(v_player[type_col].values[0]) and str(v_player[type_col].values[0]).strip() != ""
+        else (session_select if session_select != "Combined" else "Combined Practice")
     )
 
     return (
@@ -1349,39 +1335,25 @@ def render_dashboard_content(season_label, season_key):
         c_sel, c_dt_top, c_sess_top = st.columns([2, 1.5, 1.5])
         with c_sel:
             selected_player = st.selectbox(
-                "Select Athlete Profile:",
-                roster_players,
-                key=f"sel_player_{season_key}",
+                "Select Athlete Profile:", roster_players, key=f"sel_player_{season_key}"
             )
 
         ath_p_dates = (
-            vol_data[vol_data["Player"] == selected_player]["Date_Str"]
-            .dropna()
-            .unique()
-            .tolist()
+            vol_data[vol_data["Player"] == selected_player]["Date_Str"].dropna().unique().tolist()
             if not vol_data.empty
             else []
         )
         ath_cmj_dates = (
-            cmj_data[cmj_data["Name"] == selected_player]["Date_Str"]
-            .dropna()
-            .unique()
-            .tolist()
+            cmj_data[cmj_data["Name"] == selected_player]["Date_Str"].dropna().unique().tolist()
             if not cmj_data.empty and "Name" in cmj_data.columns
             else []
         )
-        combined_ath_dates = sorted(
-            list(set(ath_p_dates + ath_cmj_dates)), reverse=True
-        )
+        combined_ath_dates = sorted(list(set(ath_p_dates + ath_cmj_dates)), reverse=True)
 
         with c_dt_top:
             selected_ind_date = st.selectbox(
                 f"Select Session Date ({season_label}):",
-                options=(
-                    combined_ath_dates
-                    if combined_ath_dates
-                    else ["No dates found"]
-                ),
+                options=combined_ath_dates if combined_ath_dates else ["No dates found"],
                 format_func=format_date_clean,
                 key=f"sel_ind_top_date_{season_key}",
             )
@@ -1396,27 +1368,21 @@ def render_dashboard_content(season_label, season_key):
                 else pd.DataFrame()
             )
             ath_sessions = (
-                [
-                    s
-                    for s in ath_day_v["Session_Label"].dropna().unique().tolist()
-                    if str(s).strip() != ""
-                ]
+                [s for s in ath_day_v["Session_Label"].dropna().unique().tolist() if str(s).strip() != ""]
                 if not ath_day_v.empty and "Session_Label" in ath_day_v.columns
                 else []
             )
 
             if len(ath_sessions) > 1:
                 selected_ind_session = st.selectbox(
-                    "Select Session:",
+                    "Select Session Type:",
                     options=["Combined"] + sorted(ath_sessions),
                     key=f"sel_ind_session_{season_key}",
                 )
             else:
-                selected_ind_session = (
-                    ath_sessions[0] if ath_sessions else "Combined"
-                )
+                selected_ind_session = ath_sessions[0] if ath_sessions else "Combined"
                 st.markdown(
-                    f"<div style='padding-top: 28px; font-weight: 700; color: #64748B; font-size: 0.88rem;'>Session: <span style='color:#0F172A;'>{selected_ind_session}</span></div>",
+                    f"<div style='padding-top: 28px; font-weight: 700; color: #64748B; font-size: 0.88rem;'>Type: <span style='color:#0F172A;'>{selected_ind_session}</span></div>",
                     unsafe_allow_html=True,
                 )
         p_row = (
@@ -2148,24 +2114,20 @@ def render_dashboard_content(season_label, season_key):
             distinct_sessions = []
             if "Session_Label" in day_records.columns and not day_records.empty:
                 distinct_sessions = [
-                    s
-                    for s in day_records["Session_Label"].dropna().unique()
-                    if str(s).strip() != ""
+                    s for s in day_records["Session_Label"].dropna().unique() if str(s).strip() != ""
                 ]
 
             if len(distinct_sessions) > 1:
                 session_options = ["Combined"] + sorted(distinct_sessions)
                 selected_team_session = st.selectbox(
-                    "Select Session:",
+                    "Select Session Type:",
                     options=session_options,
                     key=f"sel_ps_session_{season_key}",
                 )
             else:
-                selected_team_session = (
-                    distinct_sessions[0] if distinct_sessions else "Combined"
-                )
+                selected_team_session = distinct_sessions[0] if distinct_sessions else "Combined"
                 st.markdown(
-                    f"<div style='padding-top: 28px; font-weight: 700; color: #64748B; font-size: 0.88rem;'>Session: <span style='color:#0F172A;'>{selected_team_session}</span></div>",
+                    f"<div style='padding-top: 28px; font-weight: 700; color: #64748B; font-size: 0.88rem;'>Type: <span style='color:#0F172A;'>{selected_team_session}</span></div>",
                     unsafe_allow_html=True,
                 )
 
