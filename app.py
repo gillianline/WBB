@@ -4339,7 +4339,6 @@ def render_cumulative_content(season_label="In-Season", season_key="cumul"):
     avg_dist = player_vol_totals["Distance (mi)"].mean() if "Distance (mi)" in player_vol_totals.columns else 0.0
     avg_jumps = player_vol_totals["Accels"].mean() if "Accels)" in player_vol_totals.columns else 0.0
     avg_mech = player_vol_totals["Decels"].mean() if ("Decels" in player_vol_totals.columns) else 0.0
-    )
 
     st.markdown(
         f"""
