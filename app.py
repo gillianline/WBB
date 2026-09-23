@@ -4335,10 +4335,40 @@ def render_cumulative_content(season_label="In-Season", season_key="cumul"):
 
     # 1. TOP TEAM AVERAGES KPI CARDS
     ath_count = player_vol_totals["Player"].nunique() if not player_vol_totals.empty else 0
-    avg_sessions = round(player_vol_totals["High Speed Distance (mi)"].mean(), 1) if not player_vol_totals.empty else 0.0
-    avg_dist = player_vol_totals["Distance (mi)"].mean() if "Distance (mi)" in player_vol_totals.columns else 0.0
-    avg_jumps = player_vol_totals["Accels"].mean() if "Accels)" in player_vol_totals.columns else 0.0
-    avg_mech = player_vol_totals["Decels"].mean() if ("Decels" in player_vol_totals.columns) else 0.0
+    
+    # 1. Team Avg Sessions (uses 'Sessions' column, with safe fallback)
+    avg_sessions = (
+        round(player_vol_totals["Sessions"].mean(), 1)
+        if not player_vol_totals.empty and "Sessions" in player_vol_totals.columns
+        else 0.0
+    )
+    
+    # 2. Team Avg Distance
+    avg_dist = (
+        player_vol_totals["Distance (mi)"].mean()
+        if not player_vol_totals.empty and "Distance (mi)" in player_vol_totals.columns
+        else 0.0
+    )
+    
+    # 3. Team Avg Jump Load
+    avg_jumps = (
+        player_vol_totals["Jump Load (J)"].mean()
+        if not player_vol_totals.empty and "Jump Load (J)" in player_vol_totals.columns
+        else 0.0
+    )
+    
+    # 4. Team Avg Accels + Decels (Mechanical Demand)
+    accels_mean = (
+        player_vol_totals["Accels"].mean()
+        if not player_vol_totals.empty and "Accels" in player_vol_totals.columns
+        else 0.0
+    )
+    decels_mean = (
+        player_vol_totals["Decels"].mean()
+        if not player_vol_totals.empty and "Decels" in player_vol_totals.columns
+        else 0.0
+    )
+    avg_accels_decels = accels_mean + decels_mean
 
     st.markdown(
         f"""
@@ -4360,7 +4390,7 @@ def render_cumulative_content(season_label="In-Season", season_key="cumul"):
             </div>
             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #6366F1; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
                 <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Team Avg Accels + Decels</div>
-                <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{avg_mech:,.0f}</div>
+                <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{avg_accels_decels:,.0f}</div>
                 <div style="font-size: 0.68rem; color: #94A3B8;">Mechanical Demand Mean</div>
             </div>
         </div>
