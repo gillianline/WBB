@@ -1623,8 +1623,9 @@ def render_dashboard_content(season_label, season_key):
 
         st.divider()
 
+        # ==========================================
         # SECTION 6: LIVE TRACKING SUMMARY
-        import datetime as dt
+        # ==========================================
         st.markdown(
             '<div class="vball-section-title">6. In-Practice Live Tracking Summary</div>',
             unsafe_allow_html=True,
@@ -1657,19 +1658,18 @@ def render_dashboard_content(season_label, season_key):
             else pd.DataFrame(columns=["Week_Starting", "Date", "Athlete", "Metric", "Count"])
         )
 
-        # Case-insensitive / whitespace-safe athlete filter
         p_ind_track = (
             ind_track_df[
-                ind_track_df["Athlete"].str.strip().str.lower()
+                ind_track_df["Athlete"].astype(str).str.strip().str.lower()
                 == str(selected_player).strip().lower()
             ]
             if not ind_track_df.empty
             else pd.DataFrame(columns=["Week_Starting", "Date", "Athlete", "Metric", "Count"])
         )
 
-        # 2. Week / Date Selection: Guarantees Today's Monday is always present
-        today = dt.date.today()
-        current_monday = today - dt.timedelta(days=today.weekday())
+        # 2. Week / Date Selection: Pure pandas timestamps (no dt scope collision)
+        today = pd.Timestamp.now().date()
+        current_monday = today - pd.Timedelta(days=today.weekday())
 
         existing_mondays = (
             get_season_mondays(vol_data)
@@ -1677,7 +1677,7 @@ def render_dashboard_content(season_label, season_key):
             else []
         )
 
-        # Merge season dates with today's week, eliminate duplicates, and sort newest first
+        # Merge season dates with today's week and sort newest first
         all_mondays = sorted(
             list(set(existing_mondays + [current_monday])),
             reverse=True,
@@ -1688,7 +1688,7 @@ def render_dashboard_content(season_label, season_key):
             sel_ind_mon = st.selectbox(
                 f"Select Week Starting ({season_label}):",
                 options=all_mondays,
-                index=0,  # Defaults to the newest Monday
+                index=0,
                 format_func=lambda d: f"{d.strftime('%Y-%m-%d')} (Current Week)" if d == current_monday else d.strftime("%Y-%m-%d (Monday)"),
                 key=f"ind_prof_track_week_picker_{season_key}",
             )
@@ -1719,7 +1719,7 @@ def render_dashboard_content(season_label, season_key):
             "Fouls": get_count(["foul", "fouls", "personal foul"]),
         }
 
-        # 4. Metrics Stacked Vertically in a Single Column (No horizontal row overflow)
+        # 4. Metrics Stacked Vertically in a Single Column Card Layout
         st.markdown("##### Weekly Totals")
         summary_col, _ = st.columns([1, 1])
         with summary_col:
@@ -1749,7 +1749,7 @@ def render_dashboard_content(season_label, season_key):
                 aggfunc="sum",
                 fill_value=0,
             )
-            # Reindex to ensure all 5 tracked metrics appear even if count is 0
+            # Reindex to ensure standard metrics show even if 0
             all_indices = list(dict.fromkeys(TRACKED_METRICS + list(pivot_ind_track.index)))
             pivot_ind_track = pivot_ind_track.reindex(index=all_indices, fill_value=0)
             pivot_ind_track["Total"] = pivot_ind_track.sum(axis=1)
@@ -3289,16 +3289,16 @@ def render_dashboard_content(season_label, season_key):
                     f"No recovery data recorded for the week of {summary_week_str}."
                 )
 
-# TAB 7: TRACKING
-    import datetime as dt
+# ==========================================
+    # TAB 7: TRACKING
+    # ==========================================
     elif main_tab == "Tracking":
         track_tab_live, track_tab_summary = st.tabs(
             ["Practice Live Tracker", "Weekly & Daily Summary"]
         )
 
-        # 1. Build Mondays list: Guarantee current week/today is always present
-        today = dt.date.today()
-        current_monday = today - dt.timedelta(days=today.weekday())
+        today = pd.Timestamp.now().date()
+        current_monday = today - pd.Timedelta(days=today.weekday())
 
         season_mondays_raw = (
             get_season_mondays(vol_data)
@@ -3306,7 +3306,7 @@ def render_dashboard_content(season_label, season_key):
             else []
         )
 
-        # Merge season dates with today's monday, remove dupes, sort newest first
+        # Merge season dates with current Monday, remove duplicates, sort newest first
         season_mondays = sorted(
             list(set(season_mondays_raw + [current_monday])),
             reverse=True,
@@ -3341,16 +3341,14 @@ def render_dashboard_content(season_label, season_key):
                     .tolist()
                 )
 
-            # Build all 7 calendar days for the week
+            # Build all 7 calendar days of the week
             full_week_dates = [
-                (selected_track_monday + dt.timedelta(days=i)).strftime("%Y-%m-%d")
+                (pd.to_datetime(selected_track_monday) + pd.Timedelta(days=i)).strftime("%Y-%m-%d")
                 for i in range(7)
             ]
 
-            # Merge any explicit season dates with full week dates so every day is trackable
             track_days_options = sorted(list(set(season_dates_in_week + full_week_dates)))
 
-            # Default date picker to today if it's within the week; otherwise default to Monday
             today_str = today.strftime("%Y-%m-%d")
             default_day_idx = track_days_options.index(today_str) if today_str in track_days_options else 0
 
@@ -3405,7 +3403,7 @@ def render_dashboard_content(season_label, season_key):
                     except Exception as ex:
                         print(f"Tracking auto-sync POST failed: {ex}")
 
-            # 5 metrics tracked in vertical stack inside each player's card
+            # 5 metrics tracked in stacked vertical layout per card (fixes line 3418 IndexError)
             metrics = ["Turnovers", "Not Crashing", "No Box Outs", "Not Calling Back", "Fouls"]
 
             for i in range(0, len(roster_players), 2):
@@ -3433,7 +3431,7 @@ def render_dashboard_content(season_label, season_key):
                                 unsafe_allow_html=True,
                             )
 
-                            # STACKED METRIC CONTROLS (Vertical Column) - Eliminates IndexError
+                            # STACKED METRIC CONTROLS (Vertical Column)
                             for metric_name in metrics:
                                 key = f"{track_week_str}|{session_date_val}|{player}|{metric_name}"
                                 val = st.session_state.tracking_data.get(key, 0)
