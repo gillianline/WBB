@@ -2186,7 +2186,10 @@ def render_dashboard_content(season_label, season_key):
                 "#38BDF8",
             )
             st.plotly_chart(fig_ind_dl, use_container_width=True, key=f"ind_dl_{season_key}")
-
+            
+    elif main_tab == "Cumulative Load":
+        render_cumulative_content(season_label=season_label, season_key=season_key)
+        
     # TAB 5: TESTING
     elif main_tab == "Testing":
         testing_tab_intake, testing_tab_cmj, testing_tab_overall = st.tabs(
@@ -4185,7 +4188,7 @@ def render_team_wellness_content():
         st.info(f"No Countermovement Jump testing records logged on {format_date_clean(sel_team_cmj_date)}.")
 
 # -----------------------------------------------------------------------------
-# CUMULATIVE LOAD ENGINE (SIDEBAR VIEW: TEAM AVERAGES & VOLUME/INTENSITY TABS)
+# CUMULATIVE LOAD ENGINE (SIDEBAR VIEW)
 # -----------------------------------------------------------------------------
 def render_cumulative_content(season_label="In-Season", season_key="cumul"):
     st.markdown(
@@ -4203,7 +4206,7 @@ def render_cumulative_content(season_label="In-Season", season_key="cumul"):
         st.info("Session data not available to calculate weekly cumulative metrics.")
         return
 
-    # Filter by season
+    # 1. Filter dataset by active season
     vol_season = filter_by_season(vol_raw, season_label).copy()
     int_season = filter_by_season(int_raw, season_label).copy()
 
@@ -4211,15 +4214,33 @@ def render_cumulative_content(season_label="In-Season", season_key="cumul"):
         st.info(f"No volume records found for {season_label}.")
         return
 
-    if "Date" in vol_season.columns:
+    # Clean column names (strip accidental spaces)
+    vol_season.columns = [str(c).strip() for c in vol_season.columns]
+    int_season.columns = [str(c).strip() for c in int_season.columns]
+
+    # Resolve date columns
+    if "Date" not in vol_season.columns:
+        date_col = next((c for c in vol_season.columns if "date" in c.lower()), None)
+        if date_col:
+            vol_season["Date"] = pd.to_datetime(vol_season[date_col], errors="coerce")
+    else:
         vol_season["Date"] = pd.to_datetime(vol_season["Date"], errors="coerce")
-    if "Date" in int_season.columns:
+
+    if "Date" not in int_season.columns:
+        date_col_int = next((c for c in int_season.columns if "date" in c.lower()), None)
+        if date_col_int:
+            int_season["Date"] = pd.to_datetime(int_season[date_col_int], errors="coerce")
+    else:
         int_season["Date"] = pd.to_datetime(int_season["Date"], errors="coerce")
 
     vol_season = vol_season.dropna(subset=["Date"]).copy()
     int_season = int_season.dropna(subset=["Date"]).copy()
 
-    # Calculate Monday of each week
+    if vol_season.empty:
+        st.info(f"No dated records found in {season_label}.")
+        return
+
+    # Ensure standardized Monday date
     vol_season["Week_Starting"] = (vol_season["Date"] - pd.to_timedelta(vol_season["Date"].dt.weekday, unit="D")).dt.date
     int_season["Week_Starting"] = (int_season["Date"] - pd.to_timedelta(int_season["Date"].dt.weekday, unit="D")).dt.date
 
@@ -4227,21 +4248,26 @@ def render_cumulative_content(season_label="In-Season", season_key="cumul"):
     today = get_eastern_now().date()
     cur_monday = today - datetime.timedelta(days=today.weekday())
 
+    # Fallback to current week if none detected
+    if not available_mondays:
+        available_mondays = [cur_monday]
+
     c_week_picker, _ = st.columns([1.5, 2.5])
     with c_week_picker:
         sel_week_mon = st.selectbox(
-            f"Select Week Starting (Monday) — {season_label}:",
-            options=available_mondays if available_mondays else [cur_monday],
+            f"Select Week Starting (Monday):",
+            options=available_mondays,
+            index=0,
             format_func=lambda d: f"{d.strftime('%Y-%m-%d')} (Current Week)" if d == cur_monday else d.strftime("%Y-%m-%d (Monday)"),
             key=f"cumul_wk_mon_picker_{season_key}",
         )
 
-    # Filter datasets for the selected week
+    # Filter to selected week
     v_wk = vol_season[vol_season["Week_Starting"] == sel_week_mon].copy()
     i_wk = int_season[int_season["Week_Starting"] == sel_week_mon].copy()
 
     if v_wk.empty:
-        st.info(f"No records found for the week of {sel_week_mon}.")
+        st.info(f"No volume records found for the week starting {sel_week_mon}.")
         return
 
     # Metric configs
@@ -4284,29 +4310,32 @@ def render_cumulative_content(season_label="In-Season", season_key="cumul"):
     # Ensure numeric columns
     for col in vol_metrics:
         if col in v_wk.columns:
-            v_wk[col] = pd.to_numeric(v_wk[col], errors="coerce").fillna(0.0)
+            v_wk[col] = pd.to_numeric(v_wk[col].astype(str).str.replace(r"[^0-9.]", "", regex=True), errors="coerce").fillna(0.0)
     for col in int_metrics:
         if col in i_wk.columns:
-            i_wk[col] = pd.to_numeric(i_wk[col], errors="coerce").fillna(0.0)
+            i_wk[col] = pd.to_numeric(i_wk[col].astype(str).str.replace(r"[^0-9.]", "", regex=True), errors="coerce").fillna(0.0)
 
-    # Aggregate weekly totals per player
     active_vol_cols = [c for c in vol_metrics if c in v_wk.columns]
     active_int_cols = [c for c in int_metrics if c in i_wk.columns]
 
+    # Group volume by athlete
     v_agg_dict = {col: "sum" for col in active_vol_cols}
     v_agg_dict["Date"] = "count"
     player_vol_totals = v_wk.groupby("Player").agg(v_agg_dict).rename(columns={"Date": "Sessions"}).reset_index()
 
-    i_agg_dict = {}
-    for col in active_int_cols:
-        # Max speed takes max across week; all others sum weekly load
-        i_agg_dict[col] = "max" if "speed (max" in col.lower() else "sum"
-    i_agg_dict["Date"] = "count"
-    player_int_totals = i_wk.groupby("Player").agg(i_agg_dict).rename(columns={"Date": "Sessions"}).reset_index()
+    # Group intensity by athlete
+    if not i_wk.empty and active_int_cols:
+        i_agg_dict = {}
+        for col in active_int_cols:
+            i_agg_dict[col] = "max" if "speed (max" in col.lower() else "sum"
+        i_agg_dict["Date"] = "count"
+        player_int_totals = i_wk.groupby("Player").agg(i_agg_dict).rename(columns={"Date": "Sessions"}).reset_index()
+    else:
+        player_int_totals = pd.DataFrame()
 
-    # 1. TOP TEAM AVERAGES KPI CARDS (Mean athlete weekly outputs)
+    # 1. TOP TEAM AVERAGES KPI CARDS
     ath_count = player_vol_totals["Player"].nunique() if not player_vol_totals.empty else 0
-    avg_sessions = round(player_vol_totals["Sessions"].mean(), 1) if not player_vol_totals.empty else 0
+    avg_sessions = round(player_vol_totals["Sessions"].mean(), 1) if not player_vol_totals.empty else 0.0
     avg_dist = player_vol_totals["Distance (mi)"].mean() if "Distance (mi)" in player_vol_totals.columns else 0.0
     avg_jumps = player_vol_totals["Jump Load (J)"].mean() if "Jump Load (J)" in player_vol_totals.columns else 0.0
     avg_mech = (
@@ -4343,7 +4372,7 @@ def render_cumulative_content(season_label="In-Season", season_key="cumul"):
         unsafe_allow_html=True,
     )
 
-    # 2. INTERNAL TABS: VOLUME vs INTENSITY
+    # 2. SUB-TABS: VOLUME vs INTENSITY
     sub_tab_vol, sub_tab_int = st.tabs(["Volume Metrics", "Intensity Metrics"])
 
     def build_matrix_table(df_player_totals, metric_cols):
@@ -4402,7 +4431,6 @@ def render_cumulative_content(season_label="In-Season", season_key="cumul"):
             st.markdown(build_matrix_table(sorted_int_df, active_int_cols), unsafe_allow_html=True)
         else:
             st.info("No intensity records available for this week.")
-
 # -----------------------------------------------------------------------------
 # 10. TAB ROUTING
 # -----------------------------------------------------------------------------
