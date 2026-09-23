@@ -4191,11 +4191,11 @@ def render_team_wellness_content():
 # CUMULATIVE LOAD ENGINE (SIDEBAR VIEW)
 # -----------------------------------------------------------------------------
 def render_cumulative_content(season_label="In-Season", season_key="cumul"):
-    st.markdown(
-        f"<div style='font-weight:700; color:#64748B; margin-bottom:12px; font-size:0.9rem;'>"
-        f"CURRENT ACTIVE SEASON: <span style='color:#FF8200;'>{season_label.upper()}</span></div>",
-        unsafe_allow_html=True,
-    )
+    #st.markdown(
+        #f"<div style='font-weight:700; color:#64748B; margin-bottom:12px; font-size:0.9rem;'>"
+        #f"CURRENT ACTIVE SEASON: <span style='color:#FF8200;'>{season_label.upper()}</span></div>",
+        #unsafe_allow_html=True,
+    #)
 
     st.markdown(
         '<div class="vball-section-title">Weekly Cumulative Load Overview</div>',
