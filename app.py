@@ -4335,63 +4335,57 @@ def render_cumulative_content(season_label="In-Season", season_key="cumul"):
 
     # 1. TOP TEAM AVERAGES KPI CARDS
     ath_count = player_vol_totals["Player"].nunique() if not player_vol_totals.empty else 0
-    
-    # 1. Team Avg Sessions (uses 'Sessions' column, with safe fallback)
-    avg_sessions = (
-        round(player_vol_totals["Sessions"].mean(), 1)
-        if not player_vol_totals.empty and "Sessions" in player_vol_totals.columns
-        else 0.0
-    )
-    
-    # 2. Team Avg Distance
+
+    # Distance (mi) from Volume
     avg_dist = (
         player_vol_totals["Distance (mi)"].mean()
         if not player_vol_totals.empty and "Distance (mi)" in player_vol_totals.columns
         else 0.0
     )
-    
-    # 3. Team Avg Jump Load
-    avg_jumps = (
-        player_vol_totals["Jump Load (J)"].mean()
-        if not player_vol_totals.empty and "Jump Load (J)" in player_vol_totals.columns
+
+    # High Speed Distance (mi) from Intensity
+    avg_hsd = (
+        player_int_totals["High Speed Distance (mi)"].mean()
+        if not player_int_totals.empty and "High Speed Distance (mi)" in player_int_totals.columns
         else 0.0
     )
-    
-    # 4. Team Avg Accels + Decels (Mechanical Demand)
-    accels_mean = (
+
+    # Accels from Volume
+    avg_accels = (
         player_vol_totals["Accels"].mean()
         if not player_vol_totals.empty and "Accels" in player_vol_totals.columns
         else 0.0
     )
-    decels_mean = (
+
+    # Decels from Volume
+    avg_decels = (
         player_vol_totals["Decels"].mean()
         if not player_vol_totals.empty and "Decels" in player_vol_totals.columns
         else 0.0
     )
-    avg_accels_decels = accels_mean + decels_mean
 
     st.markdown(
         f"""
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 10px; margin-bottom: 20px;">
-            <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #FF8200; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
-                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Team Avg Sessions</div>
-                <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{avg_sessions:.1f}</div>
-                <div style="font-size: 0.68rem; color: #94A3B8;">Across {ath_count} Active Athletes</div>
-            </div>
             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #38BDF8; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
                 <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Team Avg Distance</div>
                 <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{avg_dist:.1f} mi</div>
+                <div style="font-size: 0.68rem; color: #94A3B8;">Across {ath_count} Active Athletes</div>
+            </div>
+            <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #FF8200; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Team Avg High Speed Dist</div>
+                <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{avg_hsd:.2f} mi</div>
                 <div style="font-size: 0.68rem; color: #94A3B8;">Athlete Weekly Mean</div>
             </div>
             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #22C55E; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
-                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Team Avg Jump Load</div>
-                <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{avg_jumps:,.0f}</div>
+                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Team Avg Accels</div>
+                <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{avg_accels:,.0f}</div>
                 <div style="font-size: 0.68rem; color: #94A3B8;">Athlete Weekly Mean</div>
             </div>
             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #6366F1; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
-                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Team Avg Accels + Decels</div>
-                <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{avg_accels_decels:,.0f}</div>
-                <div style="font-size: 0.68rem; color: #94A3B8;">Mechanical Demand Mean</div>
+                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Team Avg Decels</div>
+                <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{avg_decels:,.0f}</div>
+                <div style="font-size: 0.68rem; color: #94A3B8;">Athlete Weekly Mean</div>
             </div>
         </div>
         """,
