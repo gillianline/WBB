@@ -4421,5 +4421,3 @@ with season_tab_combined:
 with season_tab_wellness:
     render_team_wellness_content()
 
-with season_tab_cumulative:
-    render_cumulative_content()
