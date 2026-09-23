@@ -1672,11 +1672,13 @@ def render_dashboard_content(season_label, season_key):
                 else pd.DataFrame(columns=["Week_Starting", "Date", "Athlete", "Metric", "Count"])
             )
 
-            t_col1, t_col2, t_col3, t_col4 = st.columns(4)
+            # Updated to 5 metric columns to include Fouls
+            t_col1, t_col2, t_col3, t_col4, t_col5 = st.columns(5)
             to_total = p_ind_track_wk[p_ind_track_wk["Metric"] == "Turnover"]["Count"].sum() if not p_ind_track_wk.empty else 0
             nc_total = p_ind_track_wk[p_ind_track_wk["Metric"] == "Not Crashing"]["Count"].sum() if not p_ind_track_wk.empty else 0
             nbo_total = p_ind_track_wk[p_ind_track_wk["Metric"] == "No Box Out"]["Count"].sum() if not p_ind_track_wk.empty else 0
             ncb_total = p_ind_track_wk[p_ind_track_wk["Metric"] == "Not Calling Back"]["Count"].sum() if not p_ind_track_wk.empty else 0
+            foul_total = p_ind_track_wk[p_ind_track_wk["Metric"].isin(["Fouls", "Foul"])]["Count"].sum() if not p_ind_track_wk.empty else 0
 
             with t_col1:
                 st.metric("Turnovers (Week)", int(to_total))
@@ -1686,6 +1688,8 @@ def render_dashboard_content(season_label, season_key):
                 st.metric("No Box Outs (Week)", int(nbo_total))
             with t_col4:
                 st.metric("Not Calling Back (Week)", int(ncb_total))
+            with t_col5:
+                st.metric("Fouls (Week)", int(foul_total))
 
             if not p_ind_track_wk.empty:
                 st.markdown(f"#### Daily Breakdown for Week of {sel_ind_mon_str}")
@@ -1736,6 +1740,7 @@ def render_dashboard_content(season_label, season_key):
                 st.info(f"No in-practice tracking metrics logged for {selected_player} during the week of {sel_ind_mon_str}.")
                 
         st.divider()
+                
 
         # SECTION 7: ASSESSMENT RECORDS
         st.markdown(
