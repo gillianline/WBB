@@ -2328,8 +2328,11 @@ def render_dashboard_content(season_label, season_key):
         if not valid_acwr_dates_str:
             st.info(f"No dated basketball volume or intensity records found for {season_label} to compute ACWR.")
         else:
+            # -----------------------------------------------------------------
+            # SUBTAB 1: TEAM WORKLOAD SUMMARY
+            # -----------------------------------------------------------------
             if sel_acwr_subtab == "Team Workload Summary":
-                c_top1, c_top2, c_top3 = st.columns([1.5, 1.5, 1.5])
+                c_top1, c_top2 = st.columns(2)
                 with c_top1:
                     sel_eval_date_str = st.selectbox(
                         "Evaluation Date:",
@@ -2344,14 +2347,6 @@ def render_dashboard_content(season_label, season_key):
                         pos_opts += sorted([p for p in roster_raw["Position"].dropna().unique() if p != "N/A"])
                     sel_pos_filter = st.selectbox(
                         "Position Filter:", pos_opts, key=f"team_acwr_pos_filter_{season_key}"
-                    )
-                with c_top3:
-                    featured_metric = st.selectbox(
-                        "Featured Grid Metric:",
-                        bball_acwr_metrics,
-                        index=0,
-                        format_func=lambda m: metric_display_names.get(m, m),
-                        key=f"team_acwr_feat_metric_{season_key}",
                     )
 
                 hide_inactive_last_week = st.checkbox(
@@ -2380,6 +2375,7 @@ def render_dashboard_content(season_label, season_key):
                     if sel_pos_filter != "All Positions" and pos_str != sel_pos_filter:
                         continue
 
+                    # Filter 7-day activity window
                     if hide_inactive_last_week:
                         v_sub = vol_data[(vol_data["Player"] == ath) & (vol_data["Date"] >= week_start_window) & (vol_data["Date"] <= eval_date_obj)] if not vol_data.empty else pd.DataFrame()
                         i_sub = int_data[(int_data["Player"] == ath) & (int_data["Date"] >= week_start_window) & (int_data["Date"] <= eval_date_obj)] if not int_data.empty else pd.DataFrame()
@@ -2428,17 +2424,17 @@ def render_dashboard_content(season_label, season_key):
                             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #22C55E; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
                                 <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Optimal (0.80 - 1.30)</div>
                                 <div style="font-size: 1.8rem; font-weight: 800; color: #166534; margin-top: 4px;">{sweet_count}</div>
-                                #<div style="font-size: 0.68rem; color: #94A3B8;">Sweet Spot Workload</div>
+                                <div style="font-size: 0.68rem; color: #94A3B8;">Sweet Spot Workload</div>
                             </div>
                             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #EAB308; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
                                 <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Underloaded (&lt; 0.80)</div>
                                 <div style="font-size: 1.8rem; font-weight: 800; color: #854D0E; margin-top: 4px;">{under_count}</div>
-                                #<div style="font-size: 0.68rem; color: #94A3B8;">Building Chronic Capacity</div>
+                                <div style="font-size: 0.68rem; color: #94A3B8;">Building Chronic Capacity</div>
                             </div>
                             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #EF4444; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
                                 <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">High Spikes (&gt; 1.50)</div>
                                 <div style="font-size: 1.8rem; font-weight: 800; color: #991B1B; margin-top: 4px;">{spike_count}</div>
-                                #<div style="font-size: 0.68rem; color: #94A3B8;">Elevated Fatigue / Injury Risk</div>
+                                <div style="font-size: 0.68rem; color: #94A3B8;">Elevated Fatigue / Injury Risk</div>
                             </div>
                         </div>
                         """,
@@ -2448,8 +2444,8 @@ def render_dashboard_content(season_label, season_key):
                     st.markdown(f"#### Team Workload Ratios on {format_date_clean(sel_eval_date_str)}")
 
                     header_cells = "".join([f"<th>{metric_display_names.get(m, m)}</th>" for m in bball_acwr_metrics])
-                    
                     table_rows = []
+
                     for _, r in team_summary_df.iterrows():
                         c_acwr = r["Composite ACWR"]
                         c_col = r["Status_Color"]
@@ -2493,7 +2489,7 @@ def render_dashboard_content(season_label, season_key):
                     st.markdown(complete_html, unsafe_allow_html=True)
                 else:
                     st.info(f"No active athlete practice records found in the 7 days prior to {format_date_clean(sel_eval_date_str)}.")
-
+                    
             elif sel_acwr_subtab == "Individual Profile":
                 c_ind1, c_ind2, c_ind3 = st.columns([1.5, 1.5, 1.5])
                 with c_ind1:
