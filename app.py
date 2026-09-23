@@ -4186,60 +4186,41 @@ def render_team_wellness_content():
         st.info(f"No Countermovement Jump testing records logged on {format_date_clean(sel_team_cmj_date)}.")
 
 # -----------------------------------------------------------------------------
-# CUMULATIVE VOLUME & INTENSITY ENGINE
+# WEEKLY CUMULATIVE VOLUME & INTENSITY ENGINE
 # -----------------------------------------------------------------------------
 def render_cumulative_content():
     st.markdown(
         "<div style='font-weight:700; color:#64748B; margin-bottom:12px; font-size:0.9rem;'>"
-        "VIEW: <span style='color:#FF8200;'>SEASON CUMULATIVE LOAD & ACCUMULATION SUMMARY</span></div>",
+        "VIEW: <span style='color:#FF8200;'>WEEKLY CUMULATIVE LOAD & ACCUMULATION SUMMARY</span></div>",
         unsafe_allow_html=True,
     )
 
     st.markdown(
-        '<div class="vball-section-title">Cumulative Team & Athlete Workload Totals</div>',
+        '<div class="vball-section-title">Weekly Cumulative Load Overview</div>',
         unsafe_allow_html=True,
     )
 
     if vol_raw.empty:
-        st.info("No volume session data available to calculate cumulative totals.")
+        st.info("No volume session data available to calculate weekly cumulative totals.")
         return
 
     df = vol_raw.copy()
     if "Date" in df.columns:
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-
-    # Filter controls
-    c_phase, c_date_range = st.columns([1.5, 2.5])
-    
-    with c_phase:
-        phase_options = ["All Phases (Combined)", "Summer", "Pre-Season", "In-Season"]
-        sel_phase = st.selectbox("Filter Phase:", phase_options, key="cumul_phase_filter")
-
-    # Apply phase filter
-    if sel_phase != "All Phases (Combined)":
-        df = filter_by_season(df, sel_phase)
-
-    with c_date_range:
-        if not df.empty and "Date" in df.columns and df["Date"].dropna().any():
-            min_d = df["Date"].dropna().min().date()
-            max_d = df["Date"].dropna().max().date()
-            sel_range = st.date_input(
-                "Filter Date Range:",
-                value=(min_d, max_d),
-                key="cumul_date_range_picker"
-            )
-            if isinstance(sel_range, (list, tuple)) and len(sel_range) == 2:
-                start_dt, end_dt = pd.to_datetime(sel_range[0]), pd.to_datetime(sel_range[1])
-                df = df[(df["Date"] >= start_dt) & (df["Date"] <= end_dt)]
-        else:
-            st.info("No dated entries available.")
-            return
-
-    if df.empty:
-        st.info("No records found for the selected phase and date range.")
+    else:
+        st.info("No Date column detected in volume data.")
         return
 
-    # Basket-specific metrics available in vol_raw / int_raw
+    # Drop invalid dates
+    df = df.dropna(subset=["Date"]).copy()
+    if df.empty:
+        st.info("No valid session records found.")
+        return
+
+    # Standardize Monday week-starting date
+    df["Week_Starting"] = (df["Date"] - pd.to_timedelta(df["Date"].dt.weekday, unit="D")).dt.date
+
+    # Basketball-specific metrics available in vol_raw / int_raw
     metrics_map = {
         "Distance (mi)": ("Total Distance", "mi", "{:.1f}"),
         "High Speed Distance (mi)": ("High Speed Dist", "mi", "{:.2f}"),
@@ -4252,7 +4233,6 @@ def render_cumulative_content():
         "Sprints": ("Sprints", "", "{:,.0f}"),
     }
 
-    # Ensure all numeric columns are numeric
     active_metrics = []
     for col in metrics_map.keys():
         if col in df.columns:
@@ -4263,89 +4243,155 @@ def render_cumulative_content():
         st.info("No standard basketball load metrics found in the dataset.")
         return
 
-    # 1. Top KPI Summary Cards
-    total_sessions = df["Date_Str"].nunique() if "Date_Str" in df.columns else df["Date"].nunique()
-    total_dist = df["Distance (mi)"].sum() if "Distance (mi)" in df.columns else 0
-    total_jumps = df["Jump Load (J)"].sum() if "Jump Load (J)" in df.columns else 0
-    total_accels = (df["Accels"].sum() + df["Decels"].sum()) if ("Accels" in df.columns and "Decels" in df.columns) else 0
+    # Filter Controls: Phase & Specific Monday Week
+    c_phase, c_week_picker = st.columns([1.5, 2.5])
+
+    with c_phase:
+        phase_options = ["All Phases (Combined)", "Summer", "Pre-Season", "In-Season"]
+        sel_phase = st.selectbox("Filter Phase:", phase_options, key="cumul_wk_phase_filter")
+
+    if sel_phase != "All Phases (Combined)":
+        df = filter_by_season(df, sel_phase)
+
+    if df.empty:
+        st.info("No records found for the selected phase.")
+        return
+
+    available_mondays = sorted(df["Week_Starting"].unique(), reverse=True)
+    today = get_eastern_now().date()
+    cur_monday = today - datetime.timedelta(days=today.weekday())
+
+    with c_week_picker:
+        sel_week_mon = st.selectbox(
+            "Select Week Starting (Monday):",
+            options=available_mondays,
+            format_func=lambda d: f"{d.strftime('%Y-%m-%d')} (Current Week)" if d == cur_monday else d.strftime("%Y-%m-%d (Monday)"),
+            key="cumul_week_monday_picker",
+        )
+
+    # Filter to chosen week
+    df_week = df[df["Week_Starting"] == sel_week_mon].copy()
+
+    # 1. Weekly KPI Summary Cards
+    week_sessions = df_week["Date_Str"].nunique() if "Date_Str" in df_week.columns else df_week["Date"].nunique()
+    week_dist = df_week["Distance (mi)"].sum() if "Distance (mi)" in df_week.columns else 0.0
+    week_jumps = df_week["Jump Load (J)"].sum() if "Jump Load (J)" in df_week.columns else 0.0
+    week_mech = (df_week["Accels"].sum() + df_week["Decels"].sum()) if ("Accels" in df_week.columns and "Decels" in df_week.columns) else 0.0
 
     st.markdown(
         f"""
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 10px; margin-bottom: 20px;">
             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #FF8200; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
-                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Total Sessions</div>
-                <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{total_sessions}</div>
-                <div style="font-size: 0.68rem; color: #94A3B8;">Practices & Games</div>
+                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Week Sessions</div>
+                <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{week_sessions}</div>
+                <div style="font-size: 0.68rem; color: #94A3B8;">Week of {sel_week_mon.strftime('%m/%d')}</div>
             </div>
             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #38BDF8; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
-                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Total Distance</div>
-                <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{total_dist:,.1f} mi</div>
-                <div style="font-size: 0.68rem; color: #94A3B8;">Cumulative Output</div>
+                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Weekly Distance</div>
+                <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{week_dist:,.1f} mi</div>
+                <div style="font-size: 0.68rem; color: #94A3B8;">Team Cumulative</div>
             </div>
             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #22C55E; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
-                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Jump Load</div>
-                <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{total_jumps:,.0f}</div>
-                <div style="font-size: 0.68rem; color: #94A3B8;">Total Accumulated Jumps</div>
+                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Weekly Jump Load</div>
+                <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{week_jumps:,.0f}</div>
+                <div style="font-size: 0.68rem; color: #94A3B8;">Total Weekly Jumps</div>
             </div>
             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #6366F1; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
                 <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Accels + Decels</div>
-                <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{total_accels:,.0f}</div>
-                <div style="font-size: 0.68rem; color: #94A3B8;">High Mechanical Stress</div>
+                <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{week_mech:,.0f}</div>
+                <div style="font-size: 0.68rem; color: #94A3B8;">Mechanical Demands</div>
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    # 2. Cumulative Comparison Chart
-    c_m_sel, _ = st.columns([1.5, 2])
-    with c_m_sel:
-        selected_metric = st.selectbox(
-            "Select Metric to Rank Athletes:",
+    # 2. Season-Wide Weekly Progression Chart
+    c_prog_sel, _ = st.columns([1.5, 2])
+    with c_prog_sel:
+        metric_for_trend = st.selectbox(
+            "Select Metric to Track Weekly Progression Across Season:",
             options=active_metrics,
             format_func=lambda m: metrics_map[m][0],
-            key="cumul_metric_rank_sel"
+            key="cumul_prog_metric_sel",
         )
 
-    # Aggregate by Athlete
+    weekly_team_trend = (
+        df.groupby("Week_Starting")[metric_for_trend]
+        .sum()
+        .reset_index()
+        .sort_values("Week_Starting")
+    )
+    weekly_team_trend["Week_Label"] = weekly_team_trend["Week_Starting"].apply(lambda d: d.strftime("%m/%d"))
+
+    fig_trend = px.bar(
+        weekly_team_trend,
+        x="Week_Label",
+        y=metric_for_trend,
+        text=metric_for_trend,
+        title=f"Season Progression: Weekly Total {metrics_map[metric_for_trend][0]}",
+    )
+    fig_trend.update_traces(
+        marker_color=["#FF8200" if d == sel_week_mon else "#CBD5E1" for d in weekly_team_trend["Week_Starting"]],
+        texttemplate="%{text:,.1f}" if "Distance" in metric_for_trend else "%{text:,.0f}",
+        textposition="outside",
+    )
+    fig_trend.update_layout(
+        height=260,
+        margin=dict(l=10, r=10, t=35, b=20),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(title="Week Starting (Monday)", showgrid=False),
+        yaxis=dict(title=metrics_map[metric_for_trend][0], showgrid=True, gridcolor="#F1F5F9"),
+    )
+    st.plotly_chart(fig_trend, use_container_width=True, key="cumul_season_weekly_trend")
+
+    st.divider()
+
+    # 3. Individual Breakdown for Selected Week
+    st.markdown(f"#### Athlete Weekly Accumulation (Week of {sel_week_mon.strftime('%Y-%m-%d')})")
+
+    if df_week.empty:
+        st.info(f"No records found for the week of {sel_week_mon.strftime('%Y-%m-%d')}.")
+        return
+
     agg_dict = {col: "sum" for col in active_metrics}
     agg_dict["Date"] = "count"
-    
-    player_cumul = (
-        df.groupby("Player")
+
+    player_week_cumul = (
+        df_week.groupby("Player")
         .agg(agg_dict)
         .rename(columns={"Date": "Sessions"})
         .reset_index()
-        .sort_values(by=selected_metric, ascending=False)
+        .sort_values(by=metric_for_trend, ascending=False)
     )
 
-    fig_cumul = px.bar(
-        player_cumul,
+    # Athlete Comparison Bar Chart for the Week
+    fig_ath_week = px.bar(
+        player_week_cumul,
         x="Player",
-        y=selected_metric,
-        text=selected_metric,
-        title=f"Cumulative {metrics_map[selected_metric][0]} by Athlete",
+        y=metric_for_trend,
+        text=metric_for_trend,
+        title=f"Athlete Weekly {metrics_map[metric_for_trend][0]} Ranking",
     )
-    fig_cumul.update_traces(
-        marker_color="#FF8200",
-        texttemplate="%{text:,.1f}" if "Distance" in selected_metric else "%{text:,.0f}",
+    fig_ath_week.update_traces(
+        marker_color="#38BDF8",
+        texttemplate="%{text:,.1f}" if "Distance" in metric_for_trend else "%{text:,.0f}",
         textposition="outside",
     )
-    fig_cumul.update_layout(
-        height=320,
+    fig_ath_week.update_layout(
+        height=300,
         margin=dict(l=20, r=20, t=40, b=40),
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
         xaxis=dict(title=None, tickangle=-30),
-        yaxis=dict(title=metrics_map[selected_metric][0], showgrid=True, gridcolor="#F1F5F9"),
+        yaxis=dict(title=metrics_map[metric_for_trend][0], showgrid=True, gridcolor="#F1F5F9"),
     )
-    st.plotly_chart(fig_cumul, use_container_width=True, key="cumul_bar_chart")
+    st.plotly_chart(fig_ath_week, use_container_width=True, key="cumul_ath_week_bar")
 
-    # 3. Master Cumulative Table with Roster Photos
-    st.markdown("#### Cumulative Athlete Roster Matrix")
-    
+    # 4. Master Weekly Cumulative Matrix Table
     html_cumul_rows = []
-    for _, row in player_cumul.iterrows():
+    for _, row in player_week_cumul.iterrows():
         p_name = row["Player"]
         p_row = roster_raw[roster_raw["Name"] == p_name] if not roster_raw.empty else pd.DataFrame()
         p_pos = p_row["Position"].iloc[0] if not p_row.empty and "Position" in p_row else "Athlete"
