@@ -319,6 +319,36 @@ def load_sheet_data():
                 df["Date"] = pd.to_datetime(df[date_col[0]], errors="coerce")
                 df["Date_Str"] = df["Date"].dt.strftime("%Y-%m-%d")
 
+                # Detect session column or calculate sequence per athlete per date
+                sess_col = next(
+                    (
+                        c
+                        for c in df.columns
+                        if c.lower()
+                        in [
+                            "session",
+                            "session_name",
+                            "session name",
+                            "session_id",
+                            "period",
+                            "time",
+                        ]
+                    ),
+                    None,
+                )
+                if sess_col:
+                    df["Session_Label"] = df[sess_col].astype(str).str.strip()
+                elif "Player" in df.columns or "Name" in df.columns:
+                    p_col = "Player" if "Player" in df.columns else "Name"
+                    df["Session_Num"] = (
+                        df.groupby(["Date_Str", p_col]).cumcount() + 1
+                    )
+                    df["Session_Label"] = "Session " + df[
+                        "Session_Num"
+                    ].astype(str)
+                else:
+                    df["Session_Label"] = "Session 1"
+
         return (
             vol_df,
             int_df,
@@ -531,15 +561,50 @@ def create_clean_bar_chart(x_vals, y_vals, title_text, bar_color="#38BDF8"):
     return fig
 
 
-def compute_practice_tables(player_name, session_date_str, v_source, i_source):
+def compute_practice_tables(
+    player_name,
+    session_date_str,
+    v_source,
+    i_source,
+    session_select="Combined",
+):
     v_player = v_source[
         (v_source["Player"] == player_name)
         & (v_source["Date_Str"] == str(session_date_str))
-    ]
+    ].copy()
     i_player = i_source[
         (i_source["Player"] == player_name)
         & (i_source["Date_Str"] == str(session_date_str))
-    ]
+    ].copy()
+
+    # --- SESSION FILTERING OR COMBINED DAILY AGGREGATION ---
+    if session_select != "Combined":
+        if "Session_Label" in v_player.columns:
+            v_player = v_player[v_player["Session_Label"] == session_select]
+        if "Session_Label" in i_player.columns:
+            i_player = i_player[i_player["Session_Label"] == session_select]
+    elif len(v_player) > 1 or len(i_player) > 1:
+        if not v_player.empty:
+            num_v = v_player.select_dtypes(include=[np.number]).sum()
+            first_v = v_player.iloc[0].to_dict()
+            for col in num_v.index:
+                first_v[col] = num_v[col]
+            first_v["Session_Label"] = "Combined"
+            v_player = pd.DataFrame([first_v])
+
+        if not i_player.empty:
+            num_i = {}
+            for c in i_player.select_dtypes(include=[np.number]).columns:
+                num_i[c] = (
+                    i_player[c].max()
+                    if "speed (max" in str(c).lower()
+                    else i_player[c].sum()
+                )
+            first_i = i_player.iloc[0].to_dict()
+            for col, val in num_i.items():
+                first_i[col] = val
+            first_i["Session_Label"] = "Combined"
+            i_player = pd.DataFrame([first_i])
 
     v_all = (
         v_source[v_source["Player"] == player_name].sort_values("Date")
@@ -557,12 +622,16 @@ def compute_practice_tables(player_name, session_date_str, v_source, i_source):
     if pd.notna(current_dt):
         window_start = current_dt - pd.Timedelta(days=30)
         v_base = (
-            v_all[(v_all["Date"] >= window_start) & (v_all["Date"] <= current_dt)]
+            v_all[
+                (v_all["Date"] >= window_start) & (v_all["Date"] <= current_dt)
+            ]
             if not v_all.empty and "Date" in v_all.columns
             else v_all
         )
         i_base = (
-            i_all[(i_all["Date"] >= window_start) & (i_all["Date"] <= current_dt)]
+            i_all[
+                (i_all["Date"] >= window_start) & (i_all["Date"] <= current_dt)
+            ]
             if not i_all.empty and "Date" in i_all.columns
             else i_all
         )
@@ -638,10 +707,16 @@ def compute_practice_tables(player_name, session_date_str, v_source, i_source):
         else "--"
     )
 
-    type_col = next((c for c in v_player.columns if "type" in c.lower()), None) if not v_player.empty else None
+    type_col = (
+        next((c for c in v_player.columns if "type" in c.lower()), None)
+        if not v_player.empty
+        else None
+    )
     session_type = (
         v_player[type_col].values[0]
-        if type_col and pd.notna(v_player[type_col].values[0]) and str(v_player[type_col].values[0]).strip() != ""
+        if type_col
+        and pd.notna(v_player[type_col].values[0])
+        and str(v_player[type_col].values[0]).strip() != ""
         else "Practice"
     )
 
@@ -656,7 +731,6 @@ def compute_practice_tables(player_name, session_date_str, v_source, i_source):
         day_num,
         session_type,
     )
-
 
 def create_team_bar_athlete_line_chart(
     weeks,
@@ -1270,34 +1344,81 @@ def render_dashboard_content(season_label, season_key):
         ("FCTs", "FCTs", "cnt"),
     ]
 
-    # TAB 1: INDIVIDUAL PROFILE
+   # TAB 1: INDIVIDUAL PROFILE
     if main_tab == "Individual Profile":
-        c_sel, c_dt_top = st.columns(2)
+        c_sel, c_dt_top, c_sess_top = st.columns([2, 1.5, 1.5])
         with c_sel:
             selected_player = st.selectbox(
-                "Select Athlete Profile:", roster_players, key=f"sel_player_{season_key}"
+                "Select Athlete Profile:",
+                roster_players,
+                key=f"sel_player_{season_key}",
             )
 
         ath_p_dates = (
-            vol_data[vol_data["Player"] == selected_player]["Date_Str"].dropna().unique().tolist()
+            vol_data[vol_data["Player"] == selected_player]["Date_Str"]
+            .dropna()
+            .unique()
+            .tolist()
             if not vol_data.empty
             else []
         )
         ath_cmj_dates = (
-            cmj_data[cmj_data["Name"] == selected_player]["Date_Str"].dropna().unique().tolist()
+            cmj_data[cmj_data["Name"] == selected_player]["Date_Str"]
+            .dropna()
+            .unique()
+            .tolist()
             if not cmj_data.empty and "Name" in cmj_data.columns
             else []
         )
-        combined_ath_dates = sorted(list(set(ath_p_dates + ath_cmj_dates)), reverse=True)
+        combined_ath_dates = sorted(
+            list(set(ath_p_dates + ath_cmj_dates)), reverse=True
+        )
 
         with c_dt_top:
             selected_ind_date = st.selectbox(
                 f"Select Session Date ({season_label}):",
-                options=combined_ath_dates if combined_ath_dates else ["No dates found"],
+                options=(
+                    combined_ath_dates
+                    if combined_ath_dates
+                    else ["No dates found"]
+                ),
                 format_func=format_date_clean,
                 key=f"sel_ind_top_date_{season_key}",
             )
 
+        with c_sess_top:
+            ath_day_v = (
+                vol_data[
+                    (vol_data["Player"] == selected_player)
+                    & (vol_data["Date_Str"] == str(selected_ind_date))
+                ]
+                if not vol_data.empty
+                else pd.DataFrame()
+            )
+            ath_sessions = (
+                [
+                    s
+                    for s in ath_day_v["Session_Label"].dropna().unique().tolist()
+                    if str(s).strip() != ""
+                ]
+                if not ath_day_v.empty and "Session_Label" in ath_day_v.columns
+                else []
+            )
+
+            if len(ath_sessions) > 1:
+                selected_ind_session = st.selectbox(
+                    "Select Session:",
+                    options=["Combined"] + sorted(ath_sessions),
+                    key=f"sel_ind_session_{season_key}",
+                )
+            else:
+                selected_ind_session = (
+                    ath_sessions[0] if ath_sessions else "Combined"
+                )
+                st.markdown(
+                    f"<div style='padding-top: 28px; font-weight: 700; color: #64748B; font-size: 0.88rem;'>Session: <span style='color:#0F172A;'>{selected_ind_session}</span></div>",
+                    unsafe_allow_html=True,
+                )
         p_row = (
             roster_raw[roster_raw["Name"] == selected_player]
             if not roster_raw.empty
@@ -1432,8 +1553,22 @@ def render_dashboard_content(season_label, season_key):
         )
 
         if active_p_date:
-            vol_df, int_df, vol_score, int_score, comb_score, mins, wk, dy, sess_type = (
-                compute_practice_tables(selected_player, active_p_date, vol_raw, int_raw)
+            (
+                vol_df,
+                int_df,
+                vol_score,
+                int_score,
+                comb_score,
+                mins,
+                wk,
+                dy,
+                sess_type,
+            ) = compute_practice_tables(
+                selected_player,
+                active_p_date,
+                vol_raw,
+                int_raw,
+                session_select=selected_ind_session,
             )
 
             wk_str = str(wk).replace("Week ", "")
@@ -1441,7 +1576,9 @@ def render_dashboard_content(season_label, season_key):
             clean_date = format_date_clean(active_p_date)
 
             with col_g2:
-                st.markdown(f"#### Practice Metrics ({clean_date})")
+                st.markdown(
+                    f"#### Practice Metrics ({clean_date} &bull; {selected_ind_session})"
+                )
                 st.markdown(
                     f"""
                         <div style="margin-bottom: 12px; display: flex; gap: 10px; align-items: center;">
@@ -1988,7 +2125,7 @@ def render_dashboard_content(season_label, season_key):
 
     # TAB 2: PRACTICE SCORE
     elif main_tab == "Practice Score":
-        c_d, _ = st.columns([1, 3])
+        c_d, c_sess = st.columns([2, 2])
         with c_d:
             available_dates = (
                 vol_data["Date_Str"].sort_values(ascending=False).unique()
@@ -2001,6 +2138,36 @@ def render_dashboard_content(season_label, season_key):
                 format_func=format_date_clean,
                 key=f"sel_ps_date_{season_key}",
             )
+
+        with c_sess:
+            day_records = (
+                vol_data[vol_data["Date_Str"] == str(session_date)]
+                if not vol_data.empty
+                else pd.DataFrame()
+            )
+            distinct_sessions = []
+            if "Session_Label" in day_records.columns and not day_records.empty:
+                distinct_sessions = [
+                    s
+                    for s in day_records["Session_Label"].dropna().unique()
+                    if str(s).strip() != ""
+                ]
+
+            if len(distinct_sessions) > 1:
+                session_options = ["Combined"] + sorted(distinct_sessions)
+                selected_team_session = st.selectbox(
+                    "Select Session:",
+                    options=session_options,
+                    key=f"sel_ps_session_{season_key}",
+                )
+            else:
+                selected_team_session = (
+                    distinct_sessions[0] if distinct_sessions else "Combined"
+                )
+                st.markdown(
+                    f"<div style='padding-top: 28px; font-weight: 700; color: #64748B; font-size: 0.88rem;'>Session: <span style='color:#0F172A;'>{selected_team_session}</span></div>",
+                    unsafe_allow_html=True,
+                )
 
         st.markdown("<br>", unsafe_allow_html=True)
 
@@ -2021,8 +2188,22 @@ def render_dashboard_content(season_label, season_key):
                 else "https://via.placeholder.com/70"
             )
 
-            vol_df, int_df, vol_score, int_score, comb_score, mins, wk, dy, sess_type = (
-                compute_practice_tables(player_name, str(session_date), vol_raw, int_raw)
+            (
+                vol_df,
+                int_df,
+                vol_score,
+                int_score,
+                comb_score,
+                mins,
+                wk,
+                dy,
+                sess_type,
+            ) = compute_practice_tables(
+                player_name,
+                str(session_date),
+                vol_raw,
+                int_raw,
+                session_select=selected_team_session,
             )
 
             vol_html_table = render_vball_table(vol_df)
