@@ -4186,7 +4186,7 @@ def render_team_wellness_content():
         st.info(f"No Countermovement Jump testing records logged on {format_date_clean(sel_team_cmj_date)}.")
 
 # -----------------------------------------------------------------------------
-# WEEKLY CUMULATIVE VOLUME & INTENSITY ENGINE
+# WEEKLY CUMULATIVE VOLUME & INTENSITY ENGINE (TABLE ONLY)
 # -----------------------------------------------------------------------------
 def render_cumulative_content():
     st.markdown(
@@ -4306,49 +4306,7 @@ def render_cumulative_content():
         unsafe_allow_html=True,
     )
 
-    # 2. Season-Wide Weekly Progression Chart
-    c_prog_sel, _ = st.columns([1.5, 2])
-    with c_prog_sel:
-        metric_for_trend = st.selectbox(
-            "Select Metric to Track Weekly Progression Across Season:",
-            options=active_metrics,
-            format_func=lambda m: metrics_map[m][0],
-            key="cumul_prog_metric_sel",
-        )
-
-    weekly_team_trend = (
-        df.groupby("Week_Starting")[metric_for_trend]
-        .sum()
-        .reset_index()
-        .sort_values("Week_Starting")
-    )
-    weekly_team_trend["Week_Label"] = weekly_team_trend["Week_Starting"].apply(lambda d: d.strftime("%m/%d"))
-
-    fig_trend = px.bar(
-        weekly_team_trend,
-        x="Week_Label",
-        y=metric_for_trend,
-        text=metric_for_trend,
-        title=f"Season Progression: Weekly Total {metrics_map[metric_for_trend][0]}",
-    )
-    fig_trend.update_traces(
-        marker_color=["#FF8200" if d == sel_week_mon else "#CBD5E1" for d in weekly_team_trend["Week_Starting"]],
-        texttemplate="%{text:,.1f}" if "Distance" in metric_for_trend else "%{text:,.0f}",
-        textposition="outside",
-    )
-    fig_trend.update_layout(
-        height=260,
-        margin=dict(l=10, r=10, t=35, b=20),
-        plot_bgcolor="rgba(0,0,0,0)",
-        paper_bgcolor="rgba(0,0,0,0)",
-        xaxis=dict(title="Week Starting (Monday)", showgrid=False),
-        yaxis=dict(title=metrics_map[metric_for_trend][0], showgrid=True, gridcolor="#F1F5F9"),
-    )
-    st.plotly_chart(fig_trend, use_container_width=True, key="cumul_season_weekly_trend")
-
-    st.divider()
-
-    # 3. Individual Breakdown for Selected Week
+    # 2. Individual Breakdown for Selected Week
     st.markdown(f"#### Athlete Weekly Accumulation (Week of {sel_week_mon.strftime('%Y-%m-%d')})")
 
     if df_week.empty:
@@ -4358,38 +4316,17 @@ def render_cumulative_content():
     agg_dict = {col: "sum" for col in active_metrics}
     agg_dict["Date"] = "count"
 
+    primary_sort_metric = "Distance (mi)" if "Distance (mi)" in active_metrics else active_metrics[0]
+
     player_week_cumul = (
         df_week.groupby("Player")
         .agg(agg_dict)
         .rename(columns={"Date": "Sessions"})
         .reset_index()
-        .sort_values(by=metric_for_trend, ascending=False)
+        .sort_values(by=primary_sort_metric, ascending=False)
     )
 
-    # Athlete Comparison Bar Chart for the Week
-    fig_ath_week = px.bar(
-        player_week_cumul,
-        x="Player",
-        y=metric_for_trend,
-        text=metric_for_trend,
-        title=f"Athlete Weekly {metrics_map[metric_for_trend][0]} Ranking",
-    )
-    fig_ath_week.update_traces(
-        marker_color="#38BDF8",
-        texttemplate="%{text:,.1f}" if "Distance" in metric_for_trend else "%{text:,.0f}",
-        textposition="outside",
-    )
-    fig_ath_week.update_layout(
-        height=300,
-        margin=dict(l=20, r=20, t=40, b=40),
-        plot_bgcolor="rgba(0,0,0,0)",
-        paper_bgcolor="rgba(0,0,0,0)",
-        xaxis=dict(title=None, tickangle=-30),
-        yaxis=dict(title=metrics_map[metric_for_trend][0], showgrid=True, gridcolor="#F1F5F9"),
-    )
-    st.plotly_chart(fig_ath_week, use_container_width=True, key="cumul_ath_week_bar")
-
-    # 4. Master Weekly Cumulative Matrix Table
+    # 3. Master Weekly Cumulative Matrix Table
     html_cumul_rows = []
     for _, row in player_week_cumul.iterrows():
         p_name = row["Player"]
@@ -4426,7 +4363,6 @@ def render_cumulative_content():
         f'<tbody>{"".join(html_cumul_rows)}</tbody></table>'
     )
     st.markdown(master_table, unsafe_allow_html=True)
-
 
 # -----------------------------------------------------------------------------
 # 10. TAB ROUTING
