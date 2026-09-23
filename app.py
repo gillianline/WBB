@@ -20,7 +20,7 @@ def get_eastern_time_str():
 
 
 def get_eastern_now():
-    return datetime.datetime.now(EASTERN_TZ)f
+    return datetime.datetime.now(EASTERN_TZ)
 
 
 def format_date_clean(val):
