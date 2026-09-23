@@ -1013,7 +1013,89 @@ def get_season_default_monday(season_data_df, default_monday):
     mondays = get_season_mondays(season_data_df)
     return mondays[0] if mondays else default_monday
 
+def get_acwr_badge(ratio):
+    try:
+        r = float(ratio)
+        if pd.isna(r) or r == 0:
+            return "#64748B", "#F1F5F9", "No Baseline"
+        elif r < 0.80:
+            return "#D97706", "#FEF3C7", "Underloaded"
+        elif 0.80 <= r <= 1.30:
+            return "#137333", "#E6F4EA", "Optimal Spot"
+        elif 1.30 < r <= 1.50:
+            return "#D97706", "#FEF3C7", "Elevated Risk"
+        else:
+            return "#D93025", "#FCE8E6", "High Spike"
+    except Exception:
+        return "#64748B", "#F1F5F9", "N/A"
 
+
+def compute_bball_ewma_calendar(v_df, i_df, ath_name, metrics_list):
+    """
+    Merges volume and intensity tracking frames for an athlete,
+    reindexes continuous calendar days, and calculates 7d (Acute) 
+    and 28d (Chronic) EWMA and ACWR ratios.
+    """
+    v_ath = (
+        v_df[v_df["Player"].astype(str).str.strip().str.lower() == str(ath_name).strip().lower()].copy()
+        if not v_df.empty and "Player" in v_df.columns
+        else pd.DataFrame()
+    )
+    i_ath = (
+        i_df[i_df["Player"].astype(str).str.strip().str.lower() == str(ath_name).strip().lower()].copy()
+        if not i_df.empty and "Player" in i_df.columns
+        else pd.DataFrame()
+    )
+
+    if v_ath.empty and i_ath.empty:
+        return pd.DataFrame()
+
+    for df_sub in [v_ath, i_ath]:
+        if not df_sub.empty and "Date" in df_sub.columns:
+            df_sub["Date"] = pd.to_datetime(df_sub["Date"], errors="coerce")
+            df_sub.dropna(subset=["Date"], inplace=True)
+
+    # Clean numeric types across metrics
+    for m in metrics_list:
+        if not v_ath.empty and m in v_ath.columns:
+            v_ath[m] = pd.to_numeric(v_ath[m].astype(str).str.replace(r"[^0-9.]", "", regex=True), errors="coerce").fillna(0.0)
+        if not i_ath.empty and m in i_ath.columns:
+            i_ath[m] = pd.to_numeric(i_ath[m].astype(str).str.replace(r"[^0-9.]", "", regex=True), errors="coerce").fillna(0.0)
+
+    # Aggregate by day
+    v_daily = v_ath.groupby("Date").sum(numeric_only=True) if not v_ath.empty else pd.DataFrame()
+    if not i_ath.empty:
+        i_agg = {}
+        for c in i_ath.select_dtypes(include=[np.number]).columns:
+            i_agg[c] = "max" if "speed (max" in str(c).lower() else "sum"
+        i_daily = i_ath.groupby("Date").agg(i_agg)
+    else:
+        i_daily = pd.DataFrame()
+
+    daily_combined = pd.merge(v_daily, i_daily, on="Date", how="outer").fillna(0.0).sort_index()
+
+    if daily_combined.empty:
+        return pd.DataFrame()
+
+    # Reindex daily continuous calendar range to compute EWMA decay over off-days
+    min_date = daily_combined.index.min()
+    max_date = daily_combined.index.max()
+    full_idx = pd.date_range(start=min_date, end=max_date, freq="D")
+    cal = daily_combined.reindex(full_idx).fillna(0.0).reset_index()
+    cal.rename(columns={"index": "Date"}, inplace=True)
+
+    # Compute 7d Acute, 28d Chronic, and ACWR Ratio
+    for m in metrics_list:
+        if m not in cal.columns:
+            cal[m] = 0.0
+        cal[f"{m}_Acute"] = cal[m].ewm(span=7, adjust=False).mean()
+        cal[f"{m}_Chronic"] = cal[m].ewm(span=28, adjust=False).mean()
+        cal[f"{m}_ACWR"] = cal.apply(
+            lambda r: (r[f"{m}_Acute"] / r[f"{m}_Chronic"]) if r[f"{m}_Chronic"] > 0 else 0.0,
+            axis=1,
+        )
+    return cal
+    
 # -----------------------------------------------------------------------------
 # 5. SIDEBAR NAVIGATION (DYNAMIC ROLES)
 # -----------------------------------------------------------------------------
@@ -1028,6 +1110,7 @@ else:
         "Compliance",
         "Weekly Data",
         "Cumulative Load",
+        "Workload & ACWR",
         "Testing",
         "Recovery",
         "Tracking",
@@ -2189,6 +2272,410 @@ def render_dashboard_content(season_label, season_key):
             
     elif main_tab == "Cumulative Load":
         render_cumulative_content(season_label=season_label, season_key=season_key)
+
+    elif main_tab == "Workload & ACWR":
+        st.markdown(
+            f'<div class="vball-section-title">Basketball Acute:Chronic Workload Ratio (EWMA) — {season_label}</div>',
+            unsafe_allow_html=True,
+        )
+
+        bball_acwr_metrics = [
+            "Distance (mi)",
+            "High Speed Distance (mi)",
+            "Accels",
+            "Decels",
+            "Physio Load",
+            "Mechanical Load",
+            "High Acceleration",
+            "Jump Load (J)",
+            "FCTs",
+            "Sprints",
+            "Exertions",
+        ]
+
+        metric_display_names = {
+            "Distance (mi)": "Total Distance (mi)",
+            "High Speed Distance (mi)": "High Speed Dist (mi)",
+            "Accels": "Accels",
+            "Decels": "Decels",
+            "Physio Load": "Physio Load",
+            "Mechanical Load": "Mechanical Load",
+            "High Acceleration": "High Accels",
+            "Jump Load (J)": "Jump Load",
+            "FCTs": "FCTs",
+            "Sprints": "Sprints",
+            "Exertions": "Exertions",
+        }
+
+        acwr_subtabs = ["Team Workload Summary", "Individual Profile"]
+        sel_acwr_subtab = st.radio(
+            "ACWR Navigation:",
+            acwr_subtabs,
+            horizontal=True,
+            key=f"acwr_subtab_radio_{season_key}",
+            label_visibility="collapsed",
+        )
+
+        season_dates = set()
+        if not vol_data.empty and "Date" in vol_data.columns:
+            season_dates.update(vol_data["Date"].dropna().dt.date)
+        if not int_data.empty and "Date" in int_data.columns:
+            season_dates.update(int_data["Date"].dropna().dt.date)
+
+        valid_acwr_dates = sorted(list(season_dates), reverse=True)
+        valid_acwr_dates_str = [d.strftime("%Y-%m-%d") for d in valid_acwr_dates]
+
+        if not valid_acwr_dates_str:
+            st.info(f"No dated basketball volume or intensity records found for {season_label} to compute ACWR.")
+        else:
+            if sel_acwr_subtab == "Team Workload Summary":
+                c_top1, c_top2, c_top3 = st.columns([1.5, 1.5, 1.5])
+                with c_top1:
+                    sel_eval_date_str = st.selectbox(
+                        "Evaluation Date:",
+                        valid_acwr_dates_str,
+                        index=0,
+                        format_func=format_date_clean,
+                        key=f"team_acwr_eval_date_{season_key}",
+                    )
+                with c_top2:
+                    pos_opts = ["All Positions"]
+                    if not roster_raw.empty and "Position" in roster_raw.columns:
+                        pos_opts += sorted([p for p in roster_raw["Position"].dropna().unique() if p != "N/A"])
+                    sel_pos_filter = st.selectbox(
+                        "Position Filter:", pos_opts, key=f"team_acwr_pos_filter_{season_key}"
+                    )
+                with c_top3:
+                    featured_metric = st.selectbox(
+                        "Featured Grid Metric:",
+                        bball_acwr_metrics,
+                        index=0,
+                        format_func=lambda m: metric_display_names.get(m, m),
+                        key=f"team_acwr_feat_metric_{season_key}",
+                    )
+
+                hide_inactive_last_week = st.checkbox(
+                    "Hide athletes inactive in the past 7 days",
+                    value=True,
+                    key=f"team_acwr_hide_inactive_{season_key}",
+                )
+
+                eval_date_obj = pd.to_datetime(sel_eval_date_str)
+                week_start_window = eval_date_obj - datetime.timedelta(days=6)
+                team_summary_rows = []
+
+                for ath in roster_players:
+                    p_meta = (
+                        roster_raw[roster_raw["Name"] == ath]
+                        if not roster_raw.empty and "Name" in roster_raw.columns
+                        else pd.DataFrame()
+                    )
+                    pos_str = p_meta["Position"].iloc[0] if not p_meta.empty and "Position" in p_meta.columns else "Athlete"
+                    p_img = (
+                        p_meta["Picture"].iloc[0]
+                        if not p_meta.empty and "Picture" in p_meta.columns and pd.notna(p_meta["Picture"].iloc[0])
+                        else "https://via.placeholder.com/40"
+                    )
+
+                    if sel_pos_filter != "All Positions" and pos_str != sel_pos_filter:
+                        continue
+
+                    if hide_inactive_last_week:
+                        v_sub = vol_data[(vol_data["Player"] == ath) & (vol_data["Date"] >= week_start_window) & (vol_data["Date"] <= eval_date_obj)] if not vol_data.empty else pd.DataFrame()
+                        i_sub = int_data[(int_data["Player"] == ath) & (int_data["Date"] >= week_start_window) & (int_data["Date"] <= eval_date_obj)] if not int_data.empty else pd.DataFrame()
+                        if v_sub.empty and i_sub.empty:
+                            continue
+
+                    ath_cal = compute_bball_ewma_calendar(vol_raw, int_raw, ath, bball_acwr_metrics)
+                    if ath_cal.empty:
+                        continue
+
+                    cal_point = ath_cal[ath_cal["Date"] <= eval_date_obj]
+                    if cal_point.empty:
+                        continue
+
+                    target_row = cal_point.iloc[-1]
+                    comp_acwr = float(np.mean([target_row.get(f"{m}_ACWR", 0.0) for m in bball_acwr_metrics]))
+                    b_color, b_bg, b_status = get_acwr_badge(comp_acwr)
+
+                    row_dict = {
+                        "Athlete": ath,
+                        "PhotoURL": p_img,
+                        "Position": pos_str,
+                        "Composite ACWR": comp_acwr,
+                        "Status": b_status,
+                        "Status_Color": b_color,
+                        "Status_Bg": b_bg,
+                    }
+                    for m in bball_acwr_metrics:
+                        row_dict[m] = target_row.get(f"{m}_ACWR", 0.0)
+                    team_summary_rows.append(row_dict)
+
+                if team_summary_rows:
+                    team_summary_df = pd.DataFrame(team_summary_rows).sort_values("Composite ACWR", ascending=False)
+                    sweet_count = sum(1 for r in team_summary_rows if 0.80 <= r["Composite ACWR"] <= 1.30)
+                    spike_count = sum(1 for r in team_summary_rows if r["Composite ACWR"] > 1.50)
+                    under_count = sum(1 for r in team_summary_rows if 0 < r["Composite ACWR"] < 0.80)
+
+                    st.markdown(
+                        f"""
+                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 10px; margin-bottom: 20px;">
+                            <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #FF8200; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+                                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Athletes Evaluated</div>
+                                <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{len(team_summary_rows)}</div>
+                                <div style="font-size: 0.68rem; color: #94A3B8;">Across Active 7-Day Window</div>
+                            </div>
+                            <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #22C55E; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+                                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Optimal (0.80 - 1.30)</div>
+                                <div style="font-size: 1.8rem; font-weight: 800; color: #166534; margin-top: 4px;">{sweet_count}</div>
+                                <div style="font-size: 0.68rem; color: #94A3B8;">Sweet Spot Workload</div>
+                            </div>
+                            <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #EAB308; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+                                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Underloaded (&lt; 0.80)</div>
+                                <div style="font-size: 1.8rem; font-weight: 800; color: #854D0E; margin-top: 4px;">{under_count}</div>
+                                <div style="font-size: 0.68rem; color: #94A3B8;">Building Chronic Capacity</div>
+                            </div>
+                            <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #EF4444; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+                                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">High Spikes (&gt; 1.50)</div>
+                                <div style="font-size: 1.8rem; font-weight: 800; color: #991B1B; margin-top: 4px;">{spike_count}</div>
+                                <div style="font-size: 0.68rem; color: #94A3B8;">Elevated Fatigue / Injury Risk</div>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                    st.markdown(f"#### Team Workload Ratios on {format_date_clean(sel_eval_date_str)}")
+
+                    header_cells = "".join([f"<th>{metric_display_names.get(m, m)}</th>" for m in bball_acwr_metrics])
+                    table_rows = []
+
+                    for _, r in team_summary_df.iterrows():
+                        c_acwr = r["Composite ACWR"]
+                        c_col = r["Status_Color"]
+                        c_bg = r["Status_Bg"]
+                        c_stat = r["Status"]
+
+                        metric_tds = "".join([
+                            f"<td style='color:{get_acwr_badge(r[m])[0]}; font-weight:700;'>{r[m]:.2f}</td>"
+                            for m in bball_acwr_metrics
+                        ])
+
+                        table_rows.append(
+                            f"""
+                            <tr>
+                                <td style="padding:6px;"><img src="{r['PhotoURL']}" style="width:36px; height:36px; border-radius:50%; object-fit:cover; border:2px solid #FF8200;"></td>
+                                <td style="font-weight:800; text-align:left !important; padding-left:14px; color:#0F172A;">{r['Athlete']}</td>
+                                <td style="color:#64748B; font-weight:600;">{r['Position']}</td>
+                                <td style="font-weight:900; font-size:1.05rem; color:{c_col};">{c_acwr:.2f}</td>
+                                <td><span style="background-color:{c_bg}; color:{c_col}; font-weight:700; padding:2px 8px; border-radius:4px; font-size:0.75rem;">{c_stat}</span></td>
+                                {metric_tds}
+                            </tr>
+                            """
+                        )
+
+                    complete_html = f"""
+                    <table class="vball-table" style="width:100%; border:1px solid #E2E8F0; background:#FFFFFF; margin-top:10px;">
+                        <thead>
+                            <tr style="background:#F1F5F9; color:#475569;">
+                                <th style="width:45px;">Photo</th>
+                                <th style="text-align:left !important; padding-left:14px;">Athlete</th>
+                                <th>Position</th>
+                                <th>Composite ACWR</th>
+                                <th>Workload Zone</th>
+                                {header_cells}
+                            </tr>
+                        </thead>
+                        <tbody>{"".join(table_rows)}</tbody>
+                    </table>
+                    """
+                    st.markdown(complete_html, unsafe_allow_html=True)
+                else:
+                    st.info(f"No active athlete practice records found in the 7 days prior to {format_date_clean(sel_eval_date_str)}.")
+
+            elif sel_acwr_subtab == "Individual Profile":
+                c_ind1, c_ind2, c_ind3 = st.columns([1.5, 1.5, 1.5])
+                with c_ind1:
+                    sel_ind_ath = st.selectbox(
+                        "Select Athlete:", roster_players, key=f"ind_acwr_ath_sel_{season_key}"
+                    )
+                with c_ind2:
+                    sel_ind_metric = st.selectbox(
+                        "Select Practice Metric:",
+                        bball_acwr_metrics,
+                        index=0,
+                        format_func=lambda m: metric_display_names.get(m, m),
+                        key=f"ind_acwr_metric_sel_{season_key}",
+                    )
+                with c_ind3:
+                    sel_ind_snap_date = st.selectbox(
+                        "Snapshot Date:",
+                        valid_acwr_dates_str,
+                        index=0,
+                        format_func=format_date_clean,
+                        key=f"ind_acwr_snap_date_{season_key}",
+                    )
+
+                p_meta = (
+                    roster_raw[roster_raw["Name"] == sel_ind_ath]
+                    if not roster_raw.empty and "Name" in roster_raw.columns
+                    else pd.DataFrame()
+                )
+                pos_str = p_meta["Position"].iloc[0] if not p_meta.empty and "Position" in p_meta.columns else "Athlete"
+                p_img = (
+                    p_meta["Picture"].iloc[0]
+                    if not p_meta.empty and "Picture" in p_meta.columns and pd.notna(p_meta["Picture"].iloc[0])
+                    else "https://via.placeholder.com/75"
+                )
+
+                ath_cal = compute_bball_ewma_calendar(vol_raw, int_raw, sel_ind_ath, bball_acwr_metrics)
+
+                if ath_cal.empty or ath_cal[ath_cal["Date"] == pd.to_datetime(sel_ind_snap_date)].empty:
+                    st.info(f"No practice history found for {sel_ind_ath} around {format_date_clean(sel_ind_snap_date)}.")
+                else:
+                    target_row = ath_cal[ath_cal["Date"] == pd.to_datetime(sel_ind_snap_date)].iloc[0]
+                    cur_acute = target_row[f"{sel_ind_metric}_Acute"]
+                    cur_chronic = target_row[f"{sel_ind_metric}_Chronic"]
+                    cur_acwr = target_row[f"{sel_ind_metric}_ACWR"]
+                    b_color, b_bg, b_status = get_acwr_badge(cur_acwr)
+
+                    st.markdown(
+                        f"""
+                        <div class="athlete-card" style="margin-top: 14px;">
+                            <img src="{p_img}" class="athlete-avatar">
+                            <div class="athlete-info">
+                                <h2 style="margin:0; font-size:1.35rem; font-weight:800; color:#0F172A;">{sel_ind_ath}</h2>
+                                <p style="margin:2px 0 0 0; color:#64748B; font-size:0.88rem; font-weight:600;">{pos_str} &bull; Workload ACWR Snapshot: {metric_display_names.get(sel_ind_metric, sel_ind_metric)}</p>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                    k1, k2, k3, k4 = st.columns(4)
+                    k1.metric("Daily Raw Workload", f"{target_row.get(sel_ind_metric, 0.0):.1f}")
+                    k2.metric("Acute Load (7d EWMA)", f"{cur_acute:.1f}")
+                    k3.metric("Chronic Load (28d EWMA)", f"{cur_chronic:.1f}")
+                    with k4:
+                        st.markdown(
+                            f"""
+                            <div style="background:{b_bg}; border:1px solid #E2E8F0; border-radius:10px; padding:8px 12px; text-align:center;">
+                                <div style="font-size:0.68rem; font-weight:800; color:{b_color}; text-transform:uppercase;">ACWR RATIO</div>
+                                <div style="font-size:1.6rem; font-weight:900; color:{b_color}; line-height:1.1;">{cur_acwr:.2f}</div>
+                                <div style="font-size:0.75rem; font-weight:700; color:{b_color}; margin-top:2px;">{b_status}</div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+
+                    st.markdown("<br>", unsafe_allow_html=True)
+
+                    fig_acwr = make_subplots(specs=[[{"secondary_y": True}]])
+                    fig_acwr.add_hrect(
+                        y0=0.80,
+                        y1=1.30,
+                        fillcolor="#22C55E",
+                        opacity=0.12,
+                        line_width=0,
+                        secondary_y=False,
+                        annotation_text="Optimal Spot (0.80 - 1.30)",
+                        annotation_position="top left",
+                        annotation_font_size=10,
+                        annotation_font_color="#166534",
+                    )
+                    fig_acwr.add_hline(
+                        y=1.50,
+                        line_dash="dash",
+                        line_color="#EF4444",
+                        line_width=1.5,
+                        secondary_y=False,
+                        annotation_text="Spike Threshold (1.50)",
+                        annotation_position="bottom right",
+                        annotation_font_size=10,
+                        annotation_font_color="#991B1B",
+                    )
+                    fig_acwr.add_trace(
+                        go.Scatter(
+                            x=ath_cal["Date"],
+                            y=ath_cal[f"{sel_ind_metric}_ACWR"],
+                            name="ACWR Ratio",
+                            mode="lines+markers",
+                            line=dict(color="#FF8200", width=3.5),
+                            marker=dict(size=5, color="#FF8200"),
+                        ),
+                        secondary_y=False,
+                    )
+                    fig_acwr.add_trace(
+                        go.Scatter(
+                            x=ath_cal["Date"],
+                            y=ath_cal[f"{sel_ind_metric}_Acute"],
+                            name="Acute Load (7d)",
+                            mode="lines",
+                            line=dict(color="#38BDF8", width=2, dash="dot"),
+                        ),
+                        secondary_y=True,
+                    )
+                    fig_acwr.add_trace(
+                        go.Scatter(
+                            x=ath_cal["Date"],
+                            y=ath_cal[f"{sel_ind_metric}_Chronic"],
+                            name="Chronic Load (28d)",
+                            mode="lines",
+                            line=dict(color="#64748B", width=1.8, dash="dash"),
+                        ),
+                        secondary_y=True,
+                    )
+                    fig_acwr.add_vline(
+                        x=pd.to_datetime(sel_ind_snap_date), line_dash="dash", line_color="#0F172A", opacity=0.4
+                    )
+
+                    fig_acwr.update_layout(
+                        height=380,
+                        margin=dict(l=20, r=20, t=40, b=20),
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        legend=dict(
+                            orientation="h",
+                            yanchor="bottom",
+                            y=1.04,
+                            xanchor="right",
+                            x=1,
+                            font=dict(size=11, color="#0F172A"),
+                        ),
+                        xaxis=dict(title=None, tickformat="%b %d", showgrid=False),
+                    )
+                    fig_acwr.update_yaxes(
+                        title_text="ACWR Ratio",
+                        secondary_y=False,
+                        rangemode="tozero",
+                        range=[0, max(2.0, float(ath_cal[f"{sel_ind_metric}_ACWR"].max()) * 1.15)],
+                    )
+                    fig_acwr.update_yaxes(
+                        title_text=f"Absolute {metric_display_names.get(sel_ind_metric, sel_ind_metric)}",
+                        secondary_y=True,
+                        showgrid=False,
+                    )
+                    st.plotly_chart(fig_acwr, use_container_width=True, key=f"ind_acwr_fig_{season_key}")
+
+                    st.markdown(f"#### Practice Metrics EWMA Breakdown on {format_date_clean(sel_ind_snap_date)}")
+                    detail_rows = []
+                    for m in bball_acwr_metrics:
+                        a_val = target_row[f"{m}_Acute"]
+                        c_val = target_row[f"{m}_Chronic"]
+                        r_val = target_row[f"{m}_ACWR"]
+                        _, _, stat_lbl = get_acwr_badge(r_val)
+                        detail_rows.append(
+                            {
+                                "Metric": metric_display_names.get(m, m),
+                                "Day Total": f"{target_row.get(m, 0.0):.1f}",
+                                "Acute (7d EWMA)": f"{a_val:.1f}",
+                                "Chronic (28d EWMA)": f"{c_val:.1f}",
+                                "ACWR Ratio": f"{r_val:.2f}",
+                                "Workload Zone": stat_lbl,
+                            }
+                        )
+                    st.markdown(render_vball_table(pd.DataFrame(detail_rows)), unsafe_allow_html=True)
+                    
         
     # TAB 5: TESTING
     elif main_tab == "Testing":
