@@ -4370,7 +4370,6 @@ def render_cumulative_content(season_label="In-Season", season_key="cumul"):
             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #38BDF8; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
                 <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Team Avg Distance</div>
                 <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{avg_dist:.1f} mi</div>
-                <div style="font-size: 0.68rem; color: #94A3B8;">Across {ath_count} Active Athletes</div>
             </div>
             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #FF8200; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
                 <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Team Avg High Speed Dist</div>
