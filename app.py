@@ -1624,6 +1624,7 @@ def render_dashboard_content(season_label, season_key):
         st.divider()
 
         # SECTION 6: LIVE TRACKING SUMMARY
+        import datetime as dt
         st.markdown(
             '<div class="vball-section-title">6. In-Practice Live Tracking Summary</div>',
             unsafe_allow_html=True,
