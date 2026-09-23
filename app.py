@@ -20,7 +20,7 @@ def get_eastern_time_str():
 
 
 def get_eastern_now():
-    return datetime.datetime.now(EASTERN_TZ)
+    return datetime.datetime.now(EASTERN_TZ)f
 
 
 def format_date_clean(val):
@@ -1629,8 +1629,17 @@ def render_dashboard_content(season_label, season_key):
             unsafe_allow_html=True,
         )
 
+        # Standard list of metrics to ensure they always display
+        TRACKED_METRICS = [
+            "Turnover",
+            "Not Crashing",
+            "No Box Out",
+            "Not Calling Back",
+            "Fouls",
+        ]
+
         ind_track_rows = []
-        for k, v in st.session_state.tracking_data.items():
+        for k, v in st.session_state.get("tracking_data", {}).items():
             parts = k.split("|")
             if len(parts) == 4 and v > 0:
                 ind_track_rows.append({
@@ -1638,107 +1647,145 @@ def render_dashboard_content(season_label, season_key):
                     "Date": parts[1],
                     "Athlete": parts[2],
                     "Metric": parts[3],
-                    "Count": v
+                    "Count": v,
                 })
 
-        ind_track_df = pd.DataFrame(ind_track_rows) if ind_track_rows else pd.DataFrame(
-            columns=["Week_Starting", "Date", "Athlete", "Metric", "Count"]
-        )
-        
-        p_ind_track = (
-            ind_track_df[ind_track_df["Athlete"] == selected_player] 
-            if not ind_track_df.empty 
+        ind_track_df = (
+            pd.DataFrame(ind_track_rows)
+            if ind_track_rows
             else pd.DataFrame(columns=["Week_Starting", "Date", "Athlete", "Metric", "Count"])
         )
 
-        season_mondays = get_season_mondays(vol_data)
+        p_ind_track = (
+            ind_track_df[ind_track_df["Athlete"] == selected_player]
+            if not ind_track_df.empty
+            else pd.DataFrame(columns=["Week_Starting", "Date", "Athlete", "Metric", "Count"])
+        )
 
+        # --- Allow weeks even if vol_data has no practices logged ---
+        season_mondays = (
+            get_season_mondays(vol_data)
+            if "vol_data" in locals() and vol_data is not None
+            else []
+        )
+
+        # Fallback: if no practices exist, create a rolling window of Mondays around today
         if not season_mondays:
-            st.info(f"No practice tracking weeks found for {season_label}.")
-        else:
-            c_tr_wk, _ = st.columns([1, 2])
-            with c_tr_wk:
-                sel_ind_mon = st.selectbox(
-                    f"Select Week Starting ({season_label}):",
-                    options=season_mondays,
-                    format_func=lambda d: d.strftime("%Y-%m-%d (Monday)"),
-                    key=f"ind_prof_track_week_picker_{season_key}",
-                )
-                sel_ind_mon_str = sel_ind_mon.strftime("%Y-%m-%d")
+            today = dt.date.today()
+            this_monday = today - dt.timedelta(days=today.weekday())
+            # Generate past 8 weeks and next 4 weeks
+            season_mondays = [this_monday + dt.timedelta(weeks=w) for w in range(-8, 5)]
 
-            p_ind_track_wk = (
-                p_ind_track[p_ind_track["Week_Starting"] == sel_ind_mon_str] 
-                if not p_ind_track.empty 
-                else pd.DataFrame(columns=["Week_Starting", "Date", "Athlete", "Metric", "Count"])
+        c_tr_wk, _ = st.columns([1, 2])
+        with c_tr_wk:
+            sel_ind_mon = st.selectbox(
+                f"Select Week Starting ({season_label}):",
+                options=season_mondays,
+                format_func=lambda d: d.strftime("%Y-%m-%d (Monday)"),
+                key=f"ind_prof_track_week_picker_{season_key}",
+            )
+            sel_ind_mon_str = sel_ind_mon.strftime("%Y-%m-%d")
+
+        p_ind_track_wk = (
+            p_ind_track[p_ind_track["Week_Starting"] == sel_ind_mon_str]
+            if not p_ind_track.empty
+            else pd.DataFrame(columns=["Week_Starting", "Date", "Athlete", "Metric", "Count"])
+        )
+
+        # Safe metric counter helper
+        def get_count(metric_patterns):
+            if p_ind_track_wk.empty:
+                return 0
+            return int(
+                p_ind_track_wk[
+                    p_ind_track_wk["Metric"]
+                    .str.strip()
+                    .str.lower()
+                    .isin([m.lower() for m in metric_patterns])
+                ]["Count"].sum()
             )
 
-            # Updated to 5 metric columns to include Fouls
-            t_col1, t_col2, t_col3, t_col4, t_col5 = st.columns(5)
-            to_total = p_ind_track_wk[p_ind_track_wk["Metric"] == "Turnover"]["Count"].sum() if not p_ind_track_wk.empty else 0
-            nc_total = p_ind_track_wk[p_ind_track_wk["Metric"] == "Not Crashing"]["Count"].sum() if not p_ind_track_wk.empty else 0
-            nbo_total = p_ind_track_wk[p_ind_track_wk["Metric"] == "No Box Out"]["Count"].sum() if not p_ind_track_wk.empty else 0
-            ncb_total = p_ind_track_wk[p_ind_track_wk["Metric"] == "Not Calling Back"]["Count"].sum() if not p_ind_track_wk.empty else 0
-            foul_total = p_ind_track_wk[p_ind_track_wk["Metric"].isin(["Fouls", "Foul"])]["Count"].sum() if not p_ind_track_wk.empty else 0
+        # Metric summary row (including Fouls)
+        t_col1, t_col2, t_col3, t_col4, t_col5 = st.columns(5)
+        to_total = get_count(["Turnover", "Turnovers"])
+        nc_total = get_count(["Not Crashing"])
+        nbo_total = get_count(["No Box Out", "No Box Outs"])
+        ncb_total = get_count(["Not Calling Back"])
+        foul_total = get_count(["Foul", "Fouls", "Personal Foul"])
 
-            with t_col1:
-                st.metric("Turnovers (Week)", int(to_total))
-            with t_col2:
-                st.metric("Not Crashing (Week)", int(nc_total))
-            with t_col3:
-                st.metric("No Box Outs (Week)", int(nbo_total))
-            with t_col4:
-                st.metric("Not Calling Back (Week)", int(ncb_total))
-            with t_col5:
-                st.metric("Fouls (Week)", int(foul_total))
+        with t_col1:
+            st.metric("Turnovers (Week)", to_total)
+        with t_col2:
+            st.metric("Not Crashing (Week)", nc_total)
+        with t_col3:
+            st.metric("No Box Outs (Week)", nbo_total)
+        with t_col4:
+            st.metric("Not Calling Back (Week)", ncb_total)
+        with t_col5:
+            st.metric("Fouls (Week)", foul_total)
 
-            if not p_ind_track_wk.empty:
-                st.markdown(f"#### Daily Breakdown for Week of {sel_ind_mon_str}")
-                
-                pivot_ind_track = p_ind_track_wk.pivot_table(
-                    index="Metric",
-                    columns="Date",
-                    values="Count",
-                    aggfunc="sum",
-                    fill_value=0
+        # Table breakdown
+        st.markdown(f"#### Daily Breakdown for Week of {sel_ind_mon_str}")
+
+        if not p_ind_track_wk.empty:
+            pivot_ind_track = p_ind_track_wk.pivot_table(
+                index="Metric",
+                columns="Date",
+                values="Count",
+                aggfunc="sum",
+                fill_value=0,
+            )
+            # Reindex to ensure standard metrics show even if 0
+            pivot_ind_track = pivot_ind_track.reindex(
+                list(set(TRACKED_METRICS + list(pivot_ind_track.index))),
+                fill_value=0,
+            )
+            pivot_ind_track["Total"] = pivot_ind_track.sum(axis=1)
+
+            formatted_cols = {}
+            for col in pivot_ind_track.columns:
+                if col != "Total":
+                    try:
+                        formatted_cols[col] = pd.to_datetime(col).strftime("%a (%m/%d)")
+                    except Exception:
+                        formatted_cols[col] = str(col)
+                else:
+                    formatted_cols[col] = "Total"
+
+            pivot_display = pivot_ind_track.rename(columns=formatted_cols).reset_index()
+
+            html_table = '<table class="vball-table" style="margin-top: 10px;"><thead><tr>'
+            for col in pivot_display.columns:
+                bg_style = (
+                    "background-color: #FF8200; color: #FFFFFF;"
+                    if col == "Total"
+                    else "background-color: #F1F5F9; color: #475569;"
                 )
-                pivot_ind_track["Total"] = pivot_ind_track.sum(axis=1)
-                
-                formatted_cols = {}
-                for col in pivot_ind_track.columns:
-                    if col != "Total":
-                        try:
-                            formatted_cols[col] = pd.to_datetime(col).strftime("%a (%m/%d)")
-                        except Exception:
-                            formatted_cols[col] = str(col)
-                    else:
-                        formatted_cols[col] = "Total"
-                        
-                pivot_display = pivot_ind_track.rename(columns=formatted_cols).reset_index()
+                html_table += f'<th style="{bg_style}">{col}</th>'
+            html_table += "</tr></thead><tbody>"
 
-                html_table = '<table class="vball-table" style="margin-top: 10px;"><thead><tr>'
+            for _, row in pivot_display.iterrows():
+                html_table += "<tr>"
                 for col in pivot_display.columns:
-                    bg_style = "background-color: #FF8200; color: #FFFFFF;" if col == "Total" else "background-color: #F1F5F9; color: #475569;"
-                    html_table += f'<th style="{bg_style}">{col}</th>'
-                html_table += "</tr></thead><tbody>"
+                    val = row[col]
+                    if col == "Metric":
+                        html_table += f'<td style="font-weight: 700; text-align: left !important; padding-left: 16px;">{val}</td>'
+                    elif col == "Total":
+                        html_table += f'<td><span style="background-color: #FF8200; color: #FFFFFF; font-weight: 800; padding: 2px 10px; border-radius: 6px;">{val}</span></td>'
+                    else:
+                        val_display = (
+                            f'<span style="font-weight: 600; color: #0F172A;">{val}</span>'
+                            if val > 0
+                            else '<span style="color: #94A3B8;">0</span>'
+                        )
+                        html_table += f"<td>{val_display}</td>"
+                html_table += "</tr>"
+            html_table += "</tbody></table>"
 
-                for _, row in pivot_display.iterrows():
-                    html_table += "<tr>"
-                    for col in pivot_display.columns:
-                        val = row[col]
-                        if col == "Metric":
-                            html_table += f'<td style="font-weight: 700; text-align: left !important; padding-left: 16px;">{val}</td>'
-                        elif col == "Total":
-                            html_table += f'<td><span style="background-color: #FF8200; color: #FFFFFF; font-weight: 800; padding: 2px 10px; border-radius: 6px;">{val}</span></td>'
-                        else:
-                            val_display = f'<span style="font-weight: 600; color: #0F172A;">{val}</span>' if val > 0 else '<span style="color: #94A3B8;">0</span>'
-                            html_table += f"<td>{val_display}</td>"
-                    html_table += "</tr>"
-                html_table += "</tbody></table>"
+            st.markdown(html_table, unsafe_allow_html=True)
+        else:
+            st.info(f"No in-practice tracking metrics logged for {selected_player} during the week of {sel_ind_mon_str}.")
 
-                st.markdown(html_table, unsafe_allow_html=True)
-            else:
-                st.info(f"No in-practice tracking metrics logged for {selected_player} during the week of {sel_ind_mon_str}.")
-                
         st.divider()
                 
 
