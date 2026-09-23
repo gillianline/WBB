@@ -1624,7 +1624,6 @@ def render_dashboard_content(season_label, season_key):
         st.divider()
 
         # SECTION 6: LIVE TRACKING SUMMARY
-        import datetime as dt
         st.markdown(
             '<div class="vball-section-title">6. In-Practice Live Tracking Summary</div>',
             unsafe_allow_html=True,
@@ -1638,16 +1637,16 @@ def render_dashboard_content(season_label, season_key):
             "Fouls",
         ]
 
-        # 1. Gather all logged rows from session state
+        # 1. Parse logged tracking rows from session state
         ind_track_rows = []
         for k, v in st.session_state.get("tracking_data", {}).items():
             parts = k.split("|")
             if len(parts) == 4 and v > 0:
                 ind_track_rows.append({
-                    "Week_Starting": parts[0],
-                    "Date": parts[1],
-                    "Athlete": parts[2],
-                    "Metric": parts[3],
+                    "Week_Starting": parts[0].strip(),
+                    "Date": parts[1].strip(),
+                    "Athlete": parts[2].strip(),
+                    "Metric": parts[3].strip(),
                     "Count": v,
                 })
 
@@ -1658,32 +1657,48 @@ def render_dashboard_content(season_label, season_key):
         )
 
         p_ind_track = (
-            ind_track_df[ind_track_df["Athlete"] == selected_player]
+            ind_track_df[
+                ind_track_df["Athlete"].str.strip().str.lower()
+                == str(selected_player).strip().lower()
+            ]
             if not ind_track_df.empty
             else pd.DataFrame(columns=["Week_Starting", "Date", "Athlete", "Metric", "Count"])
         )
 
-        # 2. Pick ANY calendar date (no requirement for practice data to exist)
+        # 2. Build the Monday options list (Guarantees Today is always an option)
+        today = dt.date.today()
+        current_monday = today - dt.timedelta(days=today.weekday())
+
+        existing_mondays = (
+            get_season_mondays(vol_data)
+            if "vol_data" in locals() and vol_data is not None
+            else []
+        )
+        
+        # Combine existing mondays with today's monday and sort descending (newest first)
+        all_mondays = sorted(
+            list(set(existing_mondays + [current_monday])),
+            reverse=True
+        )
+
         c_tr_wk, _ = st.columns([1, 2])
         with c_tr_wk:
-            chosen_date = st.date_input(
-                "Select Any Practice Date / Week:",
-                value=dt.date.today(),
-                key=f"ind_prof_track_date_picker_{season_key}",
+            sel_ind_mon = st.selectbox(
+                f"Select Week Starting ({season_label}):",
+                options=all_mondays,
+                index=0,  # Defaults to the newest Monday (today's week)
+                format_func=lambda d: f"{d.strftime('%Y-%m-%d')} (Current Week)" if d == current_monday else d.strftime("%Y-%m-%d (Monday)"),
+                key=f"ind_prof_track_week_picker_{season_key}",
             )
-            # Calculate Monday of that week automatically
-            sel_ind_mon = chosen_date - dt.timedelta(days=chosen_date.weekday())
             sel_ind_mon_str = sel_ind_mon.strftime("%Y-%m-%d")
-            st.caption(f"Tracking Week Starting (Monday): **{sel_ind_mon_str}**")
 
-        # 3. Filter records for selected week
+        # 3. Filter data for the selected week
         p_ind_track_wk = (
             p_ind_track[p_ind_track["Week_Starting"] == sel_ind_mon_str]
             if not p_ind_track.empty
             else pd.DataFrame(columns=["Week_Starting", "Date", "Athlete", "Metric", "Count"])
         )
 
-        # Helper function with case-insensitive / alias matching
         def get_count(metric_patterns):
             if p_ind_track_wk.empty:
                 return 0
@@ -1695,11 +1710,11 @@ def render_dashboard_content(season_label, season_key):
             )
 
         metric_counts = {
-            "Turnovers": get_count(["Turnover", "Turnovers"]),
-            "Not Crashing": get_count(["Not Crashing"]),
-            "No Box Outs": get_count(["No Box Out", "No Box Outs"]),
-            "Not Calling Back": get_count(["Not Calling Back"]),
-            "Fouls": get_count(["Foul", "Fouls", "Personal Foul"]),
+            "Turnovers": get_count(["turnover", "turnovers"]),
+            "Not Crashing": get_count(["not crashing"]),
+            "No Box Outs": get_count(["no box out", "no box outs"]),
+            "Not Calling Back": get_count(["not calling back"]),
+            "Fouls": get_count(["foul", "fouls", "personal foul"]),
         }
 
         # 4. Metrics Stacked Vertically in a Single Column Card Layout
@@ -1711,23 +1726,18 @@ def render_dashboard_content(season_label, season_key):
                 st.markdown(
                     f"""
                     <div style="display: flex; justify-content: space-between; align-items: center; 
-                                padding: 10px 14px; margin-bottom: 6px; background-color: #F8FAFC; 
+                                padding: 8px 14px; margin-bottom: 6px; background-color: #F8FAFC; 
                                 border: 1px solid #E2E8F0; border-radius: 8px;">
                         <span style="font-weight: 600; color: #1E293B; font-size: 14px;">{label}</span>
                         <span style="background-color: {val_badge_color}; color: #FFFFFF; font-weight: 700; 
-                                     padding: 3px 12px; border-radius: 999px; font-size: 13px;">{val}</span>
+                                     padding: 2px 10px; border-radius: 999px; font-size: 13px;">{val}</span>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
 
-        # 5. Daily Breakdown Table
+        # 5. Breakdown Table
         st.markdown(f"#### Daily Breakdown for Week of {sel_ind_mon_str}")
-
-        # Build baseline DataFrame so tracked metrics appear even with 0 counts
-        dates_in_week = [
-            (sel_ind_mon + dt.timedelta(days=i)).strftime("%Y-%m-%d") for i in range(7)
-        ]
 
         if not p_ind_track_wk.empty:
             pivot_ind_track = p_ind_track_wk.pivot_table(
@@ -1737,59 +1747,57 @@ def render_dashboard_content(season_label, season_key):
                 aggfunc="sum",
                 fill_value=0,
             )
-            # Reindex to ensure all target metrics show
-            all_indices = list(dict.fromkeys(TRACKED_METRICS + list(pivot_ind_track.index)))
-            pivot_ind_track = pivot_ind_track.reindex(index=all_indices, fill_value=0)
-        else:
-            pivot_ind_track = pd.DataFrame(
-                0,
-                index=TRACKED_METRICS,
-                columns=[chosen_date.strftime("%Y-%m-%d")],
+            # Reindex to ensure standard metrics show even if 0
+            pivot_ind_track = pivot_ind_track.reindex(
+                list(dict.fromkeys(TRACKED_METRICS + list(pivot_ind_track.index))),
+                fill_value=0,
             )
+            pivot_ind_track["Total"] = pivot_ind_track.sum(axis=1)
 
-        pivot_ind_track["Total"] = pivot_ind_track.sum(axis=1)
-
-        formatted_cols = {}
-        for col in pivot_ind_track.columns:
-            if col != "Total":
-                try:
-                    formatted_cols[col] = pd.to_datetime(col).strftime("%a (%m/%d)")
-                except Exception:
-                    formatted_cols[col] = str(col)
-            else:
-                formatted_cols[col] = "Total"
-
-        pivot_display = pivot_ind_track.rename(columns=formatted_cols).reset_index()
-
-        html_table = '<table class="vball-table" style="margin-top: 10px; width: 100%;"><thead><tr>'
-        for col in pivot_display.columns:
-            bg_style = (
-                "background-color: #FF8200; color: #FFFFFF;"
-                if col == "Total"
-                else "background-color: #F1F5F9; color: #475569;"
-            )
-            html_table += f'<th style="{bg_style}">{col}</th>'
-        html_table += "</tr></thead><tbody>"
-
-        for _, row in pivot_display.iterrows():
-            html_table += "<tr>"
-            for col in pivot_display.columns:
-                val = row[col]
-                if col == "Metric" or col == "index":
-                    html_table += f'<td style="font-weight: 700; text-align: left !important; padding-left: 16px;">{val}</td>'
-                elif col == "Total":
-                    html_table += f'<td><span style="background-color: #FF8200; color: #FFFFFF; font-weight: 800; padding: 2px 10px; border-radius: 6px;">{val}</span></td>'
+            formatted_cols = {}
+            for col in pivot_ind_track.columns:
+                if col != "Total":
+                    try:
+                        formatted_cols[col] = pd.to_datetime(col).strftime("%a (%m/%d)")
+                    except Exception:
+                        formatted_cols[col] = str(col)
                 else:
-                    val_display = (
-                        f'<span style="font-weight: 600; color: #0F172A;">{val}</span>'
-                        if val > 0
-                        else '<span style="color: #94A3B8;">0</span>'
-                    )
-                    html_table += f"<td>{val_display}</td>"
-            html_table += "</tr>"
-        html_table += "</tbody></table>"
+                    formatted_cols[col] = "Total"
 
-        st.markdown(html_table, unsafe_allow_html=True)
+            pivot_display = pivot_ind_track.rename(columns=formatted_cols).reset_index()
+
+            html_table = '<table class="vball-table" style="margin-top: 10px; width: 100%;"><thead><tr>'
+            for col in pivot_display.columns:
+                bg_style = (
+                    "background-color: #FF8200; color: #FFFFFF;"
+                    if col == "Total"
+                    else "background-color: #F1F5F9; color: #475569;"
+                )
+                html_table += f'<th style="{bg_style}">{col}</th>'
+            html_table += "</tr></thead><tbody>"
+
+            for _, row in pivot_display.iterrows():
+                html_table += "<tr>"
+                for col in pivot_display.columns:
+                    val = row[col]
+                    if col == "Metric" or col == "index":
+                        html_table += f'<td style="font-weight: 700; text-align: left !important; padding-left: 16px;">{val}</td>'
+                    elif col == "Total":
+                        html_table += f'<td><span style="background-color: #FF8200; color: #FFFFFF; font-weight: 800; padding: 2px 10px; border-radius: 6px;">{val}</span></td>'
+                    else:
+                        val_display = (
+                            f'<span style="font-weight: 600; color: #0F172A;">{val}</span>'
+                            if val > 0
+                            else '<span style="color: #94A3B8;">0</span>'
+                        )
+                        html_table += f"<td>{val_display}</td>"
+                html_table += "</tr>"
+            html_table += "</tbody></table>"
+
+            st.markdown(html_table, unsafe_allow_html=True)
+        else:
+            st.info(f"No in-practice tracking metrics logged for {selected_player} during the week of {sel_ind_mon_str}.")
+
         st.divider()
                 
 
@@ -3403,7 +3411,7 @@ def render_dashboard_content(season_label, season_key):
                             )
 
                             m_cols = st.columns(4)
-                            metrics = ["Turnover", "Not Crashing", "No Box Out", "Not Calling Back"]
+                            metrics = ["Turnover", "Not Crashing", "No Box Out", "Not Calling Back", "Fouls"]
                             for m_idx, metric_name in enumerate(metrics):
                                 key = f"{track_week_str}|{session_date_val}|{player}|{metric_name}"
                                 val = st.session_state.tracking_data.get(key, 0)
