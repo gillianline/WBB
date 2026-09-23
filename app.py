@@ -1027,6 +1027,7 @@ else:
         "Practice Score",
         "Compliance",
         "Weekly Data",
+        "Cumulative Load",
         "Testing",
         "Recovery",
         "Tracking",
@@ -1111,7 +1112,6 @@ tabs_list = [
     "Pre-Season",
     "In-Season",
     "Combined Seasons",
-    "Cumulative",
     "Team Wellness",
 ]
 detected_season_idx = 0
@@ -1148,7 +1148,6 @@ if "active_season_tab_idx" not in st.session_state:
     season_tab_preseason,
     season_tab_inseason,
     season_tab_combined,
-    season_tab_cumulative,
     season_tab_wellness,
 ) = st.tabs(tabs_list)
 
@@ -4186,12 +4185,12 @@ def render_team_wellness_content():
         st.info(f"No Countermovement Jump testing records logged on {format_date_clean(sel_team_cmj_date)}.")
 
 # -----------------------------------------------------------------------------
-# WEEKLY CUMULATIVE VOLUME & INTENSITY ENGINE (TABLE ONLY)
+# CUMULATIVE LOAD ENGINE (SIDEBAR VIEW: TEAM AVERAGES & VOLUME/INTENSITY TABS)
 # -----------------------------------------------------------------------------
-def render_cumulative_content():
+def render_cumulative_content(season_label="In-Season", season_key="cumul"):
     st.markdown(
-        "<div style='font-weight:700; color:#64748B; margin-bottom:12px; font-size:0.9rem;'>"
-        "VIEW: <span style='color:#FF8200;'>WEEKLY CUMULATIVE LOAD & ACCUMULATION SUMMARY</span></div>",
+        f"<div style='font-weight:700; color:#64748B; margin-bottom:12px; font-size:0.9rem;'>"
+        f"CURRENT ACTIVE SEASON: <span style='color:#FF8200;'>{season_label.upper()}</span></div>",
         unsafe_allow_html=True,
     )
 
@@ -4200,169 +4199,209 @@ def render_cumulative_content():
         unsafe_allow_html=True,
     )
 
-    if vol_raw.empty:
-        st.info("No volume session data available to calculate weekly cumulative totals.")
+    if vol_raw.empty or int_raw.empty:
+        st.info("Session data not available to calculate weekly cumulative metrics.")
         return
 
-    df = vol_raw.copy()
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-    else:
-        st.info("No Date column detected in volume data.")
+    # Filter by season
+    vol_season = filter_by_season(vol_raw, season_label).copy()
+    int_season = filter_by_season(int_raw, season_label).copy()
+
+    if vol_season.empty:
+        st.info(f"No volume records found for {season_label}.")
         return
 
-    # Drop invalid dates
-    df = df.dropna(subset=["Date"]).copy()
-    if df.empty:
-        st.info("No valid session records found.")
+    if "Date" in vol_season.columns:
+        vol_season["Date"] = pd.to_datetime(vol_season["Date"], errors="coerce")
+    if "Date" in int_season.columns:
+        int_season["Date"] = pd.to_datetime(int_season["Date"], errors="coerce")
+
+    vol_season = vol_season.dropna(subset=["Date"]).copy()
+    int_season = int_season.dropna(subset=["Date"]).copy()
+
+    # Calculate Monday of each week
+    vol_season["Week_Starting"] = (vol_season["Date"] - pd.to_timedelta(vol_season["Date"].dt.weekday, unit="D")).dt.date
+    int_season["Week_Starting"] = (int_season["Date"] - pd.to_timedelta(int_season["Date"].dt.weekday, unit="D")).dt.date
+
+    available_mondays = sorted(vol_season["Week_Starting"].unique(), reverse=True)
+    today = get_eastern_now().date()
+    cur_monday = today - datetime.timedelta(days=today.weekday())
+
+    c_week_picker, _ = st.columns([1.5, 2.5])
+    with c_week_picker:
+        sel_week_mon = st.selectbox(
+            f"Select Week Starting (Monday) — {season_label}:",
+            options=available_mondays if available_mondays else [cur_monday],
+            format_func=lambda d: f"{d.strftime('%Y-%m-%d')} (Current Week)" if d == cur_monday else d.strftime("%Y-%m-%d (Monday)"),
+            key=f"cumul_wk_mon_picker_{season_key}",
+        )
+
+    # Filter datasets for the selected week
+    v_wk = vol_season[vol_season["Week_Starting"] == sel_week_mon].copy()
+    i_wk = int_season[int_season["Week_Starting"] == sel_week_mon].copy()
+
+    if v_wk.empty:
+        st.info(f"No records found for the week of {sel_week_mon}.")
         return
 
-    # Standardize Monday week-starting date
-    df["Week_Starting"] = (df["Date"] - pd.to_timedelta(df["Date"].dt.weekday, unit="D")).dt.date
+    # Metric configs
+    vol_metrics = [
+        "Distance (mi)",
+        "Accels",
+        "Decels",
+        "FCTs",
+        "Physio Load",
+        "Mechanical Load",
+        "Jump Load (J)",
+    ]
+    int_metrics = [
+        "Physio Intensity",
+        "High Acceleration",
+        "High Speed Distance (mi)",
+        "Speed (max.) (mph)",
+        "Sprints",
+        "Exertions",
+        "High Metabolic Power Distance (m)",
+    ]
 
-    # Basketball-specific metrics available in vol_raw / int_raw
-    metrics_map = {
+    metric_formats = {
         "Distance (mi)": ("Total Distance", "mi", "{:.1f}"),
         "High Speed Distance (mi)": ("High Speed Dist", "mi", "{:.2f}"),
-        "Accels": ("Total Accels", "", "{:,.0f}"),
-        "Decels": ("Total Decels", "", "{:,.0f}"),
+        "Speed (max.) (mph)": ("Max Speed", "mph", "{:.1f}"),
+        "Physio Intensity": ("Physio Intensity", "", "{:.1f}"),
+        "High Acceleration": ("High Accels", "", "{:,.0f}"),
+        "Accels": ("Accels", "", "{:,.0f}"),
+        "Decels": ("Decels", "", "{:,.0f}"),
         "Jump Load (J)": ("Jump Load", "J", "{:,.0f}"),
         "Physio Load": ("Physio Load", "", "{:,.0f}"),
         "Mechanical Load": ("Mechanical Load", "", "{:,.0f}"),
         "FCTs": ("FCTs", "", "{:,.0f}"),
         "Sprints": ("Sprints", "", "{:,.0f}"),
+        "Exertions": ("Exertions", "", "{:,.0f}"),
+        "High Metabolic Power Distance (m)": ("High Met Power Dist", "m", "{:,.0f}"),
     }
 
-    active_metrics = []
-    for col in metrics_map.keys():
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
-            active_metrics.append(col)
+    # Ensure numeric columns
+    for col in vol_metrics:
+        if col in v_wk.columns:
+            v_wk[col] = pd.to_numeric(v_wk[col], errors="coerce").fillna(0.0)
+    for col in int_metrics:
+        if col in i_wk.columns:
+            i_wk[col] = pd.to_numeric(i_wk[col], errors="coerce").fillna(0.0)
 
-    if not active_metrics:
-        st.info("No standard basketball load metrics found in the dataset.")
-        return
+    # Aggregate weekly totals per player
+    active_vol_cols = [c for c in vol_metrics if c in v_wk.columns]
+    active_int_cols = [c for c in int_metrics if c in i_wk.columns]
 
-    # Filter Controls: Phase & Specific Monday Week
-    c_phase, c_week_picker = st.columns([1.5, 2.5])
+    v_agg_dict = {col: "sum" for col in active_vol_cols}
+    v_agg_dict["Date"] = "count"
+    player_vol_totals = v_wk.groupby("Player").agg(v_agg_dict).rename(columns={"Date": "Sessions"}).reset_index()
 
-    with c_phase:
-        phase_options = ["All Phases (Combined)", "Summer", "Pre-Season", "In-Season"]
-        sel_phase = st.selectbox("Filter Phase:", phase_options, key="cumul_wk_phase_filter")
+    i_agg_dict = {}
+    for col in active_int_cols:
+        # Max speed takes max across week; all others sum weekly load
+        i_agg_dict[col] = "max" if "speed (max" in col.lower() else "sum"
+    i_agg_dict["Date"] = "count"
+    player_int_totals = i_wk.groupby("Player").agg(i_agg_dict).rename(columns={"Date": "Sessions"}).reset_index()
 
-    if sel_phase != "All Phases (Combined)":
-        df = filter_by_season(df, sel_phase)
-
-    if df.empty:
-        st.info("No records found for the selected phase.")
-        return
-
-    available_mondays = sorted(df["Week_Starting"].unique(), reverse=True)
-    today = get_eastern_now().date()
-    cur_monday = today - datetime.timedelta(days=today.weekday())
-
-    with c_week_picker:
-        sel_week_mon = st.selectbox(
-            "Select Week Starting (Monday):",
-            options=available_mondays,
-            format_func=lambda d: f"{d.strftime('%Y-%m-%d')} (Current Week)" if d == cur_monday else d.strftime("%Y-%m-%d (Monday)"),
-            key="cumul_week_monday_picker",
-        )
-
-    # Filter to chosen week
-    df_week = df[df["Week_Starting"] == sel_week_mon].copy()
-
-    # 1. Weekly KPI Summary Cards
-    week_sessions = df_week["Date_Str"].nunique() if "Date_Str" in df_week.columns else df_week["Date"].nunique()
-    week_dist = df_week["Distance (mi)"].sum() if "Distance (mi)" in df_week.columns else 0.0
-    week_jumps = df_week["Jump Load (J)"].sum() if "Jump Load (J)" in df_week.columns else 0.0
-    week_mech = (df_week["Accels"].sum() + df_week["Decels"].sum()) if ("Accels" in df_week.columns and "Decels" in df_week.columns) else 0.0
+    # 1. TOP TEAM AVERAGES KPI CARDS (Mean athlete weekly outputs)
+    ath_count = player_vol_totals["Player"].nunique() if not player_vol_totals.empty else 0
+    avg_sessions = round(player_vol_totals["Sessions"].mean(), 1) if not player_vol_totals.empty else 0
+    avg_dist = player_vol_totals["Distance (mi)"].mean() if "Distance (mi)" in player_vol_totals.columns else 0.0
+    avg_jumps = player_vol_totals["Jump Load (J)"].mean() if "Jump Load (J)" in player_vol_totals.columns else 0.0
+    avg_mech = (
+        (player_vol_totals["Accels"].mean() + player_vol_totals["Decels"].mean())
+        if ("Accels" in player_vol_totals.columns and "Decels" in player_vol_totals.columns)
+        else 0.0
+    )
 
     st.markdown(
         f"""
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 10px; margin-bottom: 20px;">
             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #FF8200; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
-                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Week Sessions</div>
-                <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{week_sessions}</div>
-                <div style="font-size: 0.68rem; color: #94A3B8;">Week of {sel_week_mon.strftime('%m/%d')}</div>
+                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Team Avg Sessions</div>
+                <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{avg_sessions:.1f}</div>
+                <div style="font-size: 0.68rem; color: #94A3B8;">Across {ath_count} Active Athletes</div>
             </div>
             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #38BDF8; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
-                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Weekly Distance</div>
-                <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{week_dist:,.1f} mi</div>
-                <div style="font-size: 0.68rem; color: #94A3B8;">Team Cumulative</div>
+                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Team Avg Distance</div>
+                <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{avg_dist:.1f} mi</div>
+                <div style="font-size: 0.68rem; color: #94A3B8;">Athlete Weekly Mean</div>
             </div>
             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #22C55E; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
-                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Weekly Jump Load</div>
-                <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{week_jumps:,.0f}</div>
-                <div style="font-size: 0.68rem; color: #94A3B8;">Total Weekly Jumps</div>
+                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Team Avg Jump Load</div>
+                <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{avg_jumps:,.0f}</div>
+                <div style="font-size: 0.68rem; color: #94A3B8;">Athlete Weekly Mean</div>
             </div>
             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #6366F1; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
-                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Accels + Decels</div>
-                <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{week_mech:,.0f}</div>
-                <div style="font-size: 0.68rem; color: #94A3B8;">Mechanical Demands</div>
+                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Team Avg Accels + Decels</div>
+                <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{avg_mech:,.0f}</div>
+                <div style="font-size: 0.68rem; color: #94A3B8;">Mechanical Demand Mean</div>
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    # 2. Individual Breakdown for Selected Week
-    st.markdown(f"#### Athlete Weekly Accumulation (Week of {sel_week_mon.strftime('%Y-%m-%d')})")
+    # 2. INTERNAL TABS: VOLUME vs INTENSITY
+    sub_tab_vol, sub_tab_int = st.tabs(["Volume Metrics", "Intensity Metrics"])
 
-    if df_week.empty:
-        st.info(f"No records found for the week of {sel_week_mon.strftime('%Y-%m-%d')}.")
-        return
+    def build_matrix_table(df_player_totals, metric_cols):
+        html_rows = []
+        for _, row in df_player_totals.iterrows():
+            p_name = row["Player"]
+            p_row = roster_raw[roster_raw["Name"] == p_name] if not roster_raw.empty else pd.DataFrame()
+            p_pos = p_row["Position"].iloc[0] if not p_row.empty and "Position" in p_row else "Athlete"
+            p_img = (
+                p_row["Picture"].iloc[0]
+                if not p_row.empty and "Picture" in p_row and pd.notna(p_row["Picture"].iloc[0])
+                else "https://via.placeholder.com/40"
+            )
 
-    agg_dict = {col: "sum" for col in active_metrics}
-    agg_dict["Date"] = "count"
+            td_cells = "".join([
+                f"<td style='font-weight:600;'>{metric_formats.get(c, (c, '', '{:.1f}'))[2].format(row[c])}</td>"
+                for c in metric_cols
+            ])
 
-    primary_sort_metric = "Distance (mi)" if "Distance (mi)" in active_metrics else active_metrics[0]
+            html_rows.append(
+                f"<tr>"
+                f"<td style='padding:6px;'><img src='{p_img}' style='width:36px; height:36px; border-radius:50%; object-fit:cover; border:2px solid #FF8200;'></td>"
+                f"<td style='text-align:left !important; font-weight:800; padding-left:14px;'>{p_name}</td>"
+                f"<td style='color:#64748B;'>{p_pos}</td>"
+                f"<td style='font-weight:700;'><span style='background:#F1F5F9; padding:2px 8px; border-radius:4px;'>{row['Sessions']}</span></td>"
+                f"{td_cells}"
+                f"</tr>"
+            )
 
-    player_week_cumul = (
-        df_week.groupby("Player")
-        .agg(agg_dict)
-        .rename(columns={"Date": "Sessions"})
-        .reset_index()
-        .sort_values(by=primary_sort_metric, ascending=False)
-    )
+        headers_html = "".join([f"<th>{metric_formats.get(c, (c, '', ''))[0]}</th>" for c in metric_cols])
 
-    # 3. Master Weekly Cumulative Matrix Table
-    html_cumul_rows = []
-    for _, row in player_week_cumul.iterrows():
-        p_name = row["Player"]
-        p_row = roster_raw[roster_raw["Name"] == p_name] if not roster_raw.empty else pd.DataFrame()
-        p_pos = p_row["Position"].iloc[0] if not p_row.empty and "Position" in p_row else "Athlete"
-        p_img = p_row["Picture"].iloc[0] if not p_row.empty and "Picture" in p_row and pd.notna(p_row["Picture"].iloc[0]) else "https://via.placeholder.com/40"
-
-        td_cells = "".join([
-            f"<td style='font-weight:600;'>{metrics_map[c][2].format(row[c])}</td>"
-            for c in active_metrics
-        ])
-
-        html_cumul_rows.append(
-            f"<tr>"
-            f"<td style='padding:6px;'><img src='{p_img}' style='width:36px; height:36px; border-radius:50%; object-fit:cover; border:2px solid #FF8200;'></td>"
-            f"<td style='text-align:left !important; font-weight:800; padding-left:14px;'>{p_name}</td>"
-            f"<td style='color:#64748B;'>{p_pos}</td>"
-            f"<td style='font-weight:700;'><span style='background:#F1F5F9; padding:2px 8px; border-radius:4px;'>{row['Sessions']}</span></td>"
-            f"{td_cells}"
-            f"</tr>"
+        return (
+            f'<table class="vball-table" style="width:100%; border:1px solid #E2E8F0; background:#FFFFFF; margin-top:10px;">'
+            f'<thead><tr>'
+            f'<th style="width:50px;">Photo</th>'
+            f'<th style="text-align:left !important; padding-left:14px;">Athlete</th>'
+            f'<th>Position</th>'
+            f'<th>Sessions</th>'
+            f'{headers_html}'
+            f'</tr></thead>'
+            f'<tbody>{"".join(html_rows)}</tbody></table>'
         )
 
-    headers_html = "".join([f"<th>{metrics_map[c][0]}</th>" for c in active_metrics])
+    with sub_tab_vol:
+        if not player_vol_totals.empty:
+            vol_sort_col = "Distance (mi)" if "Distance (mi)" in active_vol_cols else active_vol_cols[0]
+            sorted_vol_df = player_vol_totals.sort_values(by=vol_sort_col, ascending=False)
+            st.markdown(build_matrix_table(sorted_vol_df, active_vol_cols), unsafe_allow_html=True)
+        else:
+            st.info("No volume records available for this week.")
 
-    master_table = (
-        f'<table class="vball-table" style="width:100%; border:1px solid #E2E8F0; background:#FFFFFF; margin-top:10px;">'
-        f'<thead><tr>'
-        f'<th style="width:50px;">Photo</th>'
-        f'<th style="text-align:left !important; padding-left:14px;">Athlete</th>'
-        f'<th>Position</th>'
-        f'<th>Sessions</th>'
-        f'{headers_html}'
-        f'</tr></thead>'
-        f'<tbody>{"".join(html_cumul_rows)}</tbody></table>'
-    )
-    st.markdown(master_table, unsafe_allow_html=True)
+    with sub_tab_int:
+        if not player_int_totals.empty:
+            int_sort_col = "High Speed Distance (mi)" if "High Speed Distance (mi)" in active_int_cols else active_int_cols[0]
+            sorted_int_df = player_int_totals.sort_values(by=int_sort_col, ascending=False)
+            st.markdown(build_matrix_table(sorted_int_df, active_int_cols), unsafe_allow_html=True)
+        else:
+            st.info("No intensity records available for this week.")
 
 # -----------------------------------------------------------------------------
 # 10. TAB ROUTING
