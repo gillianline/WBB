@@ -1111,6 +1111,7 @@ tabs_list = [
     "Pre-Season",
     "In-Season",
     "Combined Seasons",
+    "Cumulative",
     "Team Wellness",
 ]
 detected_season_idx = 0
@@ -1147,6 +1148,7 @@ if "active_season_tab_idx" not in st.session_state:
     season_tab_preseason,
     season_tab_inseason,
     season_tab_combined,
+    season_tab_cumulative,
     season_tab_wellness,
 ) = st.tabs(tabs_list)
 
@@ -4183,6 +4185,202 @@ def render_team_wellness_content():
     else:
         st.info(f"No Countermovement Jump testing records logged on {format_date_clean(sel_team_cmj_date)}.")
 
+# -----------------------------------------------------------------------------
+# CUMULATIVE VOLUME & INTENSITY ENGINE
+# -----------------------------------------------------------------------------
+def render_cumulative_content():
+    st.markdown(
+        "<div style='font-weight:700; color:#64748B; margin-bottom:12px; font-size:0.9rem;'>"
+        "VIEW: <span style='color:#FF8200;'>SEASON CUMULATIVE LOAD & ACCUMULATION SUMMARY</span></div>",
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        '<div class="vball-section-title">Cumulative Team & Athlete Workload Totals</div>',
+        unsafe_allow_html=True,
+    )
+
+    if vol_raw.empty:
+        st.info("No volume session data available to calculate cumulative totals.")
+        return
+
+    df = vol_raw.copy()
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+
+    # Filter controls
+    c_phase, c_date_range = st.columns([1.5, 2.5])
+    
+    with c_phase:
+        phase_options = ["All Phases (Combined)", "Summer", "Pre-Season", "In-Season"]
+        sel_phase = st.selectbox("Filter Phase:", phase_options, key="cumul_phase_filter")
+
+    # Apply phase filter
+    if sel_phase != "All Phases (Combined)":
+        df = filter_by_season(df, sel_phase)
+
+    with c_date_range:
+        if not df.empty and "Date" in df.columns and df["Date"].dropna().any():
+            min_d = df["Date"].dropna().min().date()
+            max_d = df["Date"].dropna().max().date()
+            sel_range = st.date_input(
+                "Filter Date Range:",
+                value=(min_d, max_d),
+                key="cumul_date_range_picker"
+            )
+            if isinstance(sel_range, (list, tuple)) and len(sel_range) == 2:
+                start_dt, end_dt = pd.to_datetime(sel_range[0]), pd.to_datetime(sel_range[1])
+                df = df[(df["Date"] >= start_dt) & (df["Date"] <= end_dt)]
+        else:
+            st.info("No dated entries available.")
+            return
+
+    if df.empty:
+        st.info("No records found for the selected phase and date range.")
+        return
+
+    # Basket-specific metrics available in vol_raw / int_raw
+    metrics_map = {
+        "Distance (mi)": ("Total Distance", "mi", "{:.1f}"),
+        "High Speed Distance (mi)": ("High Speed Dist", "mi", "{:.2f}"),
+        "Accels": ("Total Accels", "", "{:,.0f}"),
+        "Decels": ("Total Decels", "", "{:,.0f}"),
+        "Jump Load (J)": ("Jump Load", "J", "{:,.0f}"),
+        "Physio Load": ("Physio Load", "", "{:,.0f}"),
+        "Mechanical Load": ("Mechanical Load", "", "{:,.0f}"),
+        "FCTs": ("FCTs", "", "{:,.0f}"),
+        "Sprints": ("Sprints", "", "{:,.0f}"),
+    }
+
+    # Ensure all numeric columns are numeric
+    active_metrics = []
+    for col in metrics_map.keys():
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
+            active_metrics.append(col)
+
+    if not active_metrics:
+        st.info("No standard basketball load metrics found in the dataset.")
+        return
+
+    # 1. Top KPI Summary Cards
+    total_sessions = df["Date_Str"].nunique() if "Date_Str" in df.columns else df["Date"].nunique()
+    total_dist = df["Distance (mi)"].sum() if "Distance (mi)" in df.columns else 0
+    total_jumps = df["Jump Load (J)"].sum() if "Jump Load (J)" in df.columns else 0
+    total_accels = (df["Accels"].sum() + df["Decels"].sum()) if ("Accels" in df.columns and "Decels" in df.columns) else 0
+
+    st.markdown(
+        f"""
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 10px; margin-bottom: 20px;">
+            <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #FF8200; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Total Sessions</div>
+                <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{total_sessions}</div>
+                <div style="font-size: 0.68rem; color: #94A3B8;">Practices & Games</div>
+            </div>
+            <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #38BDF8; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Total Distance</div>
+                <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{total_dist:,.1f} mi</div>
+                <div style="font-size: 0.68rem; color: #94A3B8;">Cumulative Output</div>
+            </div>
+            <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #22C55E; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Jump Load</div>
+                <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{total_jumps:,.0f}</div>
+                <div style="font-size: 0.68rem; color: #94A3B8;">Total Accumulated Jumps</div>
+            </div>
+            <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #6366F1; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+                <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Accels + Decels</div>
+                <div style="font-size: 1.8rem; font-weight: 800; color: #0F172A; margin-top: 4px;">{total_accels:,.0f}</div>
+                <div style="font-size: 0.68rem; color: #94A3B8;">High Mechanical Stress</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # 2. Cumulative Comparison Chart
+    c_m_sel, _ = st.columns([1.5, 2])
+    with c_m_sel:
+        selected_metric = st.selectbox(
+            "Select Metric to Rank Athletes:",
+            options=active_metrics,
+            format_func=lambda m: metrics_map[m][0],
+            key="cumul_metric_rank_sel"
+        )
+
+    # Aggregate by Athlete
+    agg_dict = {col: "sum" for col in active_metrics}
+    agg_dict["Date"] = "count"
+    
+    player_cumul = (
+        df.groupby("Player")
+        .agg(agg_dict)
+        .rename(columns={"Date": "Sessions"})
+        .reset_index()
+        .sort_values(by=selected_metric, ascending=False)
+    )
+
+    fig_cumul = px.bar(
+        player_cumul,
+        x="Player",
+        y=selected_metric,
+        text=selected_metric,
+        title=f"Cumulative {metrics_map[selected_metric][0]} by Athlete",
+    )
+    fig_cumul.update_traces(
+        marker_color="#FF8200",
+        texttemplate="%{text:,.1f}" if "Distance" in selected_metric else "%{text:,.0f}",
+        textposition="outside",
+    )
+    fig_cumul.update_layout(
+        height=320,
+        margin=dict(l=20, r=20, t=40, b=40),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(title=None, tickangle=-30),
+        yaxis=dict(title=metrics_map[selected_metric][0], showgrid=True, gridcolor="#F1F5F9"),
+    )
+    st.plotly_chart(fig_cumul, use_container_width=True, key="cumul_bar_chart")
+
+    # 3. Master Cumulative Table with Roster Photos
+    st.markdown("#### Cumulative Athlete Roster Matrix")
+    
+    html_cumul_rows = []
+    for _, row in player_cumul.iterrows():
+        p_name = row["Player"]
+        p_row = roster_raw[roster_raw["Name"] == p_name] if not roster_raw.empty else pd.DataFrame()
+        p_pos = p_row["Position"].iloc[0] if not p_row.empty and "Position" in p_row else "Athlete"
+        p_img = p_row["Picture"].iloc[0] if not p_row.empty and "Picture" in p_row and pd.notna(p_row["Picture"].iloc[0]) else "https://via.placeholder.com/40"
+
+        td_cells = "".join([
+            f"<td style='font-weight:600;'>{metrics_map[c][2].format(row[c])}</td>"
+            for c in active_metrics
+        ])
+
+        html_cumul_rows.append(
+            f"<tr>"
+            f"<td style='padding:6px;'><img src='{p_img}' style='width:36px; height:36px; border-radius:50%; object-fit:cover; border:2px solid #FF8200;'></td>"
+            f"<td style='text-align:left !important; font-weight:800; padding-left:14px;'>{p_name}</td>"
+            f"<td style='color:#64748B;'>{p_pos}</td>"
+            f"<td style='font-weight:700;'><span style='background:#F1F5F9; padding:2px 8px; border-radius:4px;'>{row['Sessions']}</span></td>"
+            f"{td_cells}"
+            f"</tr>"
+        )
+
+    headers_html = "".join([f"<th>{metrics_map[c][0]}</th>" for c in active_metrics])
+
+    master_table = (
+        f'<table class="vball-table" style="width:100%; border:1px solid #E2E8F0; background:#FFFFFF; margin-top:10px;">'
+        f'<thead><tr>'
+        f'<th style="width:50px;">Photo</th>'
+        f'<th style="text-align:left !important; padding-left:14px;">Athlete</th>'
+        f'<th>Position</th>'
+        f'<th>Sessions</th>'
+        f'{headers_html}'
+        f'</tr></thead>'
+        f'<tbody>{"".join(html_cumul_rows)}</tbody></table>'
+    )
+    st.markdown(master_table, unsafe_allow_html=True)
+
 
 # -----------------------------------------------------------------------------
 # 10. TAB ROUTING
@@ -4201,3 +4399,6 @@ with season_tab_combined:
 
 with season_tab_wellness:
     render_team_wellness_content()
+
+with season_tab_cumulative:
+    render_cumulative_content()
