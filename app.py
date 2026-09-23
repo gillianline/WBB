@@ -1624,6 +1624,7 @@ def render_dashboard_content(season_label, season_key):
         st.divider()
 
         # SECTION 6: LIVE TRACKING SUMMARY
+        import datetime as dt
         st.markdown(
             '<div class="vball-section-title">6. In-Practice Live Tracking Summary</div>',
             unsafe_allow_html=True,
@@ -1656,6 +1657,7 @@ def render_dashboard_content(season_label, season_key):
             else pd.DataFrame(columns=["Week_Starting", "Date", "Athlete", "Metric", "Count"])
         )
 
+        # Case-insensitive / whitespace-safe athlete filter
         p_ind_track = (
             ind_track_df[
                 ind_track_df["Athlete"].str.strip().str.lower()
@@ -1665,7 +1667,7 @@ def render_dashboard_content(season_label, season_key):
             else pd.DataFrame(columns=["Week_Starting", "Date", "Athlete", "Metric", "Count"])
         )
 
-        # 2. Build the Monday options list (Guarantees Today is always an option)
+        # 2. Week / Date Selection: Guarantees Today's Monday is always present
         today = dt.date.today()
         current_monday = today - dt.timedelta(days=today.weekday())
 
@@ -1674,11 +1676,11 @@ def render_dashboard_content(season_label, season_key):
             if "vol_data" in locals() and vol_data is not None
             else []
         )
-        
-        # Combine existing mondays with today's monday and sort descending (newest first)
+
+        # Merge season dates with today's week, eliminate duplicates, and sort newest first
         all_mondays = sorted(
             list(set(existing_mondays + [current_monday])),
-            reverse=True
+            reverse=True,
         )
 
         c_tr_wk, _ = st.columns([1, 2])
@@ -1686,13 +1688,13 @@ def render_dashboard_content(season_label, season_key):
             sel_ind_mon = st.selectbox(
                 f"Select Week Starting ({season_label}):",
                 options=all_mondays,
-                index=0,  # Defaults to the newest Monday (today's week)
+                index=0,  # Defaults to the newest Monday
                 format_func=lambda d: f"{d.strftime('%Y-%m-%d')} (Current Week)" if d == current_monday else d.strftime("%Y-%m-%d (Monday)"),
                 key=f"ind_prof_track_week_picker_{season_key}",
             )
             sel_ind_mon_str = sel_ind_mon.strftime("%Y-%m-%d")
 
-        # 3. Filter data for the selected week
+        # 3. Filter entries for the chosen week
         p_ind_track_wk = (
             p_ind_track[p_ind_track["Week_Starting"] == sel_ind_mon_str]
             if not p_ind_track.empty
@@ -1717,7 +1719,7 @@ def render_dashboard_content(season_label, season_key):
             "Fouls": get_count(["foul", "fouls", "personal foul"]),
         }
 
-        # 4. Metrics Stacked Vertically in a Single Column Card Layout
+        # 4. Metrics Stacked Vertically in a Single Column (No horizontal row overflow)
         st.markdown("##### Weekly Totals")
         summary_col, _ = st.columns([1, 1])
         with summary_col:
@@ -1736,7 +1738,7 @@ def render_dashboard_content(season_label, season_key):
                     unsafe_allow_html=True,
                 )
 
-        # 5. Breakdown Table
+        # 5. Daily Breakdown Table
         st.markdown(f"#### Daily Breakdown for Week of {sel_ind_mon_str}")
 
         if not p_ind_track_wk.empty:
@@ -1747,11 +1749,9 @@ def render_dashboard_content(season_label, season_key):
                 aggfunc="sum",
                 fill_value=0,
             )
-            # Reindex to ensure standard metrics show even if 0
-            pivot_ind_track = pivot_ind_track.reindex(
-                list(dict.fromkeys(TRACKED_METRICS + list(pivot_ind_track.index))),
-                fill_value=0,
-            )
+            # Reindex to ensure all 5 tracked metrics appear even if count is 0
+            all_indices = list(dict.fromkeys(TRACKED_METRICS + list(pivot_ind_track.index)))
+            pivot_ind_track = pivot_ind_track.reindex(index=all_indices, fill_value=0)
             pivot_ind_track["Total"] = pivot_ind_track.sum(axis=1)
 
             formatted_cols = {}
