@@ -2424,17 +2424,17 @@ def render_dashboard_content(season_label, season_key):
                             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #22C55E; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
                                 <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Optimal (0.80 - 1.30)</div>
                                 <div style="font-size: 1.8rem; font-weight: 800; color: #166534; margin-top: 4px;">{sweet_count}</div>
-                                <div style="font-size: 0.68rem; color: #94A3B8;">Sweet Spot Workload</div>
+                                #<div style="font-size: 0.68rem; color: #94A3B8;">Sweet Spot Workload</div>
                             </div>
                             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #EAB308; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
                                 <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Underloaded (&lt; 0.80)</div>
                                 <div style="font-size: 1.8rem; font-weight: 800; color: #854D0E; margin-top: 4px;">{under_count}</div>
-                                <div style="font-size: 0.68rem; color: #94A3B8;">Building Chronic Capacity</div>
+                                #<div style="font-size: 0.68rem; color: #94A3B8;">Building Chronic Capacity</div>
                             </div>
                             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-left: 5px solid #EF4444; border-radius: 10px; padding: 14px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
                                 <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">High Spikes (&gt; 1.50)</div>
                                 <div style="font-size: 1.8rem; font-weight: 800; color: #991B1B; margin-top: 4px;">{spike_count}</div>
-                                <div style="font-size: 0.68rem; color: #94A3B8;">Elevated Fatigue / Injury Risk</div>
+                                #<div style="font-size: 0.68rem; color: #94A3B8;">Elevated Fatigue / Injury Risk</div>
                             </div>
                         </div>
                         """,
