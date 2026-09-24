@@ -617,7 +617,6 @@ def compute_practice_tables(
         v_base_raw = v_all
         i_base_raw = i_all
 
-    # FIX #1: If evaluating Combined, baseline historical peaks MUST also be daily combined totals!
     if is_combined and not v_base_raw.empty:
         v_base = v_base_raw.groupby("Date_Str").sum(numeric_only=True).reset_index()
     else:
@@ -653,7 +652,6 @@ def compute_practice_tables(
 
     vol_rows, int_rows = [], []
 
-    # FIX #2: Add min(100.0, ...) to ensure metrics never exceed 100
     for m in vol_metrics:
         curr = v_player[m].values[0] if not v_player.empty and m in v_player else 0.0
         mx = v_base[m].max() if not v_base.empty and m in v_base else curr
@@ -678,12 +676,34 @@ def compute_practice_tables(
     week_num = v_player["Week"].values[0] if not v_player.empty and "Week" in v_player else "--"
     day_num = v_player["Day"].values[0] if not v_player.empty and "Day" in v_player else "--"
 
-    type_col = next((c for c in v_player.columns if "type" in c.lower()), None) if not v_player.empty else None
-    session_type = (
-        v_player[type_col].values[0]
-        if type_col and pd.notna(v_player[type_col].values[0]) and str(v_player[type_col].values[0]).strip() != ""
-        else (session_select if session_select != "Combined" else "Combined Practice")
-    )
+    if is_combined:
+        # Check raw session labels/types logged on this day
+        raw_types = []
+        if not v_player_raw.empty:
+            type_src = "Base_Type" if "Base_Type" in v_player_raw.columns else "Session_Label"
+            if type_src in v_player_raw.columns:
+                raw_types.extend(v_player_raw[type_src].dropna().astype(str).tolist())
+        if not i_player_raw.empty:
+            type_src = "Base_Type" if "Base_Type" in i_player_raw.columns else "Session_Label"
+            if type_src in i_player_raw.columns:
+                raw_types.extend(i_player_raw[type_src].dropna().astype(str).tolist())
+
+        unique_types_lower = {t.strip().lower() for t in raw_types if t.strip()}
+
+        # Specifically set "Skill + Practice" if both occur, or join distinct types
+        if "skill" in unique_types_lower and "practice" in unique_types_lower:
+            session_type = "Skill + Practice"
+        elif len(unique_types_lower) > 1:
+            session_type = " + ".join(sorted({t.strip().title() for t in raw_types if t.strip()}))
+        else:
+            session_type = "Skill + Practice"
+    else:
+        type_col = next((c for c in v_player.columns if "type" in c.lower()), None) if not v_player.empty else None
+        session_type = (
+            v_player[type_col].values[0]
+            if type_col and pd.notna(v_player[type_col].values[0]) and str(v_player[type_col].values[0]).strip() != ""
+            else session_select
+        )
 
     return (
         vol_df_out,
@@ -4400,8 +4420,18 @@ def render_combined_seasons_content():
                                 phase = "Pre-Season"
 
                 day_records = vol_raw[vol_raw["Date_Str"] == d_str]
-                all_s_types = [str(x) for x in day_records["Session_Label"].dropna().unique() if str(x).strip() != ""]
-                sess_type = " + ".join(all_s_types) if len(all_s_types) > 1 else (all_s_types[0] if all_s_types else "Combined")
+                type_col_check = "Base_Type" if "Base_Type" in day_records.columns else "Session_Label"
+                all_s_types = [str(x).strip() for x in day_records[type_col_check].dropna().unique() if str(x).strip() != ""]
+                s_types_lower = [s.lower() for s in all_s_types]
+
+                if "skill" in s_types_lower and "practice" in s_types_lower:
+                    sess_type = "Skill + Practice"
+                elif len(all_s_types) > 1:
+                    sess_type = " + ".join(dict.fromkeys(all_s_types))
+                elif len(all_s_types) == 1:
+                    sess_type = all_s_types[0]
+                else:
+                    sess_type = "Skill + Practice"
 
                 daily_team_scores.append({
                     "Date": dt,
