@@ -141,11 +141,13 @@ st.markdown(
         }
 
         @media print {
+            /* Default landscape setting for wide matrix reporting */
             @page {
-                size: portrait;
-                margin: 0.35in;
+                size: landscape;
+                margin: 0.28in;
             }
 
+            /* 1. Global Print Cleaners: Hide interactive dashboard UI */
             section[data-testid="stSidebar"],
             header[data-testid="stHeader"],
             footer,
@@ -155,10 +157,12 @@ st.markdown(
             div[data-baseweb="tab-list"],
             div[data-baseweb="tab-border"],
             div[data-testid="stSelectbox"],
-            div[data-testid="stDateInput"] {
+            div[data-testid="stDateInput"],
+            div[data-testid="stRadio"] {
                 display: none !important;
             }
 
+            /* 2. Page Container Resets (prevents cut-off content & scroll clipping) */
             html, body, .stApp, .main,
             div[data-testid="stAppViewContainer"],
             div[data-testid="stAppViewBlockContainer"],
@@ -179,6 +183,7 @@ st.markdown(
                 margin: 0 !important;
             }
 
+            /* 3. Existing Practice Score Card Print Engine */
             .practice-score-card {
                 padding: 10px 14px !important;
                 margin-bottom: 12px !important;
@@ -203,6 +208,44 @@ st.markdown(
             .practice-score-card:nth-of-type(2n) {
                 page-break-after: always !important;
                 break-after: page !important;
+            }
+
+            /* 4. Coach's Report Specific Print Engine (High-Density Landscape) */
+            .coach-kpi-grid {
+                display: grid !important;
+                grid-template-columns: repeat(4, 1fr) !important;
+                gap: 8px !important;
+                margin-bottom: 10px !important;
+            }
+
+            .coach-report-table {
+                width: 100% !important;
+                font-size: 0.64rem !important;
+                border-collapse: collapse !important;
+                page-break-inside: auto !important;
+            }
+
+            .coach-report-table th, 
+            .coach-report-table td {
+                padding: 3px 4px !important;
+                border: 1px solid #CBD5E1 !important;
+                text-align: center !important;
+                white-space: nowrap !important;
+            }
+
+            .coach-report-table th {
+                background-color: #F1F5F9 !important;
+                color: #0F172A !important;
+                font-weight: 800 !important;
+            }
+
+            .coach-report-table tr {
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+            }
+
+            .coach-report-table img {
+                display: none !important; /* Drops avatar icons to save horizontal table real-estate */
             }
         }
     </style>
@@ -1156,6 +1199,252 @@ def compute_bball_ewma_calendar(v_df, i_df, ath_name, metrics_list):
             axis=1,
         )
     return cal
+
+# -----------------------------------------------------------------------------
+# COACH'S EXECUTIVE REPORT (1-2 PAGE PRINT SHEET)
+# -----------------------------------------------------------------------------
+def render_coach_report_content(season_label, season_key):
+    st.markdown(
+        f"""
+        <div style="background: linear-gradient(90deg, #FF8200 0%, #1E293B 100%); padding: 10px 16px; border-radius: 8px; color: #FFFFFF; font-weight: 800; font-size: 1.2rem; display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+            <span>LADY VOLS BASKETBALL &bull; COACH'S PERFORMANCE & WORKLOAD DOSSIER</span>
+            <span style="font-size: 0.85rem; font-weight: 600; background: rgba(255,255,255,0.2); padding: 3px 10px; border-radius: 4px;">{season_label.upper()}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    vol_data = filter_by_season(vol_raw, season_label)
+    int_data = filter_by_season(int_raw, season_label)
+    weekly_data = filter_by_season(weekly_raw, season_label)
+
+    if vol_data.empty:
+        st.info(f"No workload data available for {season_label}.")
+        return
+
+    # Date and Session Selection
+    c_d, c_s, _ = st.columns([1.5, 1.5, 2])
+    with c_d:
+        available_dates = vol_data["Date_Str"].sort_values(ascending=False).unique().tolist()
+        sel_eval_date = st.selectbox(
+            "Select Evaluation Date:",
+            available_dates,
+            format_func=format_date_clean,
+            key=f"coach_rep_date_{season_key}",
+        )
+    with c_s:
+        day_records = vol_data[vol_data["Date_Str"] == str(sel_eval_date)]
+        distinct_sessions = [s for s in day_records["Session_Label"].dropna().unique().tolist() if str(s).strip() != ""] if "Session_Label" in day_records.columns else []
+        if len(distinct_sessions) > 1:
+            sel_eval_session = st.selectbox("Select Session:", ["Combined"] + sorted(distinct_sessions), key=f"coach_rep_sess_{season_key}")
+        else:
+            sel_eval_session = distinct_sessions[0] if distinct_sessions else "Combined"
+            st.markdown(f"<div style='padding-top:28px; font-weight:700; color:#64748B;'>Session: <span style='color:#0F172A;'>{sel_eval_session}</span></div>", unsafe_allow_html=True)
+
+    # 1. Determine Week Range for Weekly Data
+    eval_dt = pd.to_datetime(sel_eval_date)
+    cur_monday = (eval_dt - pd.to_timedelta(eval_dt.weekday(), unit="D")).date()
+    
+    # 2. Setup Metrics Lists
+    bball_acwr_metrics = ["Distance (mi)", "High Speed Distance (mi)", "Accels", "Decels", "Physio Load"]
+    
+    # Pre-clean numeric columns for season cumulative calculations
+    for c in ["Distance (mi)", "Accels", "Decels", "Jump Load (J)"]:
+        if c in vol_data.columns:
+            vol_data[c] = pd.to_numeric(vol_data[c].astype(str).str.replace(r"[^0-9.]", "", regex=True), errors="coerce").fillna(0.0)
+
+    # Calculate season-to-date cumulative numbers
+    cumul_by_ath = vol_data[vol_data["Date"] <= eval_dt].groupby("Player").agg({
+        "Distance (mi)": "sum",
+        "Accels": "sum",
+        "Decels": "sum",
+        "Jump Load (J)": "sum"
+    }).reset_index() if not vol_data.empty else pd.DataFrame()
+
+    roster_players = roster_raw["Name"].tolist() if not roster_raw.empty else vol_data["Player"].unique().tolist()
+
+    report_rows = []
+    total_dist_team, sweet_spot_count, spike_count = 0.0, 0, 0
+
+    for p in roster_players:
+        p_row = roster_raw[roster_raw["Name"] == p] if not roster_raw.empty else pd.DataFrame()
+        p_pos = p_row["Position"].iloc[0] if not p_row.empty and "Position" in p_row else "G/F"
+        p_img = p_row["Picture"].iloc[0] if not p_row.empty and "Picture" in p_row and pd.notna(p_row["Picture"].iloc[0]) else "https://via.placeholder.com/35"
+
+        # A. Practice Scores
+        _, _, v_score, i_score, c_score, p_mins, wk_num, dy_num, s_type = compute_practice_tables(
+            p, str(sel_eval_date), vol_raw, int_raw, session_select=sel_eval_session
+        )
+
+        # B. ACWR Calculation (EWMA)
+        ath_cal = compute_bball_ewma_calendar(vol_raw, int_raw, p, bball_acwr_metrics)
+        if not ath_cal.empty and not ath_cal[ath_cal["Date"] <= eval_dt].empty:
+            last_acwr_row = ath_cal[ath_cal["Date"] <= eval_dt].iloc[-1]
+            act_load = last_acwr_row.get("Distance (mi)_Acute", 0.0)
+            chr_load = last_acwr_row.get("Distance (mi)_Chronic", 0.0)
+            acwr_val = last_acwr_row.get("Distance (mi)_ACWR", 0.0)
+        else:
+            act_load, chr_load, acwr_val = 0.0, 0.0, 0.0
+
+        b_color, b_bg, b_status = get_acwr_badge(acwr_val)
+        if 0.80 <= acwr_val <= 1.30:
+            sweet_spot_count += 1
+        elif acwr_val > 1.50:
+            spike_count += 1
+
+        # C. Weekly Data (Week starting this Monday)
+        p_weekly_sub = weekly_data[(weekly_data["Player"] == p) & (weekly_data["Date"] <= eval_dt)] if not weekly_data.empty and "Date" in weekly_data.columns else pd.DataFrame()
+        if not p_weekly_sub.empty:
+            wk_row = p_weekly_sub.iloc[-1]
+            wk_dist = pd.to_numeric(wk_row.get("Distance (mi)", 0.0), errors="coerce") or 0.0
+            wk_hsd = pd.to_numeric(wk_row.get("High Speed Distance (mi)", 0.0), errors="coerce") or 0.0
+            wk_acc = pd.to_numeric(wk_row.get("Accels", 0.0), errors="coerce") or 0.0
+            wk_dec = pd.to_numeric(wk_row.get("Decels", 0.0), errors="coerce") or 0.0
+        else:
+            # Fallback to summing weekly volume dataframe directly
+            w_sub_v = vol_data[(vol_data["Player"] == p) & (vol_data["Date"] >= pd.to_datetime(cur_monday)) & (vol_data["Date"] <= eval_dt)]
+            wk_dist = w_sub_v["Distance (mi)"].sum() if not w_sub_v.empty else 0.0
+            wk_acc = w_sub_v["Accels"].sum() if not w_sub_v.empty else 0.0
+            wk_dec = w_sub_v["Decels"].sum() if not w_sub_v.empty else 0.0
+            wk_hsd = 0.0
+
+        total_dist_team += wk_dist
+
+        # D. Cumulative Season Load
+        cumul_row = cumul_by_ath[cumul_by_ath["Player"] == p] if not cumul_by_ath.empty else pd.DataFrame()
+        if not cumul_row.empty:
+            cum_dist = cumul_row["Distance (mi)"].values[0]
+            cum_mech = cumul_row["Accels"].values[0] + cumul_row["Decels"].values[0]
+            cum_jump = cumul_row["Jump Load (J)"].values[0]
+        else:
+            cum_dist, cum_mech, cum_jump = 0.0, 0.0, 0.0
+
+        report_rows.append({
+            "Photo": p_img,
+            "Athlete": p,
+            "Position": p_pos,
+            "Mins": p_mins,
+            "Vol_Score": v_score,
+            "Int_Score": i_score,
+            "Comb_Score": c_score,
+            "Acute_7d": act_load,
+            "Chronic_28d": chr_load,
+            "ACWR": acwr_val,
+            "ACWR_Color": b_color,
+            "ACWR_Bg": b_bg,
+            "ACWR_Status": b_status,
+            "Wk_Dist": wk_dist,
+            "Wk_HSD": wk_hsd,
+            "Wk_Acc": wk_acc,
+            "Wk_Dec": wk_dec,
+            "Cum_Dist": cum_dist,
+            "Cum_Mech": cum_mech,
+            "Cum_Jump": cum_jump
+        })
+
+    # Summary KPI Banner
+    st.markdown(
+        f"""
+        <div class="coach-kpi-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px;">
+            <div style="background:#FFFFFF; border:1px solid #CBD5E1; border-left:4px solid #FF8200; border-radius:6px; padding:8px 12px; text-align:center;">
+                <div style="font-size:0.68rem; font-weight:700; color:#64748B; text-transform:uppercase;">Evaluated Athletes</div>
+                <div style="font-size:1.4rem; font-weight:800; color:#0F172A;">{len(report_rows)}</div>
+                <div style="font-size:0.65rem; color:#94A3B8;">{format_date_clean(sel_eval_date)} &bull; {sel_eval_session}</div>
+            </div>
+            <div style="background:#FFFFFF; border:1px solid #CBD5E1; border-left:4px solid #22C55E; border-radius:6px; padding:8px 12px; text-align:center;">
+                <div style="font-size:0.68rem; font-weight:700; color:#64748B; text-transform:uppercase;">Optimal ACWR (0.8 - 1.3)</div>
+                <div style="font-size:1.4rem; font-weight:800; color:#166534;">{sweet_spot_count}</div>
+                <div style="font-size:0.65rem; color:#166534;">Sweet Spot Ratios</div>
+            </div>
+            <div style="background:#FFFFFF; border:1px solid #CBD5E1; border-left:4px solid #EF4444; border-radius:6px; padding:8px 12px; text-align:center;">
+                <div style="font-size:0.68rem; font-weight:700; color:#64748B; text-transform:uppercase;">Spike Alerts (&gt;1.50)</div>
+                <div style="font-size:1.4rem; font-weight:800; color:#991B1B;">{spike_count}</div>
+                <div style="font-size:0.65rem; color:#991B1B;">High Acute Spikes</div>
+            </div>
+            <div style="background:#FFFFFF; border:1px solid #CBD5E1; border-left:4px solid #38BDF8; border-radius:6px; padding:8px 12px; text-align:center;">
+                <div style="font-size:0.68rem; font-weight:700; color:#64748B; text-transform:uppercase;">Team Distance This Week</div>
+                <div style="font-size:1.4rem; font-weight:800; color:#0369A1;">{total_dist_team:.1f} mi</div>
+                <div style="font-size:0.65rem; color:#64748B;">Week of {cur_monday.strftime('%b %d')}</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Master Table Builder (Ranked by Combined Score)
+    df_rep = pd.DataFrame(report_rows).sort_values("Comb_Score", ascending=False)
+
+    table_rows = []
+    for _, r in df_rep.iterrows():
+        v_bg, v_fg = get_vball_color(r["Vol_Score"])
+        i_bg, i_fg = get_vball_color(r["Int_Score"])
+        c_bg, c_fg = get_vball_color(r["Comb_Score"])
+
+        table_rows.append(
+            f"""
+            <tr>
+                <td style="padding:4px;"><img src="{r['Photo']}" style="width:28px; height:28px; border-radius:50%; object-fit:cover; border:1px solid #FF8200;"></td>
+                <td style="font-weight:800; text-align:left !important; padding-left:8px; white-space:nowrap; color:#0F172A;">{r['Athlete']}</td>
+                <td style="font-weight:600; color:#64748B;">{r['Position']}</td>
+                <td style="font-weight:700; color:#334155;">{r['Mins']}</td>
+                <td style="background:{v_bg}; color:{v_fg}; font-weight:800;">{r['Vol_Score']}</td>
+                <td style="background:{i_bg}; color:{i_fg}; font-weight:800;">{r['Int_Score']}</td>
+                <td style="background:{c_bg}; color:{c_fg}; font-weight:900;">{r['Comb_Score']}</td>
+                <td style="font-weight:600; color:#0F172A;">{r['Acute_7d']:.1f}</td>
+                <td style="font-weight:600; color:#64748B;">{r['Chronic_28d']:.1f}</td>
+                <td style="background:{r['ACWR_Bg']}; color:{r['ACWR_Color']}; font-weight:900;">{r['ACWR']:.2f}</td>
+                <td><span style="font-size:0.68rem; font-weight:700; color:{r['ACWR_Color']};">{r['ACWR_Status']}</span></td>
+                <td style="font-weight:700; color:#0284C7;">{r['Wk_Dist']:.1f}</td>
+                <td style="font-weight:700; color:#FF8200;">{r['Wk_HSD']:.2f}</td>
+                <td style="font-weight:600;">{r['Wk_Acc']:,.0f}</td>
+                <td style="font-weight:600;">{r['Wk_Dec']:,.0f}</td>
+                <td style="font-weight:800; color:#0F172A;">{r['Cum_Dist']:.1f} mi</td>
+                <td style="font-weight:600; color:#475569;">{r['Cum_Mech']:,.0f}</td>
+                <td style="font-weight:600; color:#475569;">{r['Cum_Jump']:,.0f}</td>
+            </tr>
+            """
+        )
+
+    full_matrix_html = f"""
+    <div style="width:100%; overflow-x:auto; background:#FFFFFF; border:1px solid #CBD5E1; border-radius:8px;">
+        <table class="coach-report-table vball-table" style="width:100%; border-collapse:collapse; margin-bottom:0; font-size:0.75rem;">
+            <thead>
+                <tr style="background:#0F172A; color:#FFFFFF;">
+                    <th colspan="4" style="border-right:2px solid #CBD5E1; background:#1E293B; color:#FFFFFF;">ATHLETE ROSTER</th>
+                    <th colspan="3" style="border-right:2px solid #CBD5E1; background:#0284C7; color:#FFFFFF;">SESSION SCORES ({sel_eval_session})</th>
+                    <th colspan="4" style="border-right:2px solid #CBD5E1; background:#334155; color:#FFFFFF;">WORKLOAD & ACWR (EWMA)</th>
+                    <th colspan="4" style="border-right:2px solid #CBD5E1; background:#D97706; color:#FFFFFF;">WEEKLY OUTPUT ({cur_monday.strftime('%m/%d')})</th>
+                    <th colspan="3" style="background:#475569; color:#FFFFFF;">CUMULATIVE LOAD ({season_label})</th>
+                </tr>
+                <tr style="background:#F1F5F9; color:#334155; font-size:0.7rem;">
+                    <th>Photo</th>
+                    <th style="text-align:left !important; padding-left:8px;">Name</th>
+                    <th>Pos</th>
+                    <th>Min</th>
+                    <th>Vol</th>
+                    <th>Int</th>
+                    <th>Comb</th>
+                    <th>7d Acute</th>
+                    <th>28d Chron</th>
+                    <th>Ratio</th>
+                    <th>Zone</th>
+                    <th>Dist (mi)</th>
+                    <th>HSD (mi)</th>
+                    <th>Acc</th>
+                    <th>Dec</th>
+                    <th>Distance</th>
+                    <th>A+D Count</th>
+                    <th>Jump Load (J)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {"".join(table_rows)}
+            </tbody>
+        </table>
+    </div>
+    """
+    st.markdown(full_matrix_html, unsafe_allow_html=True)
+    
     
 # -----------------------------------------------------------------------------
 # 5. SIDEBAR NAVIGATION (DYNAMIC ROLES)
@@ -1175,6 +1464,7 @@ else:
         "Testing",
         "Recovery",
         "Tracking",
+        "Coach's Report",
     ]
 
 main_tab = st.sidebar.radio(
@@ -4272,6 +4562,9 @@ def render_dashboard_content(season_label, season_key):
                     st.info("No athlete tracking data available for this week.")
             else:
                 st.info(f"No tracking data recorded for the week of {track_week_str}.")
+
+    elif main_tab == "Coach's Report":
+        render_coach_report_content(season_label=season_label, season_key=season_key)
 
 # -----------------------------------------------------------------------------
 # 8. COMBINED SEASONS DASHBOARD RENDER ENGINE
