@@ -1201,14 +1201,14 @@ def compute_bball_ewma_calendar(v_df, i_df, ath_name, metrics_list):
     return cal
 
 # -----------------------------------------------------------------------------
-# COACH'S EXECUTIVE REPORT (1-2 PAGE PRINT SHEET)
+# COACH'S EXECUTIVE REPORT (CLEAN FORMATTING & ALIGNMENT ENGINE)
 # -----------------------------------------------------------------------------
 def render_coach_report_content(season_label, season_key):
     st.markdown(
         f"""
-        <div style="background: linear-gradient(90deg, #FF8200 0%, #1E293B 100%); padding: 10px 16px; border-radius: 8px; color: #FFFFFF; font-weight: 800; font-size: 1.2rem; display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
-            <span>LADY VOLS BASKETBALL &bull; COACH'S PERFORMANCE & WORKLOAD DOSSIER</span>
-            <span style="font-size: 0.85rem; font-weight: 600; background: rgba(255,255,255,0.2); padding: 3px 10px; border-radius: 4px;">{season_label.upper()}</span>
+        <div style="background: linear-gradient(90deg, #FF8200 0%, #1E293B 100%); padding: 10px 18px; border-radius: 8px; color: #FFFFFF; font-weight: 800; font-size: 1.25rem; display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+            <span>LADY VOLS BASKETBALL &bull</span>
+            <span style="font-size: 0.85rem; font-weight: 600; background: rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 4px;">{season_label.upper()}</span>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1221,6 +1221,27 @@ def render_coach_report_content(season_label, season_key):
     if vol_data.empty:
         st.info(f"No workload data available for {season_label}.")
         return
+
+    # Helper function for score badges that turns 0 into neutral gray instead of false green
+    def get_coach_score_badge(score):
+        if score is None or pd.isna(score) or score == 0:
+            return "#F1F5F9", "#94A3B8"
+        elif score < 50:
+            return "#BBF7D0", "#166534"
+        elif score < 75:
+            return "#FEF08A", "#854D0E"
+        else:
+            return "#FFD6D6", "#991B1B"
+
+    # Helper function to format minutes cleanly
+    def format_clean_mins(val):
+        if pd.isna(val) or str(val).strip() in ["", "--", "nan"]:
+            return "--"
+        try:
+            val_num = float(val)
+            return f"{int(round(val_num))}" if val_num > 0 else "--"
+        except Exception:
+            return str(val).split(".")[0]
 
     # Date and Session Selection
     c_d, c_s, _ = st.columns([1.5, 1.5, 2])
@@ -1236,16 +1257,14 @@ def render_coach_report_content(season_label, season_key):
         day_records = vol_data[vol_data["Date_Str"] == str(sel_eval_date)]
         distinct_sessions = [s for s in day_records["Session_Label"].dropna().unique().tolist() if str(s).strip() != ""] if "Session_Label" in day_records.columns else []
         if len(distinct_sessions) > 1:
-            sel_eval_session = st.selectbox("Select Session:", ["Combined"] + sorted(distinct_sessions), key=f"coach_rep_sess_{season_key}")
+            sel_eval_session = st.selectbox("Select Session Type:", ["Combined"] + sorted(distinct_sessions), key=f"coach_rep_sess_{season_key}")
         else:
             sel_eval_session = distinct_sessions[0] if distinct_sessions else "Combined"
             st.markdown(f"<div style='padding-top:28px; font-weight:700; color:#64748B;'>Session: <span style='color:#0F172A;'>{sel_eval_session}</span></div>", unsafe_allow_html=True)
 
-    # 1. Determine Week Range for Weekly Data
     eval_dt = pd.to_datetime(sel_eval_date)
     cur_monday = (eval_dt - pd.to_timedelta(eval_dt.weekday(), unit="D")).date()
     
-    # 2. Setup Metrics Lists
     bball_acwr_metrics = ["Distance (mi)", "High Speed Distance (mi)", "Accels", "Decels", "Physio Load"]
     
     # Pre-clean numeric columns for season cumulative calculations
@@ -1253,7 +1272,6 @@ def render_coach_report_content(season_label, season_key):
         if c in vol_data.columns:
             vol_data[c] = pd.to_numeric(vol_data[c].astype(str).str.replace(r"[^0-9.]", "", regex=True), errors="coerce").fillna(0.0)
 
-    # Calculate season-to-date cumulative numbers
     cumul_by_ath = vol_data[vol_data["Date"] <= eval_dt].groupby("Player").agg({
         "Distance (mi)": "sum",
         "Accels": "sum",
@@ -1271,10 +1289,11 @@ def render_coach_report_content(season_label, season_key):
         p_pos = p_row["Position"].iloc[0] if not p_row.empty and "Position" in p_row else "G/F"
         p_img = p_row["Picture"].iloc[0] if not p_row.empty and "Picture" in p_row and pd.notna(p_row["Picture"].iloc[0]) else "https://via.placeholder.com/35"
 
-        # A. Practice Scores
+        # A. Practice Scores & Minutes
         _, _, v_score, i_score, c_score, p_mins, wk_num, dy_num, s_type = compute_practice_tables(
             p, str(sel_eval_date), vol_raw, int_raw, session_select=sel_eval_session
         )
+        clean_mins_str = format_clean_mins(p_mins)
 
         # B. ACWR Calculation (EWMA)
         ath_cal = compute_bball_ewma_calendar(vol_raw, int_raw, p, bball_acwr_metrics)
@@ -1292,7 +1311,7 @@ def render_coach_report_content(season_label, season_key):
         elif acwr_val > 1.50:
             spike_count += 1
 
-        # C. Weekly Data (Week starting this Monday)
+        # C. Weekly Data
         p_weekly_sub = weekly_data[(weekly_data["Player"] == p) & (weekly_data["Date"] <= eval_dt)] if not weekly_data.empty and "Date" in weekly_data.columns else pd.DataFrame()
         if not p_weekly_sub.empty:
             wk_row = p_weekly_sub.iloc[-1]
@@ -1301,7 +1320,6 @@ def render_coach_report_content(season_label, season_key):
             wk_acc = pd.to_numeric(wk_row.get("Accels", 0.0), errors="coerce") or 0.0
             wk_dec = pd.to_numeric(wk_row.get("Decels", 0.0), errors="coerce") or 0.0
         else:
-            # Fallback to summing weekly volume dataframe directly
             w_sub_v = vol_data[(vol_data["Player"] == p) & (vol_data["Date"] >= pd.to_datetime(cur_monday)) & (vol_data["Date"] <= eval_dt)]
             wk_dist = w_sub_v["Distance (mi)"].sum() if not w_sub_v.empty else 0.0
             wk_acc = w_sub_v["Accels"].sum() if not w_sub_v.empty else 0.0
@@ -1323,7 +1341,7 @@ def render_coach_report_content(season_label, season_key):
             "Photo": p_img,
             "Athlete": p,
             "Position": p_pos,
-            "Mins": p_mins,
+            "Mins": clean_mins_str,
             "Vol_Score": v_score,
             "Int_Score": i_score,
             "Comb_Score": c_score,
@@ -1342,49 +1360,48 @@ def render_coach_report_content(season_label, season_key):
             "Cum_Jump": cum_jump
         })
 
-    # Summary KPI Banner
+    # Summary KPI Cards
     st.markdown(
         f"""
         <div class="coach-kpi-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px;">
-            <div style="background:#FFFFFF; border:1px solid #CBD5E1; border-left:4px solid #FF8200; border-radius:6px; padding:8px 12px; text-align:center;">
+            <div style="background:#FFFFFF; border:1px solid #CBD5E1; border-left:4px solid #FF8200; border-radius:6px; padding:10px 14px; text-align:center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
                 <div style="font-size:0.68rem; font-weight:700; color:#64748B; text-transform:uppercase;">Evaluated Athletes</div>
-                <div style="font-size:1.4rem; font-weight:800; color:#0F172A;">{len(report_rows)}</div>
-                <div style="font-size:0.65rem; color:#94A3B8;">{format_date_clean(sel_eval_date)} &bull; {sel_eval_session}</div>
+                <div style="font-size:1.5rem; font-weight:800; color:#0F172A; margin-top:2px;">{len(report_rows)}</div>
+                <div style="font-size:0.68rem; color:#94A3B8;">{format_date_clean(sel_eval_date)} &bull; {sel_eval_session}</div>
             </div>
-            <div style="background:#FFFFFF; border:1px solid #CBD5E1; border-left:4px solid #22C55E; border-radius:6px; padding:8px 12px; text-align:center;">
-                <div style="font-size:0.68rem; font-weight:700; color:#64748B; text-transform:uppercase;">Optimal ACWR (0.8 - 1.3)</div>
-                <div style="font-size:1.4rem; font-weight:800; color:#166534;">{sweet_spot_count}</div>
-                <div style="font-size:0.65rem; color:#166534;">Sweet Spot Ratios</div>
+            <div style="background:#FFFFFF; border:1px solid #CBD5E1; border-left:4px solid #22C55E; border-radius:6px; padding:10px 14px; text-align:center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+                <div style="font-size:0.68rem; font-weight:700; color:#64748B; text-transform:uppercase;">Optimal ACWR (0.80 - 1.30)</div>
+                <div style="font-size:1.5rem; font-weight:800; color:#166534; margin-top:2px;">{sweet_spot_count}</div>
+                <div style="font-size:0.68rem; color:#166534;">Sweet Spot Workload</div>
             </div>
-            <div style="background:#FFFFFF; border:1px solid #CBD5E1; border-left:4px solid #EF4444; border-radius:6px; padding:8px 12px; text-align:center;">
-                <div style="font-size:0.68rem; font-weight:700; color:#64748B; text-transform:uppercase;">Spike Alerts (&gt;1.50)</div>
-                <div style="font-size:1.4rem; font-weight:800; color:#991B1B;">{spike_count}</div>
-                <div style="font-size:0.65rem; color:#991B1B;">High Acute Spikes</div>
+            <div style="background:#FFFFFF; border:1px solid #CBD5E1; border-left:4px solid #EF4444; border-radius:6px; padding:10px 14px; text-align:center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+                <div style="font-size:0.68rem; font-weight:700; color:#64748B; text-transform:uppercase;">High Spikes (&gt;1.50)</div>
+                <div style="font-size:1.5rem; font-weight:800; color:#991B1B; margin-top:2px;">{spike_count}</div>
+                <div style="font-size:0.68rem; color:#991B1B;">Fatigue / Overload Risk</div>
             </div>
-            <div style="background:#FFFFFF; border:1px solid #CBD5E1; border-left:4px solid #38BDF8; border-radius:6px; padding:8px 12px; text-align:center;">
+            <div style="background:#FFFFFF; border:1px solid #CBD5E1; border-left:4px solid #0284C7; border-radius:6px; padding:10px 14px; text-align:center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
                 <div style="font-size:0.68rem; font-weight:700; color:#64748B; text-transform:uppercase;">Team Distance This Week</div>
-                <div style="font-size:1.4rem; font-weight:800; color:#0369A1;">{total_dist_team:.1f} mi</div>
-                <div style="font-size:0.65rem; color:#64748B;">Week of {cur_monday.strftime('%b %d')}</div>
+                <div style="font-size:1.5rem; font-weight:800; color:#0369A1; margin-top:2px;">{total_dist_team:.1f} mi</div>
+                <div style="font-size:0.68rem; color:#64748B;">Week of {cur_monday.strftime('%b %d')}</div>
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    # Master Table Builder (Ranked by Combined Score)
     df_rep = pd.DataFrame(report_rows).sort_values("Comb_Score", ascending=False)
 
     table_rows = []
     for _, r in df_rep.iterrows():
-        v_bg, v_fg = get_vball_color(r["Vol_Score"])
-        i_bg, i_fg = get_vball_color(r["Int_Score"])
-        c_bg, c_fg = get_vball_color(r["Comb_Score"])
+        v_bg, v_fg = get_coach_score_badge(r["Vol_Score"])
+        i_bg, i_fg = get_coach_score_badge(r["Int_Score"])
+        c_bg, c_fg = get_coach_score_badge(r["Comb_Score"])
 
         table_rows.append(
             f"""
             <tr>
-                <td style="padding:4px;"><img src="{r['Photo']}" style="width:28px; height:28px; border-radius:50%; object-fit:cover; border:1px solid #FF8200;"></td>
-                <td style="font-weight:800; text-align:left !important; padding-left:8px; white-space:nowrap; color:#0F172A;">{r['Athlete']}</td>
+                <td style="padding:4px;"><img src="{r['Photo']}" style="width:26px; height:26px; border-radius:50%; object-fit:cover; border:1.5px solid #FF8200;"></td>
+                <td style="font-weight:800; text-align:left !important; padding-left:10px; white-space:nowrap; color:#0F172A;">{r['Athlete']}</td>
                 <td style="font-weight:600; color:#64748B;">{r['Position']}</td>
                 <td style="font-weight:700; color:#334155;">{r['Mins']}</td>
                 <td style="background:{v_bg}; color:{v_fg}; font-weight:800;">{r['Vol_Score']}</td>
@@ -1393,12 +1410,12 @@ def render_coach_report_content(season_label, season_key):
                 <td style="font-weight:600; color:#0F172A;">{r['Acute_7d']:.1f}</td>
                 <td style="font-weight:600; color:#64748B;">{r['Chronic_28d']:.1f}</td>
                 <td style="background:{r['ACWR_Bg']}; color:{r['ACWR_Color']}; font-weight:900;">{r['ACWR']:.2f}</td>
-                <td><span style="font-size:0.68rem; font-weight:700; color:{r['ACWR_Color']};">{r['ACWR_Status']}</span></td>
+                <td><span style="font-size:0.68rem; font-weight:700; padding:2px 6px; border-radius:4px; background:{r['ACWR_Bg']}; color:{r['ACWR_Color']}; white-space:nowrap;">{r['ACWR_Status']}</span></td>
                 <td style="font-weight:700; color:#0284C7;">{r['Wk_Dist']:.1f}</td>
                 <td style="font-weight:700; color:#FF8200;">{r['Wk_HSD']:.2f}</td>
                 <td style="font-weight:600;">{r['Wk_Acc']:,.0f}</td>
                 <td style="font-weight:600;">{r['Wk_Dec']:,.0f}</td>
-                <td style="font-weight:800; color:#0F172A;">{r['Cum_Dist']:.1f} mi</td>
+                <td style="font-weight:800; color:#0F172A;">{r['Cum_Dist']:.1f}</td>
                 <td style="font-weight:600; color:#475569;">{r['Cum_Mech']:,.0f}</td>
                 <td style="font-weight:600; color:#475569;">{r['Cum_Jump']:,.0f}</td>
             </tr>
@@ -1406,35 +1423,35 @@ def render_coach_report_content(season_label, season_key):
         )
 
     full_matrix_html = f"""
-    <div style="width:100%; overflow-x:auto; background:#FFFFFF; border:1px solid #CBD5E1; border-radius:8px;">
+    <div style="width:100%; overflow-x:auto; background:#FFFFFF; border:1px solid #CBD5E1; border-radius:8px; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
         <table class="coach-report-table vball-table" style="width:100%; border-collapse:collapse; margin-bottom:0; font-size:0.75rem;">
             <thead>
                 <tr style="background:#0F172A; color:#FFFFFF;">
-                    <th colspan="4" style="border-right:2px solid #CBD5E1; background:#1E293B; color:#FFFFFF;">ATHLETE ROSTER</th>
-                    <th colspan="3" style="border-right:2px solid #CBD5E1; background:#0284C7; color:#FFFFFF;">SESSION SCORES ({sel_eval_session})</th>
-                    <th colspan="4" style="border-right:2px solid #CBD5E1; background:#334155; color:#FFFFFF;">WORKLOAD & ACWR (EWMA)</th>
-                    <th colspan="4" style="border-right:2px solid #CBD5E1; background:#D97706; color:#FFFFFF;">WEEKLY OUTPUT ({cur_monday.strftime('%m/%d')})</th>
-                    <th colspan="3" style="background:#475569; color:#FFFFFF;">CUMULATIVE LOAD ({season_label})</th>
+                    <th colspan="4" style="border-right:2px solid #CBD5E1; background:#1E293B; color:#FFFFFF; text-transform:uppercase; font-size:0.72rem;">Roster</th>
+                    <th colspan="3" style="border-right:2px solid #CBD5E1; background:#0284C7; color:#FFFFFF; text-transform:uppercase; font-size:0.72rem;">Scores ({sel_eval_session})</th>
+                    <th colspan="4" style="border-right:2px solid #CBD5E1; background:#334155; color:#FFFFFF; text-transform:uppercase; font-size:0.72rem;">Workload & ACWR</th>
+                    <th colspan="4" style="border-right:2px solid #CBD5E1; background:#D97706; color:#FFFFFF; text-transform:uppercase; font-size:0.72rem;">Weekly Output (Wk {cur_monday.strftime('%m/%d')})</th>
+                    <th colspan="3" style="background:#475569; color:#FFFFFF; text-transform:uppercase; font-size:0.72rem;">Cumulative ({season_label})</th>
                 </tr>
-                <tr style="background:#F1F5F9; color:#334155; font-size:0.7rem;">
-                    <th>Photo</th>
-                    <th style="text-align:left !important; padding-left:8px;">Name</th>
+                <tr style="background:#F8FAFC; color:#475569; font-size:0.7rem; border-bottom:2px solid #E2E8F0;">
+                    <th style="width:34px;">Photo</th>
+                    <th style="text-align:left !important; padding-left:10px;">Name</th>
                     <th>Pos</th>
                     <th>Min</th>
                     <th>Vol</th>
                     <th>Int</th>
                     <th>Comb</th>
-                    <th>7d Acute</th>
-                    <th>28d Chron</th>
+                    <th>7d Act</th>
+                    <th>28d Chr</th>
                     <th>Ratio</th>
                     <th>Zone</th>
                     <th>Dist (mi)</th>
                     <th>HSD (mi)</th>
                     <th>Acc</th>
                     <th>Dec</th>
-                    <th>Distance</th>
-                    <th>A+D Count</th>
-                    <th>Jump Load (J)</th>
+                    <th>Dist (mi)</th>
+                    <th>A+D</th>
+                    <th>Jump (J)</th>
                 </tr>
             </thead>
             <tbody>
@@ -1444,7 +1461,6 @@ def render_coach_report_content(season_label, season_key):
     </div>
     """
     st.markdown(full_matrix_html, unsafe_allow_html=True)
-    
     
 # -----------------------------------------------------------------------------
 # 5. SIDEBAR NAVIGATION (DYNAMIC ROLES)
