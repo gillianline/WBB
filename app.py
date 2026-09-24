@@ -1204,15 +1204,15 @@ def compute_bball_ewma_calendar(v_df, i_df, ath_name, metrics_list):
 # COACH'S EXECUTIVE REPORT (CLEAN FORMATTING & ALIGNMENT ENGINE)
 # -----------------------------------------------------------------------------
 def render_coach_report_content(season_label, season_key):
-    st.markdown(
-        f"""
-        <div style="background: linear-gradient(90deg, #FF8200 0%, #1E293B 100%); padding: 10px 18px; border-radius: 8px; color: #FFFFFF; font-weight: 800; font-size: 1.25rem; display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
-            <span>LADY VOLS BASKETBALL &bull</span>
-            <span style="font-size: 0.85rem; font-weight: 600; background: rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 4px;">{season_label.upper()}</span>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    #st.markdown(
+        #textwrap.dedent(f"""
+       # <div style="background: linear-gradient(90deg, #FF8200 0%, #1E293B 100%); padding: 10px 18px; border-radius: 8px; color: #FFFFFF; font-weight: 800; font-size: 1.25rem; display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+            #<span>LADY VOLS BASKETBALL &bull; COACH'S PERFORMANCE & WORKLOAD DOSSIER</span>
+            #<span style="font-size: 0.85rem; font-weight: 600; background: rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 4px;">{season_label.upper()}</span>
+        #</div>
+        #"""),
+       # unsafe_allow_html=True,
+    #)
 
     vol_data = filter_by_season(vol_raw, season_label)
     int_data = filter_by_season(int_raw, season_label)
@@ -1222,7 +1222,6 @@ def render_coach_report_content(season_label, season_key):
         st.info(f"No workload data available for {season_label}.")
         return
 
-    # Helper function for score badges that turns 0 into neutral gray instead of false green
     def get_coach_score_badge(score):
         if score is None or pd.isna(score) or score == 0:
             return "#F1F5F9", "#94A3B8"
@@ -1233,7 +1232,6 @@ def render_coach_report_content(season_label, season_key):
         else:
             return "#FFD6D6", "#991B1B"
 
-    # Helper function to format minutes cleanly
     def format_clean_mins(val):
         if pd.isna(val) or str(val).strip() in ["", "--", "nan"]:
             return "--"
@@ -1267,7 +1265,6 @@ def render_coach_report_content(season_label, season_key):
     
     bball_acwr_metrics = ["Distance (mi)", "High Speed Distance (mi)", "Accels", "Decels", "Physio Load"]
     
-    # Pre-clean numeric columns for season cumulative calculations
     for c in ["Distance (mi)", "Accels", "Decels", "Jump Load (J)"]:
         if c in vol_data.columns:
             vol_data[c] = pd.to_numeric(vol_data[c].astype(str).str.replace(r"[^0-9.]", "", regex=True), errors="coerce").fillna(0.0)
@@ -1289,13 +1286,11 @@ def render_coach_report_content(season_label, season_key):
         p_pos = p_row["Position"].iloc[0] if not p_row.empty and "Position" in p_row else "G/F"
         p_img = p_row["Picture"].iloc[0] if not p_row.empty and "Picture" in p_row and pd.notna(p_row["Picture"].iloc[0]) else "https://via.placeholder.com/35"
 
-        # A. Practice Scores & Minutes
         _, _, v_score, i_score, c_score, p_mins, wk_num, dy_num, s_type = compute_practice_tables(
             p, str(sel_eval_date), vol_raw, int_raw, session_select=sel_eval_session
         )
         clean_mins_str = format_clean_mins(p_mins)
 
-        # B. ACWR Calculation (EWMA)
         ath_cal = compute_bball_ewma_calendar(vol_raw, int_raw, p, bball_acwr_metrics)
         if not ath_cal.empty and not ath_cal[ath_cal["Date"] <= eval_dt].empty:
             last_acwr_row = ath_cal[ath_cal["Date"] <= eval_dt].iloc[-1]
@@ -1311,7 +1306,6 @@ def render_coach_report_content(season_label, season_key):
         elif acwr_val > 1.50:
             spike_count += 1
 
-        # C. Weekly Data
         p_weekly_sub = weekly_data[(weekly_data["Player"] == p) & (weekly_data["Date"] <= eval_dt)] if not weekly_data.empty and "Date" in weekly_data.columns else pd.DataFrame()
         if not p_weekly_sub.empty:
             wk_row = p_weekly_sub.iloc[-1]
@@ -1328,7 +1322,6 @@ def render_coach_report_content(season_label, season_key):
 
         total_dist_team += wk_dist
 
-        # D. Cumulative Season Load
         cumul_row = cumul_by_ath[cumul_by_ath["Player"] == p] if not cumul_by_ath.empty else pd.DataFrame()
         if not cumul_row.empty:
             cum_dist = cumul_row["Distance (mi)"].values[0]
@@ -1362,7 +1355,7 @@ def render_coach_report_content(season_label, season_key):
 
     # Summary KPI Cards
     st.markdown(
-        f"""
+        textwrap.dedent(f"""
         <div class="coach-kpi-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px;">
             <div style="background:#FFFFFF; border:1px solid #CBD5E1; border-left:4px solid #FF8200; border-radius:6px; padding:10px 14px; text-align:center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
                 <div style="font-size:0.68rem; font-weight:700; color:#64748B; text-transform:uppercase;">Evaluated Athletes</div>
@@ -1385,7 +1378,7 @@ def render_coach_report_content(season_label, season_key):
                 <div style="font-size:0.68rem; color:#64748B;">Week of {cur_monday.strftime('%b %d')}</div>
             </div>
         </div>
-        """,
+        """),
         unsafe_allow_html=True,
     )
 
@@ -1398,31 +1391,31 @@ def render_coach_report_content(season_label, season_key):
         c_bg, c_fg = get_coach_score_badge(r["Comb_Score"])
 
         table_rows.append(
-            f"""
-            <tr>
-                <td style="padding:4px;"><img src="{r['Photo']}" style="width:26px; height:26px; border-radius:50%; object-fit:cover; border:1.5px solid #FF8200;"></td>
-                <td style="font-weight:800; text-align:left !important; padding-left:10px; white-space:nowrap; color:#0F172A;">{r['Athlete']}</td>
-                <td style="font-weight:600; color:#64748B;">{r['Position']}</td>
-                <td style="font-weight:700; color:#334155;">{r['Mins']}</td>
-                <td style="background:{v_bg}; color:{v_fg}; font-weight:800;">{r['Vol_Score']}</td>
-                <td style="background:{i_bg}; color:{i_fg}; font-weight:800;">{r['Int_Score']}</td>
-                <td style="background:{c_bg}; color:{c_fg}; font-weight:900;">{r['Comb_Score']}</td>
-                <td style="font-weight:600; color:#0F172A;">{r['Acute_7d']:.1f}</td>
-                <td style="font-weight:600; color:#64748B;">{r['Chronic_28d']:.1f}</td>
-                <td style="background:{r['ACWR_Bg']}; color:{r['ACWR_Color']}; font-weight:900;">{r['ACWR']:.2f}</td>
-                <td><span style="font-size:0.68rem; font-weight:700; padding:2px 6px; border-radius:4px; background:{r['ACWR_Bg']}; color:{r['ACWR_Color']}; white-space:nowrap;">{r['ACWR_Status']}</span></td>
-                <td style="font-weight:700; color:#0284C7;">{r['Wk_Dist']:.1f}</td>
-                <td style="font-weight:700; color:#FF8200;">{r['Wk_HSD']:.2f}</td>
-                <td style="font-weight:600;">{r['Wk_Acc']:,.0f}</td>
-                <td style="font-weight:600;">{r['Wk_Dec']:,.0f}</td>
-                <td style="font-weight:800; color:#0F172A;">{r['Cum_Dist']:.1f}</td>
-                <td style="font-weight:600; color:#475569;">{r['Cum_Mech']:,.0f}</td>
-                <td style="font-weight:600; color:#475569;">{r['Cum_Jump']:,.0f}</td>
-            </tr>
-            """
+            f'<tr>'
+            f'<td style="padding:4px;"><img src="{r["Photo"]}" style="width:26px; height:26px; border-radius:50%; object-fit:cover; border:1.5px solid #FF8200;"></td>'
+            f'<td style="font-weight:800; text-align:left !important; padding-left:10px; white-space:nowrap; color:#0F172A;">{r["Athlete"]}</td>'
+            f'<td style="font-weight:600; color:#64748B;">{r["Position"]}</td>'
+            f'<td style="font-weight:700; color:#334155;">{r["Mins"]}</td>'
+            f'<td style="background:{v_bg}; color:{v_fg}; font-weight:800;">{r["Vol_Score"]}</td>'
+            f'<td style="background:{i_bg}; color:{i_fg}; font-weight:800;">{r["Int_Score"]}</td>'
+            f'<td style="background:{c_bg}; color:{c_fg}; font-weight:900;">{r["Comb_Score"]}</td>'
+            f'<td style="font-weight:600; color:#0F172A;">{r["Acute_7d"]:.1f}</td>'
+            f'<td style="font-weight:600; color:#64748B;">{r["Chronic_28d"]:.1f}</td>'
+            f'<td style="background:{r["ACWR_Bg"]}; color:{r["ACWR_Color"]}; font-weight:900;">{r["ACWR"]:.2f}</td>'
+            f'<td><span style="font-size:0.68rem; font-weight:700; padding:2px 6px; border-radius:4px; background:{r["ACWR_Bg"]}; color:{r["ACWR_Color"]}; white-space:nowrap;">{r["ACWR_Status"]}</span></td>'
+            f'<td style="font-weight:700; color:#0284C7;">{r["Wk_Dist"]:.1f}</td>'
+            f'<td style="font-weight:700; color:#FF8200;">{r["Wk_HSD"]:.2f}</td>'
+            f'<td style="font-weight:600;">{r["Wk_Acc"]:,.0f}</td>'
+            f'<td style="font-weight:600;">{r["Wk_Dec"]:,.0f}</td>'
+            f'<td style="font-weight:800; color:#0F172A;">{r["Cum_Dist"]:.1f}</td>'
+            f'<td style="font-weight:600; color:#475569;">{r["Cum_Mech"]:,.0f}</td>'
+            f'<td style="font-weight:600; color:#475569;">{r["Cum_Jump"]:,.0f}</td>'
+            f'</tr>'
         )
 
-    full_matrix_html = f"""
+    rows_joined = "".join(table_rows)
+
+    full_matrix_html = textwrap.dedent(f"""
     <div style="width:100%; overflow-x:auto; background:#FFFFFF; border:1px solid #CBD5E1; border-radius:8px; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
         <table class="coach-report-table vball-table" style="width:100%; border-collapse:collapse; margin-bottom:0; font-size:0.75rem;">
             <thead>
@@ -1455,11 +1448,11 @@ def render_coach_report_content(season_label, season_key):
                 </tr>
             </thead>
             <tbody>
-                {"".join(table_rows)}
+                {rows_joined}
             </tbody>
         </table>
     </div>
-    """
+    """)
     st.markdown(full_matrix_html, unsafe_allow_html=True)
     
 # -----------------------------------------------------------------------------
