@@ -603,76 +603,77 @@ def create_clean_bar_chart(x_vals, y_vals, title_text, bar_color="#38BDF8"):
 def compute_practice_tables(
     player_name, session_date_str, v_source, i_source, session_select="Combined"
 ):
-    v_player = v_source[
+    v_player_raw = v_source[
         (v_source["Player"] == player_name)
         & (v_source["Date_Str"] == str(session_date_str))
     ].copy()
-    i_player = i_source[
+    i_player_raw = i_source[
         (i_source["Player"] == player_name)
         & (i_source["Date_Str"] == str(session_date_str))
     ].copy()
 
-    # --- SESSION FILTERING OR COMBINED DAILY AGGREGATION ---
-    if session_select != "Combined":
-        if "Session_Label" in v_player.columns:
-            v_player = v_player[v_player["Session_Label"] == session_select]
-        if "Session_Label" in i_player.columns:
-            i_player = i_player[i_player["Session_Label"] == session_select]
-    elif len(v_player) > 1 or len(i_player) > 1:
-        if not v_player.empty:
-            num_v = v_player.select_dtypes(include=[np.number]).sum()
-            first_v = v_player.iloc[0].to_dict()
+    # Determine if we need single-session or daily combined logic
+    is_combined = (session_select == "Combined")
+
+    if not is_combined:
+        v_player = v_player_raw[v_player_raw["Session_Label"] == session_select] if "Session_Label" in v_player_raw.columns else v_player_raw
+        i_player = i_player_raw[i_player_raw["Session_Label"] == session_select] if "Session_Label" in i_player_raw.columns else i_player_raw
+    else:
+        # Sum volume metrics across all sessions today
+        if not v_player_raw.empty:
+            num_v = v_player_raw.select_dtypes(include=[np.number]).sum()
+            first_v = v_player_raw.iloc[0].to_dict()
             for col in num_v.index:
                 first_v[col] = num_v[col]
             first_v["Session_Label"] = "Combined"
-            # Combine the distinct types into a clean label
-            if "Session_Label" in v_source.columns:
-                unique_types = [str(x) for x in v_source[(v_source["Player"] == player_name) & (v_source["Date_Str"] == str(session_date_str))]["Session_Label"].unique() if pd.notna(x)]
-                first_v["Type"] = " + ".join(unique_types) if unique_types else "Combined"
             v_player = pd.DataFrame([first_v])
+        else:
+            v_player = pd.DataFrame()
 
-        if not i_player.empty:
+        # Aggregate intensity metrics across all sessions today
+        if not i_player_raw.empty:
             num_i = {}
-            for c in i_player.select_dtypes(include=[np.number]).columns:
+            for c in i_player_raw.select_dtypes(include=[np.number]).columns:
                 num_i[c] = (
-                    i_player[c].max()
-                    if "speed (max" in str(c).lower()
-                    else i_player[c].sum()
+                    i_player_raw[c].max()
+                    if "speed (max" in str(c).lower() or "intensity" in str(c).lower()
+                    else i_player_raw[c].sum()
                 )
-            first_i = i_player.iloc[0].to_dict()
+            first_i = i_player_raw.iloc[0].to_dict()
             for col, val in num_i.items():
                 first_i[col] = val
             first_i["Session_Label"] = "Combined"
             i_player = pd.DataFrame([first_i])
+        else:
+            i_player = pd.DataFrame()
 
-    v_all = (
-        v_source[v_source["Player"] == player_name].sort_values("Date")
-        if not v_source.empty
-        else pd.DataFrame()
-    )
-    i_all = (
-        i_source[i_source["Player"] == player_name].sort_values("Date")
-        if not i_source.empty
-        else pd.DataFrame()
-    )
-
+    # Historical window (30-day baseline)
     current_dt = pd.to_datetime(session_date_str, errors="coerce")
+    v_all = v_source[v_source["Player"] == player_name].sort_values("Date").copy() if not v_source.empty else pd.DataFrame()
+    i_all = i_source[i_source["Player"] == player_name].sort_values("Date").copy() if not i_source.empty else pd.DataFrame()
 
     if pd.notna(current_dt):
         window_start = current_dt - pd.Timedelta(days=30)
-        v_base = (
-            v_all[(v_all["Date"] >= window_start) & (v_all["Date"] <= current_dt)]
-            if not v_all.empty and "Date" in v_all.columns
-            else v_all
-        )
-        i_base = (
-            i_all[(i_all["Date"] >= window_start) & (i_all["Date"] <= current_dt)]
-            if not i_all.empty and "Date" in i_all.columns
-            else i_all
-        )
+        v_base_raw = v_all[(v_all["Date"] >= window_start) & (v_all["Date"] <= current_dt)] if not v_all.empty and "Date" in v_all.columns else v_all
+        i_base_raw = i_all[(i_all["Date"] >= window_start) & (i_all["Date"] <= current_dt)] if not i_all.empty and "Date" in i_all.columns else i_all
     else:
-        v_base = v_all
-        i_base = i_all
+        v_base_raw = v_all
+        i_base_raw = i_all
+
+    # FIX #1: If evaluating Combined, baseline historical peaks MUST also be daily combined totals!
+    if is_combined and not v_base_raw.empty:
+        v_base = v_base_raw.groupby("Date_Str").sum(numeric_only=True).reset_index()
+    else:
+        v_base = v_base_raw
+
+    if is_combined and not i_base_raw.empty:
+        i_agg_dict = {
+            c: ("max" if "speed (max" in str(c).lower() or "intensity" in str(c).lower() else "sum")
+            for c in i_base_raw.select_dtypes(include=[np.number]).columns
+        }
+        i_base = i_base_raw.groupby("Date_Str").agg(i_agg_dict).reset_index()
+    else:
+        i_base = i_base_raw
 
     vol_metrics = [
         "Distance (mi)",
@@ -695,52 +696,30 @@ def compute_practice_tables(
 
     vol_rows, int_rows = [], []
 
+    # FIX #2: Add min(100.0, ...) to ensure metrics never exceed 100
     for m in vol_metrics:
-        curr = (
-            v_player[m].values[0]
-            if not v_player.empty and m in v_player
-            else 0.0
-        )
+        curr = v_player[m].values[0] if not v_player.empty and m in v_player else 0.0
         mx = v_base[m].max() if not v_base.empty and m in v_base else curr
-        grade = round((curr / mx * 100), 0) if mx > 0 else 0
-        vol_rows.append(
-            {"Metric": m, "Current": curr, "Max": mx, "Grade": grade}
-        )
+        grade = min(100.0, round((curr / mx * 100), 0)) if mx > 0 else 0
+        vol_rows.append({"Metric": m, "Current": curr, "Max": mx, "Grade": grade})
 
     for m in int_metrics:
-        curr = (
-            i_player[m].values[0]
-            if not i_player.empty and m in i_player
-            else 0.0
-        )
+        curr = i_player[m].values[0] if not i_player.empty and m in i_player else 0.0
         mx = i_base[m].max() if not i_base.empty and m in i_base else curr
-        grade = round((curr / mx * 100), 0) if mx > 0 else 0
-        int_rows.append(
-            {"Metric": m, "Current": curr, "Max": mx, "Grade": grade}
-        )
+        grade = min(100.0, round((curr / mx * 100), 0)) if mx > 0 else 0
+        int_rows.append({"Metric": m, "Current": curr, "Max": mx, "Grade": grade})
 
     vol_df_out = pd.DataFrame(vol_rows)
     int_df_out = pd.DataFrame(int_rows)
 
-    vol_score = int(vol_df_out["Grade"].mean()) if not vol_df_out.empty else 0
-    int_score = int(int_df_out["Grade"].mean()) if not int_df_out.empty else 0
-    comb_score = int(round((vol_score + int_score) / 2))
+    # Strictly bounded 0 to 100
+    vol_score = min(100, max(0, int(vol_df_out["Grade"].mean()))) if not vol_df_out.empty else 0
+    int_score = min(100, max(0, int(int_df_out["Grade"].mean()))) if not int_df_out.empty else 0
+    comb_score = min(100, max(0, int(round((vol_score + int_score) / 2))))
 
-    minutes = (
-        v_player["Minutes"].values[0]
-        if not v_player.empty and "Minutes" in v_player
-        else "--"
-    )
-    week_num = (
-        v_player["Week"].values[0]
-        if not v_player.empty and "Week" in v_player
-        else "--"
-    )
-    day_num = (
-        v_player["Day"].values[0]
-        if not v_player.empty and "Day" in v_player
-        else "--"
-    )
+    minutes = v_player["Minutes"].values[0] if not v_player.empty and "Minutes" in v_player else "--"
+    week_num = v_player["Week"].values[0] if not v_player.empty and "Week" in v_player else "--"
+    day_num = v_player["Day"].values[0] if not v_player.empty and "Day" in v_player else "--"
 
     type_col = next((c for c in v_player.columns if "type" in c.lower()), None) if not v_player.empty else None
     session_type = (
