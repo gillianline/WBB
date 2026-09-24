@@ -1204,15 +1204,6 @@ def compute_bball_ewma_calendar(v_df, i_df, ath_name, metrics_list):
 # COACH'S EXECUTIVE DOSSIER (CLEAN 2-COLUMN MODULAR CARD MATRIX)
 # -----------------------------------------------------------------------------
 def render_coach_report_content(season_label, season_key):
-    st.markdown(
-        textwrap.dedent(f"""
-        <div style="background: linear-gradient(90deg, #FF8200 0%, #0F172A 100%); padding: 12px 20px; border-radius: 8px; color: #FFFFFF; font-weight: 800; font-size: 1.25rem; display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-            <span>LADY VOLS BASKETBALL &bull; COACH'S PERFORMANCE DOSSIER</span>
-            <span style="font-size: 0.85rem; font-weight: 600; background: rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 4px;">{season_label.upper()}</span>
-        </div>
-        """),
-        unsafe_allow_html=True,
-    )
 
     vol_data = filter_by_season(vol_raw, season_label)
     int_data = filter_by_season(int_raw, season_label)
@@ -1403,77 +1394,54 @@ def render_coach_report_content(season_label, season_key):
         i_bg, i_fg = get_coach_score_badge(r["Int_Score"])
         c_bg, c_fg = get_coach_score_badge(r["Comb_Score"])
 
-        card = f"""
-        <div style="background:#FFFFFF; border:1px solid #CBD5E1; border-radius:10px; padding:12px 14px; box-shadow:0 1px 3px rgba(0,0,0,0.03); page-break-inside:avoid; break-inside:avoid; margin-bottom:12px;">
-            <!-- Header Row: Player + ACWR Badge + Score Pills -->
-            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #E2E8F0; padding-bottom:8px; margin-bottom:8px;">
-                <div style="display:flex; align-items:center; gap:10px;">
-                    <img src="{r['Photo']}" style="width:40px; height:40px; border-radius:50%; object-fit:cover; border:2px solid #FF8200;">
-                    <div>
-                        <div style="font-weight:800; font-size:1.05rem; color:#0F172A; line-height:1.1;">{r['Athlete']}</div>
-                        <div style="font-size:0.75rem; font-weight:600; color:#64748B;">{r['Position']} &bull; {r['Mins']} min</div>
-                    </div>
-                </div>
-                <div style="display:flex; align-items:center; gap:6px;">
-                    <span style="background:{r['ACWR_Bg']}; color:{r['ACWR_Color']}; border:1px solid {r['ACWR_Color']}33; font-weight:800; font-size:0.72rem; padding:3px 8px; border-radius:6px; white-space:nowrap;">
-                        ACWR {r['ACWR']:.2f} ({r['ACWR_Status']})
-                    </span>
-                    <div style="background:{c_bg}; color:{c_fg}; font-weight:900; font-size:1.15rem; padding:2px 10px; border-radius:6px; min-width:44px; text-align:center;">
-                        {r['Comb_Score']}
-                    </div>
-                </div>
-            </div>
-
-            <!-- 4 Structured Micro-Clusters -->
-            <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; text-align:center;">
-                <!-- Cluster 1: Session Scores -->
-                <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:6px; padding:6px 4px;">
-                    <div style="font-size:0.65rem; font-weight:700; color:#64748B; text-transform:uppercase;">Scores</div>
-                    <div style="font-size:0.85rem; font-weight:800; color:#0F172A; margin-top:2px;">
-                        <span style="color:{v_fg};">{r['Vol_Score']}</span> <span style="color:#CBD5E1;">/</span> <span style="color:{i_fg};">{r['Int_Score']}</span>
-                    </div>
-                    <div style="font-size:0.62rem; color:#94A3B8;">Vol / Int</div>
-                </div>
-
-                <!-- Cluster 2: ACWR EWMA Loads -->
-                <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:6px; padding:6px 4px;">
-                    <div style="font-size:0.65rem; font-weight:700; color:#64748B; text-transform:uppercase;">7d / 28d</div>
-                    <div style="font-size:0.85rem; font-weight:800; color:#0F172A; margin-top:2px;">
-                        {r['Acute_7d']:.1f} <span style="color:#CBD5E1;">/</span> {r['Chronic_28d']:.1f}
-                    </div>
-                    <div style="font-size:0.62rem; color:#94A3B8;">Acute / Chronic</div>
-                </div>
-
-                <!-- Cluster 3: Week Workload -->
-                <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:6px; padding:6px 4px;">
-                    <div style="font-size:0.65rem; font-weight:700; color:#0284C7; text-transform:uppercase;">Week Totals</div>
-                    <div style="font-size:0.85rem; font-weight:800; color:#0F172A; margin-top:2px;">
-                        {r['Wk_Dist']:.1f} mi
-                    </div>
-                    <div style="font-size:0.62rem; color:#64748B;">HSD: {r['Wk_HSD']:.2f} mi</div>
-                </div>
-
-                <!-- Cluster 4: Season Cumulative -->
-                <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:6px; padding:6px 4px;">
-                    <div style="font-size:0.65rem; font-weight:700; color:#FF8200; text-transform:uppercase;">Season Total</div>
-                    <div style="font-size:0.85rem; font-weight:800; color:#0F172A; margin-top:2px;">
-                        {r['Cum_Dist']:.1f} mi
-                    </div>
-                    <div style="font-size:0.62rem; color:#64748B;">A+D: {r['Cum_Mech']:,.0f}</div>
-                </div>
-            </div>
-        </div>
-        """
+        # Build as a single clean string without leading indentation
+        card = (
+            f'<div style="background:#FFFFFF; border:1px solid #CBD5E1; border-radius:10px; padding:12px 14px; box-shadow:0 1px 3px rgba(0,0,0,0.03); page-break-inside:avoid; break-inside:avoid; margin-bottom:12px;">'
+            f'<div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #E2E8F0; padding-bottom:8px; margin-bottom:8px;">'
+            f'<div style="display:flex; align-items:center; gap:10px;">'
+            f'<img src="{r["Photo"]}" style="width:40px; height:40px; border-radius:50%; object-fit:cover; border:2px solid #FF8200;">'
+            f'<div>'
+            f'<div style="font-weight:800; font-size:1.05rem; color:#0F172A; line-height:1.1;">{r["Athlete"]}</div>'
+            f'<div style="font-size:0.75rem; font-weight:600; color:#64748B;">{r["Position"]} &bull; {r["Mins"]} min</div>'
+            f'</div></div>'
+            f'<div style="display:flex; align-items:center; gap:6px;">'
+            f'<span style="background:{r["ACWR_Bg"]}; color:{r["ACWR_Color"]}; border:1px solid {r["ACWR_Color"]}33; font-weight:800; font-size:0.72rem; padding:3px 8px; border-radius:6px; white-space:nowrap;">'
+            f'ACWR {r["ACWR"]:.2f} ({r["ACWR_Status"]})'
+            f'</span>'
+            f'<div style="background:{c_bg}; color:{c_fg}; font-weight:900; font-size:1.15rem; padding:2px 10px; border-radius:6px; min-width:44px; text-align:center;">'
+            f'{r["Comb_Score"]}'
+            f'</div></div></div>'
+            f'<div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; text-align:center;">'
+            f'<div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:6px; padding:6px 4px;">'
+            f'<div style="font-size:0.65rem; font-weight:700; color:#64748B; text-transform:uppercase;">Scores</div>'
+            f'<div style="font-size:0.85rem; font-weight:800; color:#0F172A; margin-top:2px;">'
+            f'<span style="color:{v_fg};">{r["Vol_Score"]}</span> <span style="color:#CBD5E1;">/</span> <span style="color:{i_fg};">{r["Int_Score"]}</span>'
+            f'</div><div style="font-size:0.62rem; color:#94A3B8;">Vol / Int</div></div>'
+            f'<div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:6px; padding:6px 4px;">'
+            f'<div style="font-size:0.65rem; font-weight:700; color:#64748B; text-transform:uppercase;">7d / 28d</div>'
+            f'<div style="font-size:0.85rem; font-weight:800; color:#0F172A; margin-top:2px;">'
+            f'{r["Acute_7d"]:.1f} <span style="color:#CBD5E1;">/</span> {r["Chronic_28d"]:.1f}'
+            f'</div><div style="font-size:0.62rem; color:#94A3B8;">Acute / Chronic</div></div>'
+            f'<div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:6px; padding:6px 4px;">'
+            f'<div style="font-size:0.65rem; font-weight:700; color:#0284C7; text-transform:uppercase;">Week Totals</div>'
+            f'<div style="font-size:0.85rem; font-weight:800; color:#0F172A; margin-top:2px;">{r["Wk_Dist"]:.1f} mi</div>'
+            f'<div style="font-size:0.62rem; color:#64748B;">HSD: {r["Wk_HSD"]:.2f} mi</div></div>'
+            f'<div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:6px; padding:6px 4px;">'
+            f'<div style="font-size:0.65rem; font-weight:700; color:#FF8200; text-transform:uppercase;">Season Total</div>'
+            f'<div style="font-size:0.85rem; font-weight:800; color:#0F172A; margin-top:2px;">{r["Cum_Dist"]:.1f} mi</div>'
+            f'<div style="font-size:0.62rem; color:#64748B;">A+D: {r["Cum_Mech"]:,.0f}</div></div>'
+            f'</div></div>'
+        )
         card_html_list.append(card)
 
     col_left, col_right = st.columns(2)
     with col_left:
         for card_str in card_html_list[0::2]:
-            st.markdown(card_str, unsafe_allow_html=True)
+            st.html(card_str)
 
     with col_right:
         for card_str in card_html_list[1::2]:
-            st.markdown(card_str, unsafe_allow_html=True)
+            st.html(card_str)
     
 # -----------------------------------------------------------------------------
 # 5. SIDEBAR NAVIGATION (DYNAMIC ROLES)
