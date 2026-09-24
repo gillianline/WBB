@@ -1201,18 +1201,18 @@ def compute_bball_ewma_calendar(v_df, i_df, ath_name, metrics_list):
     return cal
 
 # -----------------------------------------------------------------------------
-# COACH'S EXECUTIVE REPORT (CLEAN FORMATTING & ALIGNMENT ENGINE)
+# COACH'S EXECUTIVE DOSSIER (CLEAN 2-COLUMN MODULAR CARD MATRIX)
 # -----------------------------------------------------------------------------
 def render_coach_report_content(season_label, season_key):
-    #st.markdown(
-        #textwrap.dedent(f"""
-       # <div style="background: linear-gradient(90deg, #FF8200 0%, #1E293B 100%); padding: 10px 18px; border-radius: 8px; color: #FFFFFF; font-weight: 800; font-size: 1.25rem; display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
-            #<span>LADY VOLS BASKETBALL &bull; COACH'S PERFORMANCE & WORKLOAD DOSSIER</span>
-            #<span style="font-size: 0.85rem; font-weight: 600; background: rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 4px;">{season_label.upper()}</span>
-        #</div>
-        #"""),
-       # unsafe_allow_html=True,
-    #)
+    st.markdown(
+        textwrap.dedent(f"""
+        <div style="background: linear-gradient(90deg, #FF8200 0%, #0F172A 100%); padding: 12px 20px; border-radius: 8px; color: #FFFFFF; font-weight: 800; font-size: 1.25rem; display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <span>LADY VOLS BASKETBALL &bull; COACH'S PERFORMANCE DOSSIER</span>
+            <span style="font-size: 0.85rem; font-weight: 600; background: rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 4px;">{season_label.upper()}</span>
+        </div>
+        """),
+        unsafe_allow_html=True,
+    )
 
     vol_data = filter_by_season(vol_raw, season_label)
     int_data = filter_by_season(int_raw, season_label)
@@ -1278,19 +1278,28 @@ def render_coach_report_content(season_label, season_key):
 
     roster_players = roster_raw["Name"].tolist() if not roster_raw.empty else vol_data["Player"].unique().tolist()
 
-    report_rows = []
+    report_cards = []
     total_dist_team, sweet_spot_count, spike_count = 0.0, 0, 0
+    high_load_count, mod_load_count = 0, 0
 
     for p in roster_players:
         p_row = roster_raw[roster_raw["Name"] == p] if not roster_raw.empty else pd.DataFrame()
         p_pos = p_row["Position"].iloc[0] if not p_row.empty and "Position" in p_row else "G/F"
-        p_img = p_row["Picture"].iloc[0] if not p_row.empty and "Picture" in p_row and pd.notna(p_row["Picture"].iloc[0]) else "https://via.placeholder.com/35"
+        p_img = p_row["Picture"].iloc[0] if not p_row.empty and "Picture" in p_row and pd.notna(p_row["Picture"].iloc[0]) else "https://via.placeholder.com/45"
 
+        # A. Practice Scores & Minutes
         _, _, v_score, i_score, c_score, p_mins, wk_num, dy_num, s_type = compute_practice_tables(
             p, str(sel_eval_date), vol_raw, int_raw, session_select=sel_eval_session
         )
         clean_mins_str = format_clean_mins(p_mins)
 
+        # Count session load tiers
+        if c_score >= 75:
+            high_load_count += 1
+        elif c_score >= 50:
+            mod_load_count += 1
+
+        # B. ACWR Calculation (EWMA)
         ath_cal = compute_bball_ewma_calendar(vol_raw, int_raw, p, bball_acwr_metrics)
         if not ath_cal.empty and not ath_cal[ath_cal["Date"] <= eval_dt].empty:
             last_acwr_row = ath_cal[ath_cal["Date"] <= eval_dt].iloc[-1]
@@ -1306,6 +1315,7 @@ def render_coach_report_content(season_label, season_key):
         elif acwr_val > 1.50:
             spike_count += 1
 
+        # C. Weekly Data
         p_weekly_sub = weekly_data[(weekly_data["Player"] == p) & (weekly_data["Date"] <= eval_dt)] if not weekly_data.empty and "Date" in weekly_data.columns else pd.DataFrame()
         if not p_weekly_sub.empty:
             wk_row = p_weekly_sub.iloc[-1]
@@ -1322,6 +1332,7 @@ def render_coach_report_content(season_label, season_key):
 
         total_dist_team += wk_dist
 
+        # D. Cumulative Season Load
         cumul_row = cumul_by_ath[cumul_by_ath["Player"] == p] if not cumul_by_ath.empty else pd.DataFrame()
         if not cumul_row.empty:
             cum_dist = cumul_row["Distance (mi)"].values[0]
@@ -1330,7 +1341,7 @@ def render_coach_report_content(season_label, season_key):
         else:
             cum_dist, cum_mech, cum_jump = 0.0, 0.0, 0.0
 
-        report_rows.append({
+        report_cards.append({
             "Photo": p_img,
             "Athlete": p,
             "Position": p_pos,
@@ -1353,28 +1364,30 @@ def render_coach_report_content(season_label, season_key):
             "Cum_Jump": cum_jump
         })
 
-    # Summary KPI Cards
+    # Executive Overview Cards (No Headcount, Actionable KPIs Only)
     st.markdown(
         textwrap.dedent(f"""
-        <div class="coach-kpi-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px;">
-            <div style="background:#FFFFFF; border:1px solid #CBD5E1; border-left:4px solid #FF8200; border-radius:6px; padding:10px 14px; text-align:center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
-                <div style="font-size:0.68rem; font-weight:700; color:#64748B; text-transform:uppercase;">Evaluated Athletes</div>
-                <div style="font-size:1.5rem; font-weight:800; color:#0F172A; margin-top:2px;">{len(report_rows)}</div>
-                <div style="font-size:0.68rem; color:#94A3B8;">{format_date_clean(sel_eval_date)} &bull; {sel_eval_session}</div>
+        <div class="coach-kpi-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px;">
+            <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-left:4px solid #FF8200; border-radius:8px; padding:10px 14px; text-align:center;">
+                <div style="font-size:0.7rem; font-weight:700; color:#64748B; text-transform:uppercase;">Session Output Tiers</div>
+                <div style="font-size:1.45rem; font-weight:800; color:#0F172A;">
+                    <span style="color:#B91C1C;">{high_load_count} High</span> &bull; <span style="color:#854D0E;">{mod_load_count} Mod</span>
+                </div>
+                <div style="font-size:0.68rem; color:#94A3B8;">{sel_eval_session} Load Profile</div>
             </div>
-            <div style="background:#FFFFFF; border:1px solid #CBD5E1; border-left:4px solid #22C55E; border-radius:6px; padding:10px 14px; text-align:center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
-                <div style="font-size:0.68rem; font-weight:700; color:#64748B; text-transform:uppercase;">Optimal ACWR (0.80 - 1.30)</div>
-                <div style="font-size:1.5rem; font-weight:800; color:#166534; margin-top:2px;">{sweet_spot_count}</div>
-                <div style="font-size:0.68rem; color:#166534;">Sweet Spot Workload</div>
+            <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-left:4px solid #22C55E; border-radius:8px; padding:10px 14px; text-align:center;">
+                <div style="font-size:0.7rem; font-weight:700; color:#64748B; text-transform:uppercase;">Optimal ACWR (0.80 - 1.30)</div>
+                <div style="font-size:1.45rem; font-weight:800; color:#166534;">{sweet_spot_count} Players</div>
+                <div style="font-size:0.68rem; color:#166534;">In Sweet Spot Zone</div>
             </div>
-            <div style="background:#FFFFFF; border:1px solid #CBD5E1; border-left:4px solid #EF4444; border-radius:6px; padding:10px 14px; text-align:center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
-                <div style="font-size:0.68rem; font-weight:700; color:#64748B; text-transform:uppercase;">High Spikes (&gt;1.50)</div>
-                <div style="font-size:1.5rem; font-weight:800; color:#991B1B; margin-top:2px;">{spike_count}</div>
+            <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-left:4px solid #EF4444; border-radius:8px; padding:10px 14px; text-align:center;">
+                <div style="font-size:0.7rem; font-weight:700; color:#64748B; text-transform:uppercase;">High Spikes (&gt;1.50)</div>
+                <div style="font-size:1.45rem; font-weight:800; color:#991B1B;">{spike_count} Players</div>
                 <div style="font-size:0.68rem; color:#991B1B;">Fatigue / Overload Risk</div>
             </div>
-            <div style="background:#FFFFFF; border:1px solid #CBD5E1; border-left:4px solid #0284C7; border-radius:6px; padding:10px 14px; text-align:center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
-                <div style="font-size:0.68rem; font-weight:700; color:#64748B; text-transform:uppercase;">Team Distance This Week</div>
-                <div style="font-size:1.5rem; font-weight:800; color:#0369A1; margin-top:2px;">{total_dist_team:.1f} mi</div>
+            <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-left:4px solid #0284C7; border-radius:8px; padding:10px 14px; text-align:center;">
+                <div style="font-size:0.7rem; font-weight:700; color:#64748B; text-transform:uppercase;">Team Distance This Week</div>
+                <div style="font-size:1.45rem; font-weight:800; color:#0369A1;">{total_dist_team:.1f} mi</div>
                 <div style="font-size:0.68rem; color:#64748B;">Week of {cur_monday.strftime('%b %d')}</div>
             </div>
         </div>
@@ -1382,78 +1395,85 @@ def render_coach_report_content(season_label, season_key):
         unsafe_allow_html=True,
     )
 
-    df_rep = pd.DataFrame(report_rows).sort_values("Comb_Score", ascending=False)
+    df_sorted = pd.DataFrame(report_cards).sort_values("Comb_Score", ascending=False)
 
-    table_rows = []
-    for _, r in df_rep.iterrows():
+    card_html_list = []
+    for _, r in df_sorted.iterrows():
         v_bg, v_fg = get_coach_score_badge(r["Vol_Score"])
         i_bg, i_fg = get_coach_score_badge(r["Int_Score"])
         c_bg, c_fg = get_coach_score_badge(r["Comb_Score"])
 
-        table_rows.append(
-            f'<tr>'
-            f'<td style="padding:4px;"><img src="{r["Photo"]}" style="width:26px; height:26px; border-radius:50%; object-fit:cover; border:1.5px solid #FF8200;"></td>'
-            f'<td style="font-weight:800; text-align:left !important; padding-left:10px; white-space:nowrap; color:#0F172A;">{r["Athlete"]}</td>'
-            f'<td style="font-weight:600; color:#64748B;">{r["Position"]}</td>'
-            f'<td style="font-weight:700; color:#334155;">{r["Mins"]}</td>'
-            f'<td style="background:{v_bg}; color:{v_fg}; font-weight:800;">{r["Vol_Score"]}</td>'
-            f'<td style="background:{i_bg}; color:{i_fg}; font-weight:800;">{r["Int_Score"]}</td>'
-            f'<td style="background:{c_bg}; color:{c_fg}; font-weight:900;">{r["Comb_Score"]}</td>'
-            f'<td style="font-weight:600; color:#0F172A;">{r["Acute_7d"]:.1f}</td>'
-            f'<td style="font-weight:600; color:#64748B;">{r["Chronic_28d"]:.1f}</td>'
-            f'<td style="background:{r["ACWR_Bg"]}; color:{r["ACWR_Color"]}; font-weight:900;">{r["ACWR"]:.2f}</td>'
-            f'<td><span style="font-size:0.68rem; font-weight:700; padding:2px 6px; border-radius:4px; background:{r["ACWR_Bg"]}; color:{r["ACWR_Color"]}; white-space:nowrap;">{r["ACWR_Status"]}</span></td>'
-            f'<td style="font-weight:700; color:#0284C7;">{r["Wk_Dist"]:.1f}</td>'
-            f'<td style="font-weight:700; color:#FF8200;">{r["Wk_HSD"]:.2f}</td>'
-            f'<td style="font-weight:600;">{r["Wk_Acc"]:,.0f}</td>'
-            f'<td style="font-weight:600;">{r["Wk_Dec"]:,.0f}</td>'
-            f'<td style="font-weight:800; color:#0F172A;">{r["Cum_Dist"]:.1f}</td>'
-            f'<td style="font-weight:600; color:#475569;">{r["Cum_Mech"]:,.0f}</td>'
-            f'<td style="font-weight:600; color:#475569;">{r["Cum_Jump"]:,.0f}</td>'
-            f'</tr>'
-        )
+        card = f"""
+        <div style="background:#FFFFFF; border:1px solid #CBD5E1; border-radius:10px; padding:12px 14px; box-shadow:0 1px 3px rgba(0,0,0,0.03); page-break-inside:avoid; break-inside:avoid; margin-bottom:12px;">
+            <!-- Header Row: Player + ACWR Badge + Score Pills -->
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #E2E8F0; padding-bottom:8px; margin-bottom:8px;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <img src="{r['Photo']}" style="width:40px; height:40px; border-radius:50%; object-fit:cover; border:2px solid #FF8200;">
+                    <div>
+                        <div style="font-weight:800; font-size:1.05rem; color:#0F172A; line-height:1.1;">{r['Athlete']}</div>
+                        <div style="font-size:0.75rem; font-weight:600; color:#64748B;">{r['Position']} &bull; {r['Mins']} min</div>
+                    </div>
+                </div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <span style="background:{r['ACWR_Bg']}; color:{r['ACWR_Color']}; border:1px solid {r['ACWR_Color']}33; font-weight:800; font-size:0.72rem; padding:3px 8px; border-radius:6px; white-space:nowrap;">
+                        ACWR {r['ACWR']:.2f} ({r['ACWR_Status']})
+                    </span>
+                    <div style="background:{c_bg}; color:{c_fg}; font-weight:900; font-size:1.15rem; padding:2px 10px; border-radius:6px; min-width:44px; text-align:center;">
+                        {r['Comb_Score']}
+                    </div>
+                </div>
+            </div>
 
-    rows_joined = "".join(table_rows)
+            <!-- 4 Structured Micro-Clusters -->
+            <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; text-align:center;">
+                <!-- Cluster 1: Session Scores -->
+                <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:6px; padding:6px 4px;">
+                    <div style="font-size:0.65rem; font-weight:700; color:#64748B; text-transform:uppercase;">Scores</div>
+                    <div style="font-size:0.85rem; font-weight:800; color:#0F172A; margin-top:2px;">
+                        <span style="color:{v_fg};">{r['Vol_Score']}</span> <span style="color:#CBD5E1;">/</span> <span style="color:{i_fg};">{r['Int_Score']}</span>
+                    </div>
+                    <div style="font-size:0.62rem; color:#94A3B8;">Vol / Int</div>
+                </div>
 
-    full_matrix_html = textwrap.dedent(f"""
-    <div style="width:100%; overflow-x:auto; background:#FFFFFF; border:1px solid #CBD5E1; border-radius:8px; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
-        <table class="coach-report-table vball-table" style="width:100%; border-collapse:collapse; margin-bottom:0; font-size:0.75rem;">
-            <thead>
-                <tr style="background:#0F172A; color:#FFFFFF;">
-                    <th colspan="4" style="border-right:2px solid #CBD5E1; background:#1E293B; color:#FFFFFF; text-transform:uppercase; font-size:0.72rem;">Roster</th>
-                    <th colspan="3" style="border-right:2px solid #CBD5E1; background:#0284C7; color:#FFFFFF; text-transform:uppercase; font-size:0.72rem;">Scores ({sel_eval_session})</th>
-                    <th colspan="4" style="border-right:2px solid #CBD5E1; background:#334155; color:#FFFFFF; text-transform:uppercase; font-size:0.72rem;">Workload & ACWR</th>
-                    <th colspan="4" style="border-right:2px solid #CBD5E1; background:#D97706; color:#FFFFFF; text-transform:uppercase; font-size:0.72rem;">Weekly Output (Wk {cur_monday.strftime('%m/%d')})</th>
-                    <th colspan="3" style="background:#475569; color:#FFFFFF; text-transform:uppercase; font-size:0.72rem;">Cumulative ({season_label})</th>
-                </tr>
-                <tr style="background:#F8FAFC; color:#475569; font-size:0.7rem; border-bottom:2px solid #E2E8F0;">
-                    <th style="width:34px;">Photo</th>
-                    <th style="text-align:left !important; padding-left:10px;">Name</th>
-                    <th>Pos</th>
-                    <th>Min</th>
-                    <th>Vol</th>
-                    <th>Int</th>
-                    <th>Comb</th>
-                    <th>7d Act</th>
-                    <th>28d Chr</th>
-                    <th>Ratio</th>
-                    <th>Zone</th>
-                    <th>Dist (mi)</th>
-                    <th>HSD (mi)</th>
-                    <th>Acc</th>
-                    <th>Dec</th>
-                    <th>Dist (mi)</th>
-                    <th>A+D</th>
-                    <th>Jump (J)</th>
-                </tr>
-            </thead>
-            <tbody>
-                {rows_joined}
-            </tbody>
-        </table>
-    </div>
-    """)
-    st.markdown(full_matrix_html, unsafe_allow_html=True)
+                <!-- Cluster 2: ACWR EWMA Loads -->
+                <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:6px; padding:6px 4px;">
+                    <div style="font-size:0.65rem; font-weight:700; color:#64748B; text-transform:uppercase;">7d / 28d</div>
+                    <div style="font-size:0.85rem; font-weight:800; color:#0F172A; margin-top:2px;">
+                        {r['Acute_7d']:.1f} <span style="color:#CBD5E1;">/</span> {r['Chronic_28d']:.1f}
+                    </div>
+                    <div style="font-size:0.62rem; color:#94A3B8;">Acute / Chronic</div>
+                </div>
+
+                <!-- Cluster 3: Week Workload -->
+                <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:6px; padding:6px 4px;">
+                    <div style="font-size:0.65rem; font-weight:700; color:#0284C7; text-transform:uppercase;">Week Totals</div>
+                    <div style="font-size:0.85rem; font-weight:800; color:#0F172A; margin-top:2px;">
+                        {r['Wk_Dist']:.1f} mi
+                    </div>
+                    <div style="font-size:0.62rem; color:#64748B;">HSD: {r['Wk_HSD']:.2f} mi</div>
+                </div>
+
+                <!-- Cluster 4: Season Cumulative -->
+                <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:6px; padding:6px 4px;">
+                    <div style="font-size:0.65rem; font-weight:700; color:#FF8200; text-transform:uppercase;">Season Total</div>
+                    <div style="font-size:0.85rem; font-weight:800; color:#0F172A; margin-top:2px;">
+                        {r['Cum_Dist']:.1f} mi
+                    </div>
+                    <div style="font-size:0.62rem; color:#64748B;">A+D: {r['Cum_Mech']:,.0f}</div>
+                </div>
+            </div>
+        </div>
+        """
+        card_html_list.append(card)
+
+    col_left, col_right = st.columns(2)
+    with col_left:
+        for card_str in card_html_list[0::2]:
+            st.markdown(card_str, unsafe_allow_html=True)
+
+    with col_right:
+        for card_str in card_html_list[1::2]:
+            st.markdown(card_str, unsafe_allow_html=True)
     
 # -----------------------------------------------------------------------------
 # 5. SIDEBAR NAVIGATION (DYNAMIC ROLES)
