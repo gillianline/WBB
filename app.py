@@ -2434,6 +2434,7 @@ def render_dashboard_content(season_label, season_key):
             "FCTs",
             "Sprints",
             "Exertions",
+            "High Metabolic Power Distance (m)",
         ]
 
         metric_display_names = {
@@ -2448,6 +2449,7 @@ def render_dashboard_content(season_label, season_key):
             "FCTs": "FCTs",
             "Sprints": "Sprints",
             "Exertions": "Exertions",
+            "High Metabolic Power Distance (m)": "High Met Power Dist (m)",
         }
 
         acwr_subtabs = ["Team Workload Summary", "Individual Profile"]
@@ -4966,7 +4968,11 @@ def render_cumulative_content(season_label="In-Season", season_key="cumul"):
         "FCTs": ("FCTs", "", "{:,.0f}"),
         "Sprints": ("Sprints", "", "{:,.0f}"),
         "Exertions": ("Exertions", "", "{:,.0f}"),
-        "High Metabolic Power Distance (m)": ("High Met Power Dist", "m", "{:,.0f}"),
+        "High Metabolic Power Distance (m)": (
+            "High Met Power Dist",
+            "m",
+            "{:,.2f}",
+        ),
     }
 
     # Ensure numeric columns
