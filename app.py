@@ -3584,6 +3584,7 @@ def render_dashboard_content(season_label, season_key):
                 "Marc Pro",
                 "Tempering",
                 "Needling",
+                "Manual Stretching",
             ]
 
             for i in range(0, len(roster_players), 2):
