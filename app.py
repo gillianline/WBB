@@ -32,6 +32,14 @@ def format_date_clean(val):
         return str(val).split(" ")[0]
     return dt.strftime("%Y-%m-%d")
 
+def make_track_key(wk, dt, athlete, metric):
+    try:
+        wk_str = pd.to_datetime(wk).strftime("%Y-%m-%d")
+        dt_str = pd.to_datetime(dt).strftime("%Y-%m-%d")
+    except Exception:
+        wk_str = str(wk).strip()
+        dt_str = str(dt).strip()
+    return f"{wk_str}|{dt_str}|{str(athlete).strip()}|{str(metric).strip()}"
 
 # -----------------------------------------------------------------------------
 # 1. PAGE CONFIGURATION & STYLING (FIXED PRINT ENGINE)
@@ -457,29 +465,34 @@ if (
         ath_col = cols_lower.get("athlete", "Athlete")
         met_col = cols_lower.get("metric", "Metric")
         cnt_col = cols_lower.get("count", "Count")
+        ts_col = cols_lower.get("timestamp", "Timestamp")
 
-        for _, row in live_track_df.iterrows():
-            raw_wk = str(row.get(wk_col, "")).strip()
-            raw_dt = str(row.get(dt_col, "")).strip()
+        # Sort by timestamp if present so the latest entry takes priority
+        if ts_col in live_track_df.columns:
+            live_track_df[ts_col] = pd.to_datetime(
+                live_track_df[ts_col], errors="coerce"
+            )
+            live_track_df = live_track_df.sort_values(
+                by=ts_col, ascending=True
+            )
+
+        # Deduplicate to keep only the latest row for each specific tracking event
+        deduped_df = live_track_df.groupby(
+            [wk_col, dt_col, ath_col, met_col], as_index=False
+        ).last()
+
+        for _, row in deduped_df.iterrows():
+            raw_wk = row.get(wk_col, "")
+            raw_dt = row.get(dt_col, "")
             ath = str(row.get(ath_col, "")).strip()
             met = str(row.get(met_col, "")).strip()
             cnt = pd.to_numeric(row.get(cnt_col, 0), errors="coerce")
 
-            wk_clean = format_date_clean(raw_wk)
-            dt_clean = format_date_clean(raw_dt)
-
-            if (
-                wk_clean != "N/A"
-                and dt_clean != "N/A"
-                and ath
-                and met
-                and pd.notna(cnt)
-            ):
-                key = f"{wk_clean}|{dt_clean}|{ath}|{met}"
+            if ath and met and pd.notna(cnt):
+                key = make_track_key(raw_wk, raw_dt, ath, met)
                 st.session_state.tracking_data[key] = int(cnt)
 
     st.session_state.tracking_data_initialized = True
-
 
 # -----------------------------------------------------------------------------
 # 4. HELPER FUNCTIONS
@@ -4050,41 +4063,43 @@ def render_dashboard_content(season_label, season_key):
             st.markdown("<br>", unsafe_allow_html=True)
 
             def modify_counter(p_name, metric, delta, wk_s, date_s):
-                wk_clean = format_date_clean(wk_s)
-                dt_clean = format_date_clean(date_s)
-                key = f"{wk_clean}|{dt_clean}|{p_name}|{metric}"
+            key = make_track_key(wk_s, date_s, p_name, metric)
 
-                curr = st.session_state.tracking_data.get(key, 0)
-                new_val = max(0, curr + delta)
-                st.session_state.tracking_data[key] = new_val
+            curr = st.session_state.tracking_data.get(key, 0)
+            new_val = max(0, curr + delta)
+            st.session_state.tracking_data[key] = new_val
 
-                macro_url = (
-                    st.secrets.get("MACRO_URL")
-                    or st.secrets.get("Live Track")
-                    or st.secrets.get("sheets", {}).get("live_track_url")
-                )
+            macro_url = (
+                st.secrets.get("MACRO_URL")
+                or st.secrets.get("Live Track")
+                or st.secrets.get("sheets", {}).get("live_track_url")
+            )
 
-                if macro_url:
-                    payload = {
-                        "tracking_logs": [{
-                            "Week_Starting": wk_clean,
-                            "Date": dt_clean,
-                            "Athlete": str(p_name).strip(),
-                            "Metric": str(metric).strip(),
-                            "Count": new_val,
-                            "Timestamp": get_eastern_time_str(),
-                        }]
-                    }
-                    try:
-                        requests.post(
-                            macro_url,
-                            data=json.dumps(payload),
-                            headers={"Content-Type": "text/plain;charset=utf-8"},
-                            allow_redirects=True,
-                            timeout=4,
-                        )
-                    except Exception as ex:
-                        print(f"Tracking auto-sync POST failed: {ex}")
+            if macro_url:
+                wk_clean = pd.to_datetime(wk_s).strftime("%Y-%m-%d")
+                dt_clean = pd.to_datetime(date_s).strftime("%Y-%m-%d")
+                payload = {
+                    "tracking_logs": [{
+                        "Week_Starting": wk_clean,
+                        "Date": dt_clean,
+                        "Athlete": str(p_name).strip(),
+                        "Metric": str(metric).strip(),
+                        "Count": new_val,
+                        "Timestamp": datetime.datetime.now().strftime(
+                            "%Y-%m-%d %H:%M:%S"
+                        ),
+                    }]
+                }
+                try:
+                    requests.post(
+                        macro_url,
+                        data=json.dumps(payload),
+                        headers={"Content-Type": "text/plain;charset=utf-8"},
+                        allow_redirects=True,
+                        timeout=4,
+                    )
+                except Exception as ex:
+                    print(f"Tracking auto-sync POST failed: {ex}")
 
             metrics = [
                 "Turnovers",
@@ -4132,7 +4147,10 @@ def render_dashboard_content(season_label, season_key):
                             )
 
                             for metric_name in metrics:
-                                key = f"{track_week_str}|{session_date_val}|{player}|{metric_name}"
+                                # Use helper to build the key consistently
+                                key = make_track_key(
+                                    track_week_str, session_date_val, player, metric_name
+                                )
                                 val = st.session_state.tracking_data.get(key, 0)
 
                                 c_lbl, c_dec, c_val, c_inc = st.columns(
