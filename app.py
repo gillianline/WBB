@@ -12,6 +12,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 import textwrap
 import requests
+import re
 
 EASTERN_TZ = ZoneInfo("America/New_York")
 
@@ -32,11 +33,18 @@ def format_date_clean(val):
         return str(val).split(" ")[0]
     return dt.strftime("%Y-%m-%d")
 
+def clean_metric_name(metric_raw):
+    """
+    Strips trailing timestamps (e.g., 'Turnovers111:24:31' -> 'Turnovers') 
+    and extra spaces from metric names.
+    """
+    s = str(metric_raw).strip()
+    # Remove trailing time patterns like 11:24:31 or attached digit/timestamp sequences
+    s = re.sub(r'\d{1,2}:\d{2}:\d{2}.*$', '', s)
+    # Remove trailing digits that got glued during rapid string ops if needed
+    return s.strip()
+
 def make_track_key(week, date, athlete, metric):
-    """
-    Standardizes tracking keys in session state to prevent key mismatches 
-    or duplicate entries on rapid clicks.
-    """
     try:
         wk_str = pd.to_datetime(week).strftime("%Y-%m-%d")
     except Exception:
@@ -47,7 +55,29 @@ def make_track_key(week, date, athlete, metric):
     except Exception:
         dt_str = str(date).strip()
 
-    return f"{wk_str}|{dt_str}|{str(athlete).strip()}|{str(metric).strip()}"
+    clean_metric = clean_metric_name(metric)
+    clean_ath = str(athlete).strip()
+
+    return f"{wk_str}|{dt_str}|{clean_ath}|{clean_metric}"
+
+def modify_counter(week, date, athlete, metric, delta):
+    """
+    Safely increments or decrements session state counters as pure integers.
+    """
+    key = make_track_key(week, date, athlete, metric)
+    
+    if "tracking_data" not in st.session_state:
+        st.session_state["tracking_data"] = {}
+
+    # Ensure existing stored value is forced to an integer
+    try:
+        current_val = int(pd.to_numeric(st.session_state.tracking_data.get(key, 0), errors="coerce"))
+    except Exception:
+        current_val = 0
+
+    # Apply delta and clamp to a minimum of 0
+    new_val = max(0, current_val + int(delta))
+    st.session_state.tracking_data[key] = new_val
     
 # -----------------------------------------------------------------------------
 # 1. PAGE CONFIGURATION & STYLING (FIXED PRINT ENGINE)
@@ -1876,7 +1906,7 @@ def render_dashboard_content(season_label, season_key):
             "Fouls",
         ]
 
-        # 1. Parse logged tracking rows from session state & NORMALIZE KEYS
+        # 1. Parse logged tracking rows from session state & CLEAN METRIC NAMES
         ind_track_rows = []
         for k, v in st.session_state.get("tracking_data", {}).items():
             parts = k.split("|")
@@ -1889,8 +1919,9 @@ def render_dashboard_content(season_label, season_key):
                 if val_num > 0:
                     raw_wk = parts[0].strip()
                     raw_dt = parts[1].strip()
+                    raw_met = parts[3].strip()
 
-                    # Strictly normalize week and date strings to prevent duplicate keys
+                    # Normalize dates
                     try:
                         wk_clean = pd.to_datetime(raw_wk).strftime("%Y-%m-%d")
                     except Exception:
@@ -1901,11 +1932,18 @@ def render_dashboard_content(season_label, season_key):
                     except Exception:
                         dt_clean = raw_dt
 
+                    # Strip any timestamps that leaked into the metric string
+                    clean_met = re.sub(r'\d{1,2}:\d{2}:\d{2}.*$', '', raw_met).strip()
+                    for tm in TRACKED_METRICS:
+                        if clean_met.lower().startswith(tm.lower()):
+                            clean_met = tm
+                            break
+
                     ind_track_rows.append({
                         "Week_Starting": wk_clean,
                         "Date": dt_clean,
                         "Athlete": parts[2].strip(),
-                        "Metric": parts[3].strip(),
+                        "Metric": clean_met,
                         "Count": val_num,
                     })
 
@@ -1917,13 +1955,12 @@ def render_dashboard_content(season_label, season_key):
             )
         )
 
-        # 2. CONSOLIDATE DUPLICATE ENTRIES FOR THE SAME ATHLETE & METRIC
+        # 2. CONSOLIDATE & SUM DUPLICATE METRIC ENTRIES
         if not ind_track_df.empty:
             ind_track_df["Count"] = pd.to_numeric(
                 ind_track_df["Count"], errors="coerce"
             ).fillna(0).astype(int)
-    
-            # Group by Week, Date, Athlete, and Metric to collapse any split keys from rapid clicks
+            
             ind_track_df = ind_track_df.groupby(
                 ["Week_Starting", "Date", "Athlete", "Metric"], as_index=False
             )["Count"].sum()
@@ -1948,7 +1985,7 @@ def render_dashboard_content(season_label, season_key):
             if "vol_data" in locals() and vol_data is not None
             else []
         )
-    
+
         all_mondays = sorted(
             list(set(existing_mondays + [current_monday])),
             reverse=True,
@@ -1978,7 +2015,6 @@ def render_dashboard_content(season_label, season_key):
             )
         )
 
-
         def get_count(metric_patterns):
             if p_ind_track_wk.empty:
                 return 0
@@ -1991,7 +2027,6 @@ def render_dashboard_content(season_label, season_key):
                 .isin(lowered)
             ]
             return int(pd.to_numeric(filtered["Count"], errors="coerce").fillna(0).sum())
-
 
         metric_counts = {
             "Turnovers": get_count(["turnover", "turnovers"]),
@@ -2019,7 +2054,7 @@ def render_dashboard_content(season_label, season_key):
                     """,
                     unsafe_allow_html=True,
                 )
-    
+
         # 6. Daily Breakdown Table
         st.markdown(f"#### Daily Breakdown for Week of {sel_ind_mon_str}")
 
@@ -2095,7 +2130,6 @@ def render_dashboard_content(season_label, season_key):
             )
 
         st.divider()
-                
 
         # SECTION 7: ASSESSMENT RECORDS
         st.markdown(
