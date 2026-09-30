@@ -4200,7 +4200,7 @@ def render_dashboard_content(season_label, season_key):
                         or st.secrets.get("sheets", {}).get("live_track_url")
                     )
 
-                     if macro_url:
+                    if macro_url:
                         # Log each click as its own row event (+1 or -1)
                         payload = {
                             "tracking_logs": [{
