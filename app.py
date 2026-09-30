@@ -4331,7 +4331,7 @@ def render_dashboard_content(season_label, season_key):
                             )
                                 
         with track_tab_summary:
-             st.markdown(
+                st.markdown(
                 '<div class="vball-section-title">Tracking Summary Dashboard</div>',
                 unsafe_allow_html=True,
             )
