@@ -80,20 +80,36 @@ def make_track_key(week, date, athlete, metric):
 
 def modify_counter(week, date, athlete, metric, delta):
     """
-    Safely modifies tracking state counters with positional arguments matching st.button.
+    Safely increments or decrements tracking counts in session state, 
+    guaranteeing integer arithmetic.
     """
     key = make_track_key(week, date, athlete, metric)
 
     if "tracking_data" not in st.session_state:
         st.session_state["tracking_data"] = {}
 
-    try:
-        current_val = int(pd.to_numeric(st.session_state.tracking_data.get(key, 0), errors="coerce"))
-    except Exception:
-        current_val = 0
+    # 1. Fetch current stored value safely
+    raw_curr = st.session_state["tracking_data"].get(key, 0)
 
-    new_val = max(0, current_val + int(delta))
-    st.session_state.tracking_data[key] = new_val
+    # 2. Convert current value strictly to integer
+    try:
+        curr_int = int(pd.to_numeric(raw_curr, errors="coerce"))
+        if pd.isna(curr_int):
+            curr_int = 0
+    except Exception:
+        curr_int = 0
+
+    # 3. Convert incoming delta strictly to integer
+    try:
+        delta_int = int(pd.to_numeric(delta, errors="coerce"))
+        if pd.isna(delta_int):
+            delta_int = 0
+    except Exception:
+        delta_int = 0
+
+    # 4. Perform safe addition and clamp to 0 minimum
+    new_val = max(0, curr_int + delta_int)
+    st.session_state["tracking_data"][key] = new_val
     
 # -----------------------------------------------------------------------------
 # 1. PAGE CONFIGURATION & STYLING (FIXED PRINT ENGINE)
