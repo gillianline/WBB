@@ -4220,7 +4220,7 @@ def render_dashboard_content(season_label, season_key):
                                 allow_redirects=True,
                                 timeout=4,
                              )
-                         except Exception as ex:
+                        except Exception as ex:
                             print(f"Tracking auto-sync POST failed: {ex}")
 
                 metrics = [
