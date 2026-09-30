@@ -1311,7 +1311,7 @@ active_season = st.segmented_control(
     label_visibility="collapsed",
 )
 
-# Map selections back to boolean variables for clean downstream tab rendering
+# Map selections to boolean variables
 season_tab_summer = active_season == "Summer"
 season_tab_preseason = active_season == "Pre-Season"
 season_tab_inseason = active_season == "In-Season"
@@ -5230,17 +5230,17 @@ def render_cumulative_content(season_label="In-Season", season_key="cumul"):
 # -----------------------------------------------------------------------------
 # 10. TAB ROUTING
 # -----------------------------------------------------------------------------
-with season_tab_summer:
+if season_tab_summer:
     render_dashboard_content("Summer", "summer")
 
-with season_tab_preseason:
+elif season_tab_preseason:
     render_dashboard_content("Pre-Season", "pre_season")
 
-with season_tab_inseason:
+elif season_tab_inseason:
     render_dashboard_content("In-Season", "in_season")
 
-with season_tab_combined:
+elif season_tab_combined:
     render_combined_seasons_content()
 
-with season_tab_wellness:
+elif season_tab_wellness:
     render_team_wellness_content()
