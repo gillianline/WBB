@@ -1860,7 +1860,7 @@ def render_dashboard_content(season_label, season_key):
             "Fouls",
         ]
 
-        # 1. Parse logged tracking rows from session state with date normalization & strict numeric conversion
+        # 1. Parse logged tracking rows from session state & NORMALIZE KEYS
         ind_track_rows = []
         for k, v in st.session_state.get("tracking_data", {}).items():
             parts = k.split("|")
@@ -1874,7 +1874,7 @@ def render_dashboard_content(season_label, season_key):
                     raw_wk = parts[0].strip()
                     raw_dt = parts[1].strip()
 
-                    # Normalize dates to YYYY-MM-DD so keys always match
+                    # Strictly normalize week and date strings to prevent duplicate keys
                     try:
                         wk_clean = pd.to_datetime(raw_wk).strftime("%Y-%m-%d")
                     except Exception:
@@ -1901,10 +1901,16 @@ def render_dashboard_content(season_label, season_key):
             )
         )
 
+        # 2. CONSOLIDATE DUPLICATE ENTRIES FOR THE SAME ATHLETE & METRIC
         if not ind_track_df.empty:
             ind_track_df["Count"] = pd.to_numeric(
                 ind_track_df["Count"], errors="coerce"
             ).fillna(0).astype(int)
+    
+            # Group by Week, Date, Athlete, and Metric to collapse any split keys from rapid clicks
+            ind_track_df = ind_track_df.groupby(
+                ["Week_Starting", "Date", "Athlete", "Metric"], as_index=False
+            )["Count"].sum()
 
         p_ind_track = (
             ind_track_df[
@@ -1917,7 +1923,7 @@ def render_dashboard_content(season_label, season_key):
             )
         )
 
-        # 2. Week Selection
+        # 3. Week Selection
         today = pd.Timestamp.now().date()
         current_monday = today - pd.Timedelta(days=today.weekday())
 
@@ -1926,7 +1932,7 @@ def render_dashboard_content(season_label, season_key):
             if "vol_data" in locals() and vol_data is not None
             else []
         )
-
+    
         all_mondays = sorted(
             list(set(existing_mondays + [current_monday])),
             reverse=True,
@@ -1947,7 +1953,7 @@ def render_dashboard_content(season_label, season_key):
             )
             sel_ind_mon_str = sel_ind_mon.strftime("%Y-%m-%d")
 
-        # 3. Filter entries for chosen week
+        # 4. Filter entries for chosen week
         p_ind_track_wk = (
             p_ind_track[p_ind_track["Week_Starting"] == sel_ind_mon_str].copy()
             if not p_ind_track.empty
@@ -1979,7 +1985,7 @@ def render_dashboard_content(season_label, season_key):
             "Fouls": get_count(["foul", "fouls", "personal foul"]),
         }
 
-        # 4. Vertical Card Summary
+        # 5. Vertical Card Summary
         st.markdown("##### Weekly Totals")
         summary_col, _ = st.columns([1, 1])
         with summary_col:
@@ -1997,8 +2003,8 @@ def render_dashboard_content(season_label, season_key):
                     """,
                     unsafe_allow_html=True,
                 )
-
-        # 5. Daily Breakdown Table
+    
+        # 6. Daily Breakdown Table
         st.markdown(f"#### Daily Breakdown for Week of {sel_ind_mon_str}")
 
         if not p_ind_track_wk.empty:
