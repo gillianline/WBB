@@ -1262,8 +1262,9 @@ components.html(
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# Determine current active season to set dynamic default tab
-# Determine current active season to set dynamic default tab
+# -----------------------------------------------------------------------------
+# SEASON NAVIGATION & DYNAMIC DEFAULT SELECTION
+# -----------------------------------------------------------------------------
 tabs_list = [
     "Summer",
     "Pre-Season",
@@ -1297,16 +1298,25 @@ if not vol_raw.empty and "Date" in vol_raw.columns:
     elif "summer" in latest_val:
         detected_season_idx = 0
 
-if "active_season_tab_idx" not in st.session_state:
-    st.session_state["active_season_tab_idx"] = detected_season_idx
+# Initialize default season in session state using auto-detected value
+if "active_season_tab" not in st.session_state:
+    st.session_state["active_season_tab"] = tabs_list[detected_season_idx]
 
-(
-    season_tab_summer,
-    season_tab_preseason,
-    season_tab_inseason,
-    season_tab_combined,
-    season_tab_wellness,
-) = st.tabs(tabs_list)
+# Render modern segmented control pills across the top
+active_season = st.segmented_control(
+    "Select Season",
+    options=tabs_list,
+    key="active_season_tab",
+    selection_mode="single",
+    label_visibility="collapsed",
+)
+
+# Map selections back to boolean variables for clean downstream tab rendering
+season_tab_summer = active_season == "Summer"
+season_tab_preseason = active_season == "Pre-Season"
+season_tab_inseason = active_season == "In-Season"
+season_tab_combined = active_season == "Combined Seasons"
+season_tab_wellness = active_season == "Team Wellness"
 
 
 # -----------------------------------------------------------------------------
