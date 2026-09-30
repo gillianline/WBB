@@ -26,12 +26,25 @@ def get_eastern_now():
 
 
 def format_date_clean(val):
-    if pd.isna(val) or str(val).strip() == "":
-        return "N/A"
-    dt = pd.to_datetime(val, errors="coerce")
-    if pd.isna(dt):
-        return str(val).split(" ")[0]
-    return dt.strftime("%Y-%m-%d")
+    if val is None or pd.isna(val):
+        return ""
+
+    # Convert to string and strip whitespace
+    val_str = str(val).strip()
+
+    # Handle ISO datetime strings like '2026-09-30 11:29:14' or '2026-09-30T11:29:14'
+    if " " in val_str:
+        val_str = val_str.split(" ")[0]
+    elif "T" in val_str:
+        val_str = val_str.split("T")[0]
+
+    # Attempt parsing with pandas for flexible date formats
+    try:
+        dt = pd.to_datetime(val_str)
+        return dt.strftime("%Y-%m-%d")
+    except Exception:
+        # Fallback: return trimmed string if parsing fails
+        return val_str
 
 def clean_metric_name(metric_raw):
     """
@@ -77,40 +90,6 @@ def make_track_key(week, date, athlete, metric):
 
     return f"{wk_str}|{dt_str}|{clean_ath}|{clean_met}"
 
-
-def modify_counter(week, date, athlete, metric, delta):
-    """
-    Safely increments or decrements tracking counts in session state, 
-    guaranteeing integer arithmetic.
-    """
-    key = make_track_key(week, date, athlete, metric)
-
-    if "tracking_data" not in st.session_state:
-        st.session_state["tracking_data"] = {}
-
-    # 1. Fetch current stored value safely
-    raw_curr = st.session_state["tracking_data"].get(key, 0)
-
-    # 2. Convert current value strictly to integer
-    try:
-        curr_int = int(pd.to_numeric(raw_curr, errors="coerce"))
-        if pd.isna(curr_int):
-            curr_int = 0
-    except Exception:
-        curr_int = 0
-
-    # 3. Convert incoming delta strictly to integer
-    try:
-        delta_int = int(pd.to_numeric(delta, errors="coerce"))
-        if pd.isna(delta_int):
-            delta_int = 0
-    except Exception:
-        delta_int = 0
-
-    # 4. Perform safe addition and clamp to 0 minimum
-    new_val = max(0, curr_int + delta_int)
-    st.session_state["tracking_data"][key] = new_val
-    
 # -----------------------------------------------------------------------------
 # 1. PAGE CONFIGURATION & STYLING (FIXED PRINT ENGINE)
 # -----------------------------------------------------------------------------
@@ -4193,149 +4172,165 @@ def render_dashboard_content(season_label, season_key):
             st.markdown("<br>", unsafe_allow_html=True)
 
             def modify_counter(p_name, metric, delta, wk_s, date_s):
-                wk_clean = format_date_clean(wk_s)
-                dt_clean = format_date_clean(date_s)
-                key = f"{wk_clean}|{dt_clean}|{p_name}|{metric}"
+    # Safe conversion of delta to integer
+    try:
+        delta_int = int(delta)
+    except (TypeError, ValueError):
+        delta_int = 0
 
-                curr = st.session_state.tracking_data.get(key, 0)
-                new_val = max(0, curr + delta)
-                st.session_state.tracking_data[key] = new_val
+    wk_clean = format_date_clean(wk_s)
+    dt_clean = format_date_clean(date_s)
+    key = f"{wk_clean}|{dt_clean}|{p_name}|{metric}"
 
-                macro_url = (
-                    st.secrets.get("MACRO_URL")
-                    or st.secrets.get("Live Track")
-                    or st.secrets.get("sheets", {}).get("live_track_url")
+    if "tracking_data" not in st.session_state:
+        st.session_state.tracking_data = {}
+
+    # Safe conversion of stored current value
+    raw_curr = st.session_state.tracking_data.get(key, 0)
+    try:
+        curr = int(raw_curr)
+    except (TypeError, ValueError):
+        curr = 0
+
+    new_val = max(0, curr + delta_int)
+    st.session_state.tracking_data[key] = new_val
+
+    macro_url = (
+        st.secrets.get("MACRO_URL")
+        or st.secrets.get("Live Track")
+        or st.secrets.get("sheets", {}).get("live_track_url")
+    )
+
+    if macro_url:
+        payload = {
+            "tracking_logs": [{
+                "Week_Starting": wk_clean,
+                "Date": dt_clean,
+                "Athlete": str(p_name).strip(),
+                "Metric": str(metric).strip(),
+                "Count": new_val,
+                "Timestamp": get_eastern_time_str(),
+            }]
+        }
+        try:
+            requests.post(
+                macro_url,
+                data=json.dumps(payload),
+                headers={"Content-Type": "text/plain;charset=utf-8"},
+                allow_redirects=True,
+                timeout=4,
+            )
+        except Exception as ex:
+            print(f"Tracking auto-sync POST failed: {ex}")
+
+
+metrics = [
+    "Turnovers",
+    "Not Crashing",
+    "No Box Outs",
+    "Not Calling Back",
+    "Fouls",
+]
+
+for i in range(0, len(roster_players), 2):
+    grid_cols = st.columns(2)
+    for j in range(2):
+        if i + j < len(roster_players):
+            player = roster_players[i + j]
+            p_row = (
+                roster_raw[roster_raw["Name"] == player]
+                if not roster_raw.empty
+                else pd.DataFrame()
+            )
+            p_pos = (
+                p_row["Position"].values[0]
+                if not p_row.empty and "Position" in p_row.columns
+                else "Athlete"
+            )
+            p_img = (
+                p_row["Picture"].values[0]
+                if not p_row.empty and "Picture" in p_row.columns
+                else "https://via.placeholder.com/70"
+            )
+
+            with grid_cols[j]:
+                st.markdown(
+                    f"""
+                    <div class="rec-grid-card" style="padding-bottom: 4px;">
+                        <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 8px;">
+                            <img src="{p_img}" class="athlete-avatar" style="width: 50px; height: 50px; border-radius: 50%;">
+                            <div>
+                                <h4 style="margin: 0; color: #0F172A; font-weight: 700;">{player}</h4>
+                                <span style="color: #64748B; font-size: 0.85rem;">{p_pos}</span>
+                            </div>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
                 )
 
-                if macro_url:
-                    payload = {
-                        "tracking_logs": [{
-                            "Week_Starting": wk_clean,
-                            "Date": dt_clean,
-                            "Athlete": str(p_name).strip(),
-                            "Metric": str(metric).strip(),
-                            "Count": new_val,
-                            "Timestamp": get_eastern_time_str(),
-                        }]
-                    }
-                    try:
-                        requests.post(
-                            macro_url,
-                            data=json.dumps(payload),
-                            headers={"Content-Type": "text/plain;charset=utf-8"},
-                            allow_redirects=True,
-                            timeout=4,
-                        )
-                    except Exception as ex:
-                        print(f"Tracking auto-sync POST failed: {ex}")
+                for metric_name in metrics:
+                    wk_clean_val = format_date_clean(track_week_str)
+                    dt_clean_val = format_date_clean(session_date_val)
+                    key = f"{wk_clean_val}|{dt_clean_val}|{player}|{metric_name}"
+                    val = st.session_state.tracking_data.get(key, 0)
 
-            metrics = [
-                "Turnovers",
-                "Not Crashing",
-                "No Box Outs",
-                "Not Calling Back",
-                "Fouls",
-            ]
+                    c_lbl, c_dec, c_val, c_inc = st.columns([3, 1, 1.2, 1])
 
-            for i in range(0, len(roster_players), 2):
-                grid_cols = st.columns(2)
-                for j in range(2):
-                    if i + j < len(roster_players):
-                        player = roster_players[i + j]
-                        p_row = (
-                            roster_raw[roster_raw["Name"] == player]
-                            if not roster_raw.empty
-                            else pd.DataFrame()
-                        )
-                        p_pos = (
-                            p_row["Position"].values[0]
-                            if not p_row.empty and "Position" in p_row.columns
-                            else "Athlete"
-                        )
-                        p_img = (
-                            p_row["Picture"].values[0]
-                            if not p_row.empty and "Picture" in p_row.columns
-                            else "https://via.placeholder.com/70"
+                    with c_lbl:
+                        st.markdown(
+                            f'<div style="font-weight: 600; font-size: 0.85rem; color: #334155; padding-top: 6px;">{metric_name}</div>',
+                            unsafe_allow_html=True,
                         )
 
-                        with grid_cols[j]:
-                            st.markdown(
-                                f"""
-                                <div class="rec-grid-card" style="padding-bottom: 4px;">
-                                    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 8px;">
-                                        <img src="{p_img}" class="athlete-avatar" style="width: 50px; height: 50px; border-radius: 50%;">
-                                        <div>
-                                            <h4 style="margin: 0; color: #0F172A; font-weight: 700;">{player}</h4>
-                                            <span style="color: #64748B; font-size: 0.85rem;">{p_pos}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                """,
-                                unsafe_allow_html=True,
-                            )
+                    with c_dec:
+                        st.button(
+                            "-",
+                            key=f"dec_{season_key}_{player}_{metric_name}_{session_date_val}",
+                            on_click=modify_counter,
+                            args=(
+                                player,            # 1. p_name
+                                metric_name,       # 2. metric
+                                -1,                # 3. delta
+                                track_week_str,    # 4. wk_s
+                                session_date_val,  # 5. date_s
+                            ),
+                            use_container_width=True,
+                        )
 
-                            for metric_name in metrics:
-                                key = f"{track_week_str}|{session_date_val}|{player}|{metric_name}"
-                                val = st.session_state.tracking_data.get(key, 0)
+                    with c_val:
+                        bg_cnt = "#FF8200" if val > 0 else "#F1F5F9"
+                        txt_cnt = "#FFFFFF" if val > 0 else "#64748B"
+                        st.markdown(
+                            f"""
+                            <div style="text-align: center; font-size: 0.95rem; font-weight: 800; 
+                                        background-color: {bg_cnt}; color: {txt_cnt}; 
+                                        padding: 4px 0; border-radius: 6px; margin-top: 2px;">
+                                {val}
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
 
-                                c_lbl, c_dec, c_val, c_inc = st.columns(
-                                    [3, 1, 1.2, 1]
-                                )
+                    with c_inc:
+                        st.button(
+                            "+",
+                            key=f"inc_{season_key}_{player}_{metric_name}_{session_date_val}",
+                            on_click=modify_counter,
+                            args=(
+                                player,            # 1. p_name
+                                metric_name,       # 2. metric
+                                1,                 # 3. delta
+                                track_week_str,    # 4. wk_s
+                                session_date_val,  # 5. date_s
+                            ),
+                            use_container_width=True,
+                        )
 
-                                with c_lbl:
-                                    st.markdown(
-                                        f'<div style="font-weight: 600; font-size: 0.85rem; color: #334155; padding-top: 6px;">{metric_name}</div>',
-                                        unsafe_allow_html=True,
-                                    )
-
-                                with c_dec:
-                                    st.button(
-                                        "-",
-                                        key=f"dec_{season_key}_{player}_{metric_name}_{session_date_val}",
-                                        on_click=modify_counter,
-                                        args=(
-                                            track_week_str,    # 1. week
-                                            session_date_val,  # 2. date
-                                            player,            # 3. athlete
-                                            metric_name,       # 4. metric
-                                             -1,                # 5. delta
-                                        ),
-                                        use_container_width=True,
-                                    )
-
-                                with c_val:
-                                    bg_cnt = "#FF8200" if val > 0 else "#F1F5F9"
-                                    txt_cnt = "#FFFFFF" if val > 0 else "#64748B"
-                                    st.markdown(
-                                        f"""
-                                        <div style="text-align: center; font-size: 0.95rem; font-weight: 800; 
-                                                    background-color: {bg_cnt}; color: {txt_cnt}; 
-                                                    padding: 4px 0; border-radius: 6px; margin-top: 2px;">
-                                            {val}
-                                        </div>
-                                        """,
-                                        unsafe_allow_html=True,
-                                    )
-
-                                with c_inc:
-                                    st.button(
-                                        "+",
-                                        key=f"inc_{season_key}_{player}_{metric_name}_{session_date_val}",
-                                        on_click=modify_counter,
-                                        args=(
-                                            track_week_str,    # 1. week
-                                            session_date_val,  # 2. date
-                                            player,            # 3. athlete
-                                            metric_name,       # 4. metric
-                                            1,                 # 5. delta
-                                        ),
-                                        use_container_width=True,
-                                    )
-
-                            st.markdown(
-                                "<hr style='margin: 14px 0; border-color: #E2E8F0;'>",
-                                unsafe_allow_html=True,
-                            )
+                st.markdown(
+                    "<hr style='margin: 14px 0; border-color: #E2E8F0;'>",
+                    unsafe_allow_html=True,
+                )
 
         with track_tab_summary:
             st.markdown(
