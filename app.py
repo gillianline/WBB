@@ -4076,7 +4076,7 @@ def render_dashboard_content(season_label, season_key):
                 st.info(
                     f"No recovery data recorded for the week of {summary_week_str}."
                 )
-    # ==========================================
+  # ==========================================
     # MAIN TAB: TRACKING
     # ==========================================
     if main_tab == "Tracking":
@@ -4329,9 +4329,9 @@ def render_dashboard_content(season_label, season_key):
                                 "<hr style='margin: 14px 0; border-color: #E2E8F0;'>",
                                 unsafe_allow_html=True,
                             )
-                                
+
         with track_tab_summary:
-                st.markdown(
+            st.markdown(
                 '<div class="vball-section-title">Tracking Summary Dashboard</div>',
                 unsafe_allow_html=True,
             )
@@ -4344,9 +4344,9 @@ def render_dashboard_content(season_label, season_key):
                         "Week_Starting": parts[0].strip(),
                         "Date": parts[1].strip(),
                         "Athlete": parts[2].strip(),
-                         "Metric": parts[3].strip(),
+                        "Metric": parts[3].strip(),
                         "Count": v,
-                })
+                    })
 
             track_df = (
                 pd.DataFrame(t_rows)
