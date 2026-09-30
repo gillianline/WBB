@@ -35,14 +35,31 @@ def format_date_clean(val):
 
 def clean_metric_name(metric_raw):
     """
-    Strips trailing timestamps (e.g., 'Turnovers111:24:31' -> 'Turnovers') 
-    and extra spaces from metric names.
+    Strips attached numbers, indices, and timestamps from metric strings.
+    Example: 'Turnovers111:29:14' -> 'Turnovers'
+             'Not Crashing011:29:48' -> 'Not Crashing'
     """
     s = str(metric_raw).strip()
-    # Remove trailing time patterns like 11:24:31 or attached digit/timestamp sequences
+    
+    # List of expected canonical metric names
+    valid_metrics = [
+        "Turnovers",
+        "Not Crashing",
+        "No Box Outs",
+        "Not Calling Back",
+        "Fouls",
+    ]
+    
+    # 1. Match against known metric names first
+    for vm in valid_metrics:
+        if s.lower().startswith(vm.lower()):
+            return vm
+            
+    # 2. Fallback: Strip trailing timestamp patterns (e.g., 11:29:14) and any appended numbers
     s = re.sub(r'\d{1,2}:\d{2}:\d{2}.*$', '', s)
-    # Remove trailing digits that got glued during rapid string ops if needed
+    s = re.sub(r'\d+$', '', s)
     return s.strip()
+
 
 def make_track_key(week, date, athlete, metric):
     try:
@@ -55,27 +72,26 @@ def make_track_key(week, date, athlete, metric):
     except Exception:
         dt_str = str(date).strip()
 
-    clean_metric = clean_metric_name(metric)
+    clean_met = clean_metric_name(metric)
     clean_ath = str(athlete).strip()
 
-    return f"{wk_str}|{dt_str}|{clean_ath}|{clean_metric}"
+    return f"{wk_str}|{dt_str}|{clean_ath}|{clean_met}"
+
 
 def modify_counter(week, date, athlete, metric, delta):
     """
-    Safely increments or decrements session state counters as pure integers.
+    Safely modifies tracking state counters with positional arguments matching st.button.
     """
     key = make_track_key(week, date, athlete, metric)
-    
+
     if "tracking_data" not in st.session_state:
         st.session_state["tracking_data"] = {}
 
-    # Ensure existing stored value is forced to an integer
     try:
         current_val = int(pd.to_numeric(st.session_state.tracking_data.get(key, 0), errors="coerce"))
     except Exception:
         current_val = 0
 
-    # Apply delta and clamp to a minimum of 0
     new_val = max(0, current_val + int(delta))
     st.session_state.tracking_data[key] = new_val
     
@@ -4258,15 +4274,15 @@ def render_dashboard_content(season_label, season_key):
 
                                 with c_dec:
                                     st.button(
-                                        "−",
+                                        "-",
                                         key=f"dec_{season_key}_{player}_{metric_name}_{session_date_val}",
                                         on_click=modify_counter,
                                         args=(
-                                            player,
-                                            metric_name,
-                                            -1,
-                                            track_week_str,
-                                            session_date_val,
+                                            track_week_str,    # 1. week
+                                            session_date_val,  # 2. date
+                                            player,            # 3. athlete
+                                            metric_name,       # 4. metric
+                                             -1,                # 5. delta
                                         ),
                                         use_container_width=True,
                                     )
@@ -4291,11 +4307,11 @@ def render_dashboard_content(season_label, season_key):
                                         key=f"inc_{season_key}_{player}_{metric_name}_{session_date_val}",
                                         on_click=modify_counter,
                                         args=(
-                                            player,
-                                            metric_name,
-                                            1,
-                                            track_week_str,
-                                            session_date_val,
+                                            track_week_str,    # 1. week
+                                            session_date_val,  # 2. date
+                                            player,            # 3. athlete
+                                            metric_name,       # 4. metric
+                                            1,                 # 5. delta
                                         ),
                                         use_container_width=True,
                                     )
