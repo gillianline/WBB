@@ -457,30 +457,40 @@ if (
         ath_col = cols_lower.get("athlete", "Athlete")
         met_col = cols_lower.get("metric", "Metric")
         cnt_col = cols_lower.get("count", "Count")
+        ts_col = cols_lower.get("timestamp", "Timestamp")
 
-        for _, row in live_track_df.iterrows():
-            raw_wk = str(row.get(wk_col, "")).strip()
-            raw_dt = str(row.get(dt_col, "")).strip()
+        # Convert count column STRICTLY to numeric integers to prevent "2" + "1" = "21" string concatenation
+        live_track_df[cnt_col] = pd.to_numeric(
+            live_track_df[cnt_col], errors="coerce"
+        ).fillna(0)
+
+        # Sort by timestamp so the most recent logged value comes last
+        if ts_col in live_track_df.columns:
+            live_track_df[ts_col] = pd.to_datetime(
+                live_track_df[ts_col], errors="coerce"
+            )
+            live_track_df = live_track_df.sort_values(
+                by=ts_col, ascending=True
+            )
+
+        # KEEP ONLY THE LATEST ROW per athlete, metric, and date
+        deduped_df = live_track_df.groupby(
+            [wk_col, dt_col, ath_col, met_col], as_index=False
+        ).last()
+
+        for _, row in deduped_df.iterrows():
+            raw_wk = row.get(wk_col, "")
+            raw_dt = row.get(dt_col, "")
             ath = str(row.get(ath_col, "")).strip()
             met = str(row.get(met_col, "")).strip()
-            cnt = pd.to_numeric(row.get(cnt_col, 0), errors="coerce")
+            cnt = int(row.get(cnt_col, 0))
 
-            wk_clean = format_date_clean(raw_wk)
-            dt_clean = format_date_clean(raw_dt)
-
-            if (
-                wk_clean != "N/A"
-                and dt_clean != "N/A"
-                and ath
-                and met
-                and pd.notna(cnt)
-            ):
-                key = f"{wk_clean}|{dt_clean}|{ath}|{met}"
-                st.session_state.tracking_data[key] = int(cnt)
+            if ath and met:
+                key = make_track_key(raw_wk, raw_dt, ath, met)
+                st.session_state.tracking_data[key] = cnt
 
     st.session_state.tracking_data_initialized = True
-
-
+    
 # -----------------------------------------------------------------------------
 # 4. HELPER FUNCTIONS
 # -----------------------------------------------------------------------------
@@ -1850,18 +1860,38 @@ def render_dashboard_content(season_label, season_key):
             "Fouls",
         ]
 
-        # 1. Parse logged tracking rows from session state
+        # 1. Parse logged tracking rows from session state with date normalization & strict numeric conversion
         ind_track_rows = []
         for k, v in st.session_state.get("tracking_data", {}).items():
             parts = k.split("|")
-            if len(parts) == 4 and v > 0:
-                ind_track_rows.append({
-                    "Week_Starting": parts[0].strip(),
-                    "Date": parts[1].strip(),
-                    "Athlete": parts[2].strip(),
-                    "Metric": parts[3].strip(),
-                    "Count": v,
-                })
+            if len(parts) == 4:
+                try:
+                    val_num = int(pd.to_numeric(v, errors="coerce"))
+                except Exception:
+                    val_num = 0
+
+                if val_num > 0:
+                    raw_wk = parts[0].strip()
+                    raw_dt = parts[1].strip()
+
+                    # Normalize dates to YYYY-MM-DD so keys always match
+                    try:
+                        wk_clean = pd.to_datetime(raw_wk).strftime("%Y-%m-%d")
+                    except Exception:
+                        wk_clean = raw_wk
+
+                    try:
+                        dt_clean = pd.to_datetime(raw_dt).strftime("%Y-%m-%d")
+                    except Exception:
+                        dt_clean = raw_dt
+
+                    ind_track_rows.append({
+                        "Week_Starting": wk_clean,
+                        "Date": dt_clean,
+                        "Athlete": parts[2].strip(),
+                        "Metric": parts[3].strip(),
+                        "Count": val_num,
+                    })
 
         ind_track_df = (
             pd.DataFrame(ind_track_rows)
@@ -1870,6 +1900,11 @@ def render_dashboard_content(season_label, season_key):
                 columns=["Week_Starting", "Date", "Athlete", "Metric", "Count"]
             )
         )
+
+        if not ind_track_df.empty:
+            ind_track_df["Count"] = pd.to_numeric(
+                ind_track_df["Count"], errors="coerce"
+            ).fillna(0).astype(int)
 
         p_ind_track = (
             ind_track_df[
@@ -1914,7 +1949,7 @@ def render_dashboard_content(season_label, season_key):
 
         # 3. Filter entries for chosen week
         p_ind_track_wk = (
-            p_ind_track[p_ind_track["Week_Starting"] == sel_ind_mon_str]
+            p_ind_track[p_ind_track["Week_Starting"] == sel_ind_mon_str].copy()
             if not p_ind_track.empty
             else pd.DataFrame(
                 columns=["Week_Starting", "Date", "Athlete", "Metric", "Count"]
@@ -1926,15 +1961,14 @@ def render_dashboard_content(season_label, season_key):
             if p_ind_track_wk.empty:
                 return 0
             lowered = [p.lower() for p in metric_patterns]
-            return int(
-                p_ind_track_wk[
-                    p_ind_track_wk["Metric"]
-                    .astype(str)
-                    .str.strip()
-                    .str.lower()
-                    .isin(lowered)
-                ]["Count"].sum()
-            )
+            filtered = p_ind_track_wk[
+                p_ind_track_wk["Metric"]
+                .astype(str)
+                .str.strip()
+                .str.lower()
+                .isin(lowered)
+            ]
+            return int(pd.to_numeric(filtered["Count"], errors="coerce").fillna(0).sum())
 
 
         metric_counts = {
@@ -1968,6 +2002,10 @@ def render_dashboard_content(season_label, season_key):
         st.markdown(f"#### Daily Breakdown for Week of {sel_ind_mon_str}")
 
         if not p_ind_track_wk.empty:
+            p_ind_track_wk["Count"] = pd.to_numeric(
+                p_ind_track_wk["Count"], errors="coerce"
+            ).fillna(0).astype(int)
+
             pivot_ind_track = p_ind_track_wk.pivot_table(
                 index="Metric",
                 columns="Date",
@@ -1975,11 +2013,12 @@ def render_dashboard_content(season_label, season_key):
                 aggfunc="sum",
                 fill_value=0,
             )
+
             all_indices = list(
                 dict.fromkeys(TRACKED_METRICS + list(pivot_ind_track.index))
             )
             pivot_ind_track = pivot_ind_track.reindex(index=all_indices, fill_value=0)
-            pivot_ind_track["Total"] = pivot_ind_track.sum(axis=1)
+            pivot_ind_track["Total"] = pivot_ind_track.sum(axis=1).astype(int)
 
             formatted_cols = {}
             for col in pivot_ind_track.columns:
@@ -2006,18 +2045,24 @@ def render_dashboard_content(season_label, season_key):
             for _, row in pivot_display.iterrows():
                 html_table += "<tr>"
                 for col in pivot_display.columns:
-                    val = row[col]
+                    raw_val = row[col]
                     if col == "Metric" or col == "index":
-                        html_table += f'<td style="font-weight: 700; text-align: left !important; padding-left: 16px;">{val}</td>'
-                    elif col == "Total":
-                        html_table += f'<td><span style="background-color: #FF8200; color: #FFFFFF; font-weight: 800; padding: 2px 10px; border-radius: 6px;">{val}</span></td>'
+                        html_table += f'<td style="font-weight: 700; text-align: left !important; padding-left: 16px;">{raw_val}</td>'
                     else:
-                        val_display = (
-                            f'<span style="font-weight: 600; color: #0F172A;">{val}</span>'
-                            if val > 0
-                            else '<span style="color: #94A3B8;">0</span>'
-                        )
-                        html_table += f"<td>{val_display}</td>"
+                        try:
+                            val = int(pd.to_numeric(raw_val, errors="coerce"))
+                        except Exception:
+                            val = 0
+
+                        if col == "Total":
+                            html_table += f'<td><span style="background-color: #FF8200; color: #FFFFFF; font-weight: 800; padding: 2px 10px; border-radius: 6px;">{val}</span></td>'
+                        else:
+                            val_display = (
+                                f'<span style="font-weight: 600; color: #0F172A;">{val}</span>'
+                                if val > 0
+                                else '<span style="color: #94A3B8;">0</span>'
+                            )
+                            html_table += f"<td>{val_display}</td>"
                 html_table += "</tr>"
             html_table += "</tbody></table>"
 
