@@ -32,7 +32,23 @@ def format_date_clean(val):
         return str(val).split(" ")[0]
     return dt.strftime("%Y-%m-%d")
 
+def make_track_key(week, date, athlete, metric):
+    """
+    Standardizes tracking keys in session state to prevent key mismatches 
+    or duplicate entries on rapid clicks.
+    """
+    try:
+        wk_str = pd.to_datetime(week).strftime("%Y-%m-%d")
+    except Exception:
+        wk_str = str(week).strip()
 
+    try:
+        dt_str = pd.to_datetime(date).strftime("%Y-%m-%d")
+    except Exception:
+        dt_str = str(date).strip()
+
+    return f"{wk_str}|{dt_str}|{str(athlete).strip()}|{str(metric).strip()}"
+    
 # -----------------------------------------------------------------------------
 # 1. PAGE CONFIGURATION & STYLING (FIXED PRINT ENGINE)
 # -----------------------------------------------------------------------------
