@@ -4171,12 +4171,12 @@ def render_dashboard_content(season_label, season_key):
             session_date_val = selected_track_day.split(" ")[0]
             st.markdown("<br>", unsafe_allow_html=True)
 
-            def modify_counter(p_name, metric, delta, wk_s, date_s):
-                # Safe conversion of delta to integer
-                try:
-                    delta_int = int(delta)
-                except (TypeError, ValueError):
-                    delta_int = 0
+        def modify_counter(p_name, metric, delta, wk_s, date_s):
+            # Safe conversion of delta to integer
+            try:
+                delta_int = int(delta)
+            except (TypeError, ValueError):
+                delta_int = 0
 
                 wk_clean = format_date_clean(wk_s)
                 dt_clean = format_date_clean(date_s)
