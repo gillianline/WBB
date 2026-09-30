@@ -4223,113 +4223,113 @@ def render_dashboard_content(season_label, season_key):
                         except Exception as ex:
                             print(f"Tracking auto-sync POST failed: {ex}")
 
-                metrics = [
-                    "Turnovers",
-                    "Not Crashing",
-                    "No Box Outs",
-                    "Not Calling Back",
-                    "Fouls",
-                 ]
+            metrics = [
+                "Turnovers",
+                "Not Crashing",
+                "No Box Outs",
+                "Not Calling Back",
+                "Fouls",
+            ]
 
-                for i in range(0, len(roster_players), 2):
-                    grid_cols = st.columns(2)
-                    for j in range(2):
-                        if i + j < len(roster_players):
-                            player = roster_players[i + j]
-                            p_row = (
-                                roster_raw[roster_raw["Name"] == player]
-                                if not roster_raw.empty
-                                else pd.DataFrame()
-                            )
-                            p_pos = (
-                                p_row["Position"].values[0]
-                                if not p_row.empty and "Position" in p_row.columns
-                                else "Athlete"
-                            )
-                            p_img = (
-                                p_row["Picture"].values[0]
-                                if not p_row.empty and "Picture" in p_row.columns
-                                else "https://via.placeholder.com/70"
-                            )
+            for i in range(0, len(roster_players), 2):
+                grid_cols = st.columns(2)
+                for j in range(2):
+                    if i + j < len(roster_players):
+                        player = roster_players[i + j]
+                        p_row = (
+                            roster_raw[roster_raw["Name"] == player]
+                            if not roster_raw.empty
+                            else pd.DataFrame()
+                        )
+                        p_pos = (
+                            p_row["Position"].values[0]
+                            if not p_row.empty and "Position" in p_row.columns
+                            else "Athlete"
+                        )
+                        p_img = (
+                            p_row["Picture"].values[0]
+                            if not p_row.empty and "Picture" in p_row.columns
+                            else "https://via.placeholder.com/70"
+                        )
 
-                            with grid_cols[j]:
-                                st.markdown(
+                        with grid_cols[j]:
+                            st.markdown(
                                     f"""
-                                    <div class="rec-grid-card" style="padding-bottom: 4px;">
-                                        <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 8px;">
-                                             <img src="{p_img}" class="athlete-avatar" style="width: 50px; height: 50px; border-radius: 50%;">
-                                             <div>
-                                                <h4 style="margin: 0; color: #0F172A; font-weight: 700;">{player}</h4>
-                                                 <span style="color: #64748B; font-size: 0.85rem;">{p_pos}</span>
-                                             </div>
-                                        </div>
-                                     </div>
-                                    """,
-                                    unsafe_allow_html=True,
-                                )
+                                <div class="rec-grid-card" style="padding-bottom: 4px;">
+                                     <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 8px;">
+                                        <img src="{p_img}" class="athlete-avatar" style="width: 50px; height: 50px; border-radius: 50%;">
+                                         <div>
+                                            <h4 style="margin: 0; color: #0F172A; font-weight: 700;">{player}</h4>
+                                            <span style="color: #64748B; font-size: 0.85rem;">{p_pos}</span>
+                                         </div>
+                                    </div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
 
-                                for metric_name in metrics:
-                                    wk_clean_val = format_date_clean(track_week_str)
-                                    dt_clean_val = format_date_clean(session_date_val)
-                                    key = f"{wk_clean_val}|{dt_clean_val}|{player}|{metric_name}"
-                                    val = st.session_state.tracking_data.get(key, 0)
+                            for metric_name in metrics:
+                                wk_clean_val = format_date_clean(track_week_str)
+                                dt_clean_val = format_date_clean(session_date_val)
+                                key = f"{wk_clean_val}|{dt_clean_val}|{player}|{metric_name}"
+                                val = st.session_state.tracking_data.get(key, 0)
 
-                                     c_lbl, c_dec, c_val, c_inc = st.columns([3, 1, 1.2, 1])
+                                c_lbl, c_dec, c_val, c_inc = st.columns([3, 1, 1.2, 1])
 
-                                    with c_lbl:
-                                        st.markdown(
-                                            f'<div style="font-weight: 600; font-size: 0.85rem; color: #334155; padding-top: 6px;">{metric_name}</div>',
-                                             unsafe_allow_html=True,
-                                         )
+                                with c_lbl:
+                                    st.markdown(
+                                        f'<div style="font-weight: 600; font-size: 0.85rem; color: #334155; padding-top: 6px;">{metric_name}</div>',
+                                        unsafe_allow_html=True,
+                                    )
 
-                                    with c_dec:
-                                        st.button(
-                                            "-",
-                                            key=f"dec_{season_key}_{player}_{metric_name}_{session_date_val}",
-                                            on_click=modify_counter,
-                                            args=(
-                                                player,
-                                                 metric_name,
-                                                 -1,
-                                                track_week_str,
-                                                session_date_val,
-                                            ),
-                                            use_container_width=True,
-                                        )
+                                with c_dec:
+                                    st.button(
+                                        "-",
+                                        key=f"dec_{season_key}_{player}_{metric_name}_{session_date_val}",
+                                        on_click=modify_counter,
+                                        args=(
+                                            player,
+                                            metric_name,
+                                            -1,
+                                            track_week_str,
+                                            session_date_val,
+                                        ),
+                                        use_container_width=True,
+                                    )
 
-                                    with c_val:
-                                        bg_cnt = "#FF8200" if val > 0 else "#F1F5F9"
-                                        txt_cnt = "#FFFFFF" if val > 0 else "#64748B"
-                                        st.markdown(
-                                            f"""
-                                            <div style="text-align: center; font-size: 0.95rem; font-weight: 800; 
-                                                        background-color: {bg_cnt}; color: {txt_cnt}; 
-                                                        padding: 4px 0; border-radius: 6px; margin-top: 2px;">
-                                                {val}
-                                             </div>
-                                            """,
-                                            unsafe_allow_html=True,
-                                        )
+                                with c_val:
+                                    bg_cnt = "#FF8200" if val > 0 else "#F1F5F9"
+                                    txt_cnt = "#FFFFFF" if val > 0 else "#64748B"
+                                    st.markdown(
+                                        f"""
+                                        <div style="text-align: center; font-size: 0.95rem; font-weight: 800; 
+                                                    background-color: {bg_cnt}; color: {txt_cnt}; 
+                                                    padding: 4px 0; border-radius: 6px; margin-top: 2px;">
+                                            {val}
+                                            </div>
+                                        """,
+                                        unsafe_allow_html=True,
+                                    )
 
-                                    with c_inc:
-                                        st.button(
-                                            "+",
-                                            key=f"inc_{season_key}_{player}_{metric_name}_{session_date_val}",
-                                            on_click=modify_counter,
-                                            args=(
-                                                player,
-                                                metric_name,
-                                                1,
-                                                track_week_str,
-                                                session_date_val,
-                                            ),
-                                            use_container_width=True,
-                                        )
+                                with c_inc:
+                                    st.button(
+                                        "+",
+                                        key=f"inc_{season_key}_{player}_{metric_name}_{session_date_val}",
+                                        on_click=modify_counter,
+                                        args=(
+                                            player,
+                                            metric_name,
+                                            1,
+                                            track_week_str,
+                                            session_date_val,
+                                        ),
+                                        use_container_width=True,
+                                    )
 
-                                st.markdown(
-                                    "<hr style='margin: 14px 0; border-color: #E2E8F0;'>",
-                                    unsafe_allow_html=True,
-                                )
+                            st.markdown(
+                                "<hr style='margin: 14px 0; border-color: #E2E8F0;'>",
+                                unsafe_allow_html=True,
+                            )
 
         with track_tab_summary:
             st.markdown(
