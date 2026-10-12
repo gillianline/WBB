@@ -4881,21 +4881,19 @@ def get_readiness_color(pct_score):
         return "#B91C1C"
 
 
+# --- EXACT COLUMN MAPPINGS FOR WELLNESS ---
 readiness_metrics_ref = [
-    {"label": "mRSI", "col": "RSI-modified [m/s]", "alt_col": "RSI [m/s]", "invert": False},
-    {"label": "ECC RFD", "col": "Eccentric Deceleration RFD [N/s]", "alt_col": "Eccentric RFD [N/s]", "invert": False},
+    {"label": "mRSI", "col": "RSI [m/s]", "invert": False},
+    {"label": "ECC RFD", "col": "Eccentric Braking RFD [N/s]", "invert": False},
     {"label": "Force @ 0 Velo", "col": "Force at Zero Velocity [N]", "invert": False},
-    {"label": "TTO", "col": "Contraction Time [ms]", "alt_col": "Time to Takeoff [s]", "invert": True},
-    {"label": "ECC Peak Velo", "col": "Eccentric Peak Velocity [m/s]", "invert": False},
-    {"label": "Ecc Peak Power", "col": "Eccentric Peak Power [W]", "invert": False},
-    {"label": "P2:P1 Con Impulse", "col": "P2 Concentric Impulse:P1 Concentric Impulse", "invert": True},
+    {"label": "TTO", "col": "Time to Takeoff [ms]", "invert": True},  # Lower is better
+    {"label": "P2P1", "col": "P2 Concentric Impulse:P1 Concentric Impulse", "invert": True}, # Lower is better
 ]
-
 
 def compute_excel_readiness_score(curr_row, prev_row):
     sub_scores = []
     for rm in readiness_metrics_ref:
-        c_name = rm["col"] if rm["col"] in curr_row else rm.get("alt_col", rm["col"])
+        c_name = rm["col"]
         if c_name in curr_row and c_name in prev_row:
             try:
                 t_val = abs(float(pd.to_numeric(curr_row.get(c_name, 0.0), errors="coerce")))
@@ -4903,14 +4901,13 @@ def compute_excel_readiness_score(curr_row, prev_row):
                 if s_val > 0 and t_val > 0:
                     pct_diff = ((t_val - s_val) / s_val) * 100.0
                     score = (100.0 - pct_diff) if rm["invert"] else (100.0 + pct_diff)
-                    score = min(100.0, score)
-                    sub_scores.append(max(0.0, score))
+                    score = max(0.0, min(100.0, score))
+                    sub_scores.append(score)
             except Exception:
                 continue
     if sub_scores:
         return sum(sub_scores) / len(sub_scores)
     return 100.0
-
 
 def render_team_wellness_content():
     st.markdown(
@@ -5003,11 +5000,14 @@ def render_team_wellness_content():
         else:
             prev_row = target_row
 
-        # Calculate individual metric readiness percentages
+        # Calculate Overall Readiness %
+        readiness_pct = int(round(compute_excel_readiness_score(target_row, prev_row)))
+        z_color = get_readiness_color(readiness_pct)
+
+        # Calculate individual metric percentages
         indiv_scores = {}
-        sub_scores = []
         for rm in readiness_metrics_ref:
-            c_name = rm["col"] if rm["col"] in target_row else rm.get("alt_col", rm["col"])
+            c_name = rm["col"]
             lbl = rm["label"]
             if c_name in target_row and c_name in prev_row:
                 try:
@@ -5016,18 +5016,13 @@ def render_team_wellness_content():
                     if s_val > 0 and t_val > 0:
                         pct_diff = ((t_val - s_val) / s_val) * 100.0
                         score = (100.0 - pct_diff) if rm["invert"] else (100.0 + pct_diff)
-                        score = max(0.0, min(100.0, score))
-                        indiv_scores[lbl] = score
-                        sub_scores.append(score)
+                        indiv_scores[lbl] = max(0.0, min(100.0, score))
                     else:
                         indiv_scores[lbl] = None
                 except Exception:
                     indiv_scores[lbl] = None
             else:
                 indiv_scores[lbl] = None
-
-        readiness_pct = int(round(sum(sub_scores) / len(sub_scores))) if sub_scores else 100
-        z_color = get_readiness_color(readiness_pct)
 
         def format_pct(val):
             return f"{int(round(val))}%" if val is not None else "-"
@@ -5053,12 +5048,8 @@ def render_team_wellness_content():
                 "F0V_c": get_pct_color(indiv_scores.get("Force @ 0 Velo")),
                 "TTO": format_pct(indiv_scores.get("TTO")),
                 "TTO_c": get_pct_color(indiv_scores.get("TTO")),
-                "ECC_PV": format_pct(indiv_scores.get("ECC Peak Velo")),
-                "ECC_PV_c": get_pct_color(indiv_scores.get("ECC Peak Velo")),
-                "ECC_PP": format_pct(indiv_scores.get("Ecc Peak Power")),
-                "ECC_PP_c": get_pct_color(indiv_scores.get("Ecc Peak Power")),
-                "P2P1": format_pct(indiv_scores.get("P2:P1 Con Impulse")),
-                "P2P1_c": get_pct_color(indiv_scores.get("P2:P1 Con Impulse")),
+                "P2P1": format_pct(indiv_scores.get("P2P1")),
+                "P2P1_c": get_pct_color(indiv_scores.get("P2P1")),
             }
         )
 
@@ -5103,11 +5094,9 @@ def render_team_wellness_content():
                 <th style="background:#82C6E2; color:#0F172A;">Wellness Score</th>
                 <th>Readiness Status</th>
                 <th>mRSI</th>
-                <th>ECC RFD</th>
+                <th>Ecc Braking RFD</th>
                 <th>Force @ 0 Velo</th>
                 <th>TTO</th>
-                <th>ECC Peak Velo</th>
-                <th>ECC Peak Power</th>
                 <th>P2:P1 Ratio</th>
             </tr>
         </thead><tbody>"""
@@ -5130,20 +5119,19 @@ def render_team_wellness_content():
                 <td style="font-weight:600; color:#64748B;">{row['Position']}</td>
                 <td style="font-weight:900; font-size:15px; color:{row['Status_Color']}; background:#F8FAFC;">{r_val}%</td>
                 <td><span style="background-color:{badge_bg}; color:{badge_fg}; padding:4px 10px; border-radius:12px; font-weight:700; font-size:0.75rem; white-space:nowrap;">{status_text}</span></td>
-                <td style="font-weight:700; color:{row['mRSI_c']};">{row['mRSI']}</td>
-                <td style="font-weight:700; color:{row['ECC_RFD_c']};">{row['ECC_RFD']}</td>
-                <td style="font-weight:700; color:{row['F0V_c']};">{row['F0V']}</td>
-                <td style="font-weight:700; color:{row['TTO_c']};">{row['TTO']}</td>
-                <td style="font-weight:700; color:{row['ECC_PV_c']};">{row['ECC_PV']}</td>
-                <td style="font-weight:700; color:{row['ECC_PP_c']};">{row['ECC_PP']}</td>
-                <td style="font-weight:700; color:{row['P2P1_c']};">{row['P2P1']}</td>
+                <td style="font-weight:800; color:{row['mRSI_c']};">{row['mRSI']}</td>
+                <td style="font-weight:800; color:{row['ECC_RFD_c']};">{row['ECC_RFD']}</td>
+                <td style="font-weight:800; color:{row['F0V_c']};">{row['F0V']}</td>
+                <td style="font-weight:800; color:{row['TTO_c']};">{row['TTO']}</td>
+                <td style="font-weight:800; color:{row['P2P1_c']};">{row['P2P1']}</td>
             </tr>"""
 
         complete_table_html += "</tbody></table>"
         st.markdown(complete_table_html, unsafe_allow_html=True)
     else:
         st.info(f"No Countermovement Jump testing records logged on {format_date_clean(sel_team_cmj_date)}.")
-# -----------------------------------------------------------------------------
+        
+# -----------------------------------------------------------------------------        
 # CUMULATIVE LOAD ENGINE (SIDEBAR VIEW)
 # -----------------------------------------------------------------------------
 def render_cumulative_content(season_label="In-Season", season_key="cumul"):
