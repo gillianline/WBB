@@ -5080,7 +5080,7 @@ def render_team_wellness_content():
                 <th style="width:50px; padding:8px;">Photo</th>
                 <th style="text-align:left !important; padding-left:15px;">Name</th>
                 <th>Position</th>
-                <th style="background:#1E40AF;">Wellness Score</th>
+                <th style="background:#4895DB;">Wellness Score</th>
                 <th>Readiness Status</th>
                 <th>RSI-Mod [m/s]</th>
                 <th>Ecc Braking RFD [N/s]</th>
