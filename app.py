@@ -4969,6 +4969,19 @@ def render_team_wellness_content():
         )
 
     team_cmj_rows = []
+    
+    # Helper to pull the right column dynamically based on keywords
+    def get_metric_val(row, columns, keys, fmt="{:.2f}"):
+        col = next((c for c in columns if any(k in c.lower() for k in keys)), None)
+        if col and pd.notna(row.get(col)):
+            try:
+                clean_val = pd.to_numeric(str(row[col]).replace(r"[^0-9.-]", ""), errors="coerce")
+                if pd.notna(clean_val):
+                    return fmt.format(clean_val)
+            except:
+                return str(row[col])
+        return "-"
+
     for ath_name in sorted(cmj_df["Name"].dropna().unique()):
         ath_sub_cmj = cmj_df[cmj_df["Name"] == ath_name].sort_values("Test Date")
         if ath_sub_cmj.empty:
@@ -4994,6 +5007,7 @@ def render_team_wellness_content():
             continue
 
         target_row = ath_date_match.iloc[-1]
+        cols = ath_sub_cmj.columns
 
         all_indices = list(ath_sub_cmj.index)
         if target_row.name in all_indices:
@@ -5005,6 +5019,13 @@ def render_team_wellness_content():
         readiness_pct = int(round(compute_excel_readiness_score(target_row, prev_row)))
         z_color = get_readiness_color(readiness_pct)
 
+        # Extract the 5 wellness metrics
+        val_rsi = get_metric_val(target_row, cols, ["rsi-modified", "rsi"], "{:.2f}")
+        val_ecc_rfd = get_metric_val(target_row, cols, ["eccentric braking rfd"], "{:.0f}")
+        val_f0v = get_metric_val(target_row, cols, ["force at zero velocity", "force @ 0 velo"], "{:.0f}")
+        val_tt = get_metric_val(target_row, cols, ["time to takeoff", "contraction time"], "{:.0f}")
+        val_p2p1 = get_metric_val(target_row, cols, ["p2 concentric impulse:p1", "p2:p1"], "{:.2f}")
+
         team_cmj_rows.append(
             {
                 "Athlete": ath_name,
@@ -5012,6 +5033,11 @@ def render_team_wellness_content():
                 "Position": pos_str,
                 "Readiness %": readiness_pct,
                 "Status_Color": z_color,
+                "RSI": val_rsi,
+                "Ecc_RFD": val_ecc_rfd,
+                "F0V": val_f0v,
+                "Time_Takeoff": val_tt,
+                "P2P1": val_p2p1
             }
         )
 
@@ -5047,7 +5073,23 @@ def render_team_wellness_content():
         """)
         st.markdown(kpi_html, unsafe_allow_html=True)
 
-        html_rows = []
+        # Upgraded table with the 5 appended metrics
+        complete_table_html = """<table class="vball-table" style="width:100%; border:1px solid #E2E8F0; background:white; margin-top:10px; text-align:center; font-size:12px;">
+        <thead>
+            <tr style="background:#4895DB; color:white;">
+                <th style="width:50px; padding:8px;">Photo</th>
+                <th style="text-align:left !important; padding-left:15px;">Name</th>
+                <th>Position</th>
+                <th style="background:#1E40AF;">Wellness Score</th>
+                <th>Readiness Status</th>
+                <th>RSI-Mod [m/s]</th>
+                <th>Ecc Braking RFD [N/s]</th>
+                <th>Force @ 0 Velo [N]</th>
+                <th>Time to Takeoff [ms]</th>
+                <th>P2:P1 Ratio</th>
+            </tr>
+        </thead><tbody>"""
+
         for _, row in cmj_team_df.iterrows():
             r_val = row["Readiness %"]
             status_text = (
@@ -5060,31 +5102,20 @@ def render_team_wellness_content():
                 "#15803D" if r_val >= 90 else ("#B45309" if r_val >= 80 else "#B91C1C")
             )
 
-            html_rows.append(
-                f'<tr>'
-                f'<td style="padding:6px;"><img src="{row["PhotoURL"]}" style="width:40px; height:40px; border-radius:50%; object-fit:cover; border:2px solid #FF8200;"></td>'
-                f'<td style="text-align:left !important; font-weight:800; padding-left:18px; font-size:0.92rem; color:#0F172A;">{row["Athlete"]}</td>'
-                f'<td style="font-weight:600; color:#64748B;">{row["Position"]}</td>'
-                f'<td style="font-weight:900; font-size:1.15rem; color:{row["Status_Color"]};">{r_val}%</td>'
-                f'<td><span style="background-color:{badge_bg}; color:{badge_fg}; padding:4px 10px; border-radius:12px; font-weight:700; font-size:0.75rem;">{status_text}</span></td>'
-                f'</tr>'
-            )
+            complete_table_html += f"""<tr style="border-bottom: 1px solid #E2E8F0;">
+                <td style="padding:6px;"><img src="{row['PhotoURL']}" style="width:38px; height:38px; border-radius:50%; object-fit:cover; border:2px solid #FF8200;"></td>
+                <td style="text-align:left !important; font-weight:800; padding-left:15px; font-size:13px;">{row['Athlete']}</td>
+                <td style="font-weight:600; color:#64748B;">{row['Position']}</td>
+                <td style="font-weight:900; font-size:15px; color:{row['Status_Color']}; background:#F8FAFC;">{r_val}%</td>
+                <td><span style="background-color:{badge_bg}; color:{badge_fg}; padding:4px 10px; border-radius:12px; font-weight:700; font-size:0.75rem; white-space:nowrap;">{status_text}</span></td>
+                <td style="font-weight:700; color:#1D1D1F;">{row['RSI']}</td>
+                <td style="font-weight:700; color:#1D1D1F;">{row['Ecc_RFD']}</td>
+                <td style="font-weight:700; color:#1D1D1F;">{row['F0V']}</td>
+                <td style="font-weight:700; color:#1D1D1F;">{row['Time_Takeoff']}</td>
+                <td style="font-weight:700; color:#1D1D1F;">{row['P2P1']}</td>
+            </tr>"""
 
-        complete_table_html = (
-            '<table class="vball-table" style="width:100%; border:1px solid #E2E8F0; background:#FFFFFF; margin-top:10px;">'
-            '<thead>'
-            '<tr>'
-            '<th style="width:70px;">Athlete</th>'
-            '<th style="text-align:left !important; padding-left:18px;">Name</th>'
-            '<th>Position</th>'
-            '<th>Wellness Score</th>'
-            '<th>Readiness Status</th>'
-            '</tr>'
-            '</thead>'
-            '<tbody>'
-            + "".join(html_rows)
-            + '</tbody></table>'
-        )
+        complete_table_html += "</tbody></table>"
         st.markdown(complete_table_html, unsafe_allow_html=True)
     else:
         st.info(f"No Countermovement Jump testing records logged on {format_date_clean(sel_team_cmj_date)}.")
