@@ -959,21 +959,19 @@ def render_cmj_tscore_standards(player_name, cmj_all_df, target_date_str=None, a
 
     active_date_str = format_date_clean(active_jump.get("Date"))
 
+    # ALIGNED WITH WELLNESS SCORE: (Label, [Data Columns], invert_tscore)
+    # invert=True ensures that lower values (like faster Time to Takeoff) yield higher T-Scores
     metric_configs = [
-        ("Jump Height", ["Jump Height (cm)", "Jump Height", "Height"]),
-        ("Jump Momentum", ["Take-off Momentum [kg m/s]", "Take-off Momentum", "Jump Momentum"]),
-        ("Peak Velocity", ["Concentric Peak Velocity [m/s]", "Peak Velocity", "Concentric Peak Velocity"]),
-        ("Mean Con Force", ["Concentric Mean Force [N]", "Concentric Mean Force", "Mean Force"]),
-        ("Force @ 0 Velocity", ["Force at Zero Velocity [N]", "Force at Zero Velocity", "Force @ 0 Velocity"]),
-        ("Positive Impulse", ["Positive Impulse [N s]", "Positive Impulse"]),
-        ("P1 Con Impulse", ["P1 Concentric Impulse [N s]", "P1 Concentric Impulse"]),
-        ("P2 Con Impulse", ["P2 Concentric Impulse [N s]", "P2 Concentric Impulse"]),
-        ("CM Depth", ["Countermovement Depth [cm]", "CM Depth", "Depth"]),
-        ("Time to Takeoff", ["Time to Takeoff [s]", "Time to Take-off [s]", "Time to Takeoff", "Time to Take-off"]),
+        ("Jump Height", ["Jump Height (cm)", "Jump Height", "Height"], False),
+        ("mRSI", ["RSI [m/s]", "RSI", "mRSI"], False),
+        ("Ecc Braking RFD", ["Eccentric Braking RFD [N/s]", "Eccentric Braking RFD", "ECC RFD"], False),
+        ("Force @ 0 Velo", ["Force at Zero Velocity [N]", "Force at Zero Velocity", "Force @ 0 Velo"], False),
+        ("Time to Takeoff", ["Time to Takeoff [ms]", "Time to Take-off [ms]", "Time to Takeoff [s]", "Time to Takeoff", "TTO"], True),
+        ("P2:P1 Ratio", ["P2 Concentric Impulse:P1 Concentric Impulse", "P2P1 Ratio", "P2:P1"], True),
     ]
 
     resolved_metrics = []
-    for label, col_candidates in metric_configs:
+    for label, col_candidates, invert in metric_configs:
         found_col = next((c for c in df.columns for cand in col_candidates if cand.lower() == c.lower().strip()), None)
         if not found_col:
             found_col = next((c for c in df.columns for cand in col_candidates if cand.lower() in c.lower()), None)
@@ -982,7 +980,7 @@ def render_cmj_tscore_standards(player_name, cmj_all_df, target_date_str=None, a
                 df[found_col].astype(str).str.replace(r"[^0-9.-]", "", regex=True),
                 errors="coerce",
             )
-            resolved_metrics.append((label, found_col))
+            resolved_metrics.append((label, found_col, invert))
 
     if not resolved_metrics:
         st.info("CMJ metric columns not detected in the dataset.")
@@ -990,13 +988,18 @@ def render_cmj_tscore_standards(player_name, cmj_all_df, target_date_str=None, a
 
     labels, t_scores, text_labels = [], [], []
 
-    for label, col in resolved_metrics:
+    for label, col, invert in resolved_metrics:
         pop_mean = df[col].mean()
         pop_std = df[col].std()
         val = active_jump[col]
 
         if pd.notna(val) and pd.notna(pop_mean) and pd.notna(pop_std) and pop_std > 0:
-            t_score = 50.0 + 10.0 * ((val - pop_mean) / pop_std)
+            if invert:
+                # Inverted formula: lower time/ratio gives a higher T-Score
+                t_score = 50.0 - 10.0 * ((val - pop_mean) / pop_std)
+            else:
+                t_score = 50.0 + 10.0 * ((val - pop_mean) / pop_std)
+                
             t_score = max(0.0, min(100.0, t_score))
         else:
             t_score = 50.0
@@ -1098,12 +1101,12 @@ def render_cmj_tscore_standards(player_name, cmj_all_df, target_date_str=None, a
         )
         st.plotly_chart(fig, use_container_width=True, key=f"cmj_tscore_fig_{player_name.replace(' ','_')}_{widget_key_suffix}")
 
+        # Group labels re-aligned into thirds to match the 6 metric bars above
         st.markdown(
             """
             <div style="display: flex; gap: 8px; width: 100%; margin-top: -30px; margin-bottom: 15px; padding-left: 45px;">
-                <div style="flex: 3; background: #FEE2E2; color: #991B1B; text-align: center; padding: 4px 0; font-weight: 700; font-size: 0.75rem; border-radius: 4px;">Speed</div>
-                <div style="flex: 3; background: #ECFCCB; color: #3F6212; text-align: center; padding: 4px 0; font-weight: 700; font-size: 0.75rem; border-radius: 4px;">Strength</div>
-                <div style="flex: 2; background: #E0F2FE; color: #0369A1; text-align: center; padding: 4px 0; font-weight: 700; font-size: 0.75rem; border-radius: 4px;">Power</div>
+                <div style="flex: 2; background: #E0F2FE; color: #0369A1; text-align: center; padding: 4px 0; font-weight: 700; font-size: 0.75rem; border-radius: 4px;">Output Profile</div>
+                <div style="flex: 2; background: #ECFCCB; color: #3F6212; text-align: center; padding: 4px 0; font-weight: 700; font-size: 0.75rem; border-radius: 4px;">Eccentric Strength</div>
                 <div style="flex: 2; background: #F3E8FF; color: #6B21A8; text-align: center; padding: 4px 0; font-weight: 700; font-size: 0.75rem; border-radius: 4px;">Jump Strategy</div>
             </div>
             """,
@@ -1130,7 +1133,6 @@ def render_cmj_tscore_standards(player_name, cmj_all_df, target_date_str=None, a
         </div>
         """
         st.markdown(legend_table_html, unsafe_allow_html=True)
-
 
 def get_season_mondays(season_df):
     if not season_df.empty and "Date" in season_df.columns:
