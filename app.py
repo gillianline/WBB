@@ -4719,7 +4719,13 @@ def render_combined_seasons_content():
             # Scatter markers by Session / Type
             for type_name in df_comb_timeline["Type"].unique():
                 t_group = df_comb_timeline[df_comb_timeline["Type"] == type_name]
-                pt_color = marker_color_map.get(type_name, "#FF8200")
+                
+                # Check dynamically so custom names like "Scrimmage v. Wake Forest" work
+                if "scrimmage" in str(type_name).lower():
+                    pt_color = "#E11D48"  # Distinct Crimson/Rose color for scrimmage
+                else:
+                    pt_color = marker_color_map.get(type_name, "#FF8200")
+                    
                 border_color = "#FFFFFF" if type_name == "SEC Game" else "#0F172A"
 
                 scatter_kwargs = dict(
@@ -4858,13 +4864,14 @@ def render_combined_seasons_content():
                             f"{val:.1f}</span></td>"
                         )
                     elif col == "Session / Type":
-                        badge_color = marker_color_map.get(val, "#FF8200")
+                        # Check dynamically for the table badge
+                        if "scrimmage" in str(val).lower():
+                            badge_color = "#E11D48"
+                        else:
+                            badge_color = marker_color_map.get(val, "#FF8200")
+                            
                         txt_color = "#FFFFFF" if val == "SEC Game" else ("#0F172A" if val == "Non-Conference Game" else "#FFFFFF")
                         html += f'<td><span style="background-color:{badge_color}; color:{txt_color}; font-weight:700; padding:2px 8px; border-radius:4px; font-size:0.75rem;">{val}</span></td>'
-                    else:
-                        html += f"<td>{val}</td>"
-                html += "</tr>"
-            html += "</tbody></table>"
 
             st.markdown(html, unsafe_allow_html=True)
     else:
