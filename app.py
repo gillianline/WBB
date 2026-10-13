@@ -4609,9 +4609,7 @@ def render_combined_seasons_content():
                     sess_type = "SEC Game" if any(k in combined_context for k in sec_teams) else "Non-Conference Game"
                 elif "scrimmage" in combined_context:
                     sess_type = "Scrimmage"
-                if "game" in combined_context or "match" in combined_context:
-                    sess_type = "SEC Game" if any(k in combined_context for k in sec_teams) else "Non-Conference Game"
-
+                    
                 daily_team_scores.append({
                     "Date": dt,
                     "Date_Str": format_date_clean(d_str),
@@ -4700,7 +4698,7 @@ def render_combined_seasons_content():
             "Conditioning": "#38BDF8",
             "Skill": "#8B5CF6",
             "Shootaround": "#10B981",
-            "Scrimmage": "#E11D48",  # Added scrimmage circle color
+            "Scrimmage": "#E11D48", 
         }
         
         def create_custom_timeline_chart(metric_col, title_label, show_text=True):
