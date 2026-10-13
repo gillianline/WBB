@@ -4607,6 +4607,10 @@ def render_combined_seasons_content():
 
                 if "game" in combined_context or "match" in combined_context:
                     sess_type = "SEC Game" if any(k in combined_context for k in sec_teams) else "Non-Conference Game"
+                elif "scrimmage" in combined_context:
+                    sess_type = "Scrimmage"
+                if "game" in combined_context or "match" in combined_context:
+                    sess_type = "SEC Game" if any(k in combined_context for k in sec_teams) else "Non-Conference Game"
 
                 daily_team_scores.append({
                     "Date": dt,
@@ -4664,7 +4668,9 @@ def render_combined_seasons_content():
                 all_s_types = [str(x).strip() for x in day_records[type_col_check].dropna().unique() if str(x).strip() != ""]
                 s_types_lower = [s.lower() for s in all_s_types]
 
-                if "skill" in s_types_lower and "practice" in s_types_lower:
+                if any("scrimmage" in s for s in s_types_lower):
+                    sess_type = "Scrimmage"
+                elif "skill" in s_types_lower and "practice" in s_types_lower:
                     sess_type = "Skill + Practice"
                 elif len(all_s_types) > 1:
                     sess_type = " + ".join(dict.fromkeys(all_s_types))
@@ -4694,8 +4700,9 @@ def render_combined_seasons_content():
             "Conditioning": "#38BDF8",
             "Skill": "#8B5CF6",
             "Shootaround": "#10B981",
+            "Scrimmage": "#E11D48",  # Added scrimmage circle color
         }
-
+        
         def create_custom_timeline_chart(metric_col, title_label, show_text=True):
             fig = go.Figure()
 
