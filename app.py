@@ -1452,7 +1452,9 @@ def render_dashboard_content(season_label, season_key):
             )
 
         ath_p_dates = (
-            vol_data[vol_data["Player"] == selected_player]["Date_Str"].dropna().unique().tolist()
+            vol_data[vol_data["Player"] == selected_player]
+            .sort_values("Date", ascending=False)["Date_Str"]  # Add this sort_values line
+            .dropna().unique().tolist()
             if not vol_data.empty
             else []
         )
