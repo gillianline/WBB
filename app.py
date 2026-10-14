@@ -3865,28 +3865,6 @@ def render_dashboard_content(season_label, season_key):
                             )
                         )
 
-                        annotations = []
-                        for r_idx, metric in enumerate(pivot_asym.index):
-                            for c_idx, date_val in enumerate(pivot_asym.columns):
-                                val = pivot_asym.iloc[r_idx, c_idx]
-                                if abs(val) >= 0.1:
-                                    side_char = "R" if val > 0 else "L"
-                                    display_txt = f"{abs(val):.1f}% {side_char}"
-                                else:
-                                    display_txt = "0.0%"
-
-                                font_color = "#FFFFFF" if abs(val) >= 8.0 else "#0F172A"
-
-                                annotations.append(
-                                    dict(
-                                        x=date_val,
-                                        y=metric,
-                                        text=f"<b>{display_txt}</b>",
-                                        font=dict(size=13, color=font_color, family="Arial"),
-                                        showarrow=False,
-                                    )
-                                )
-
                         fig_heat.update_layout(
                             height=300,
                             margin=dict(l=20, r=20, t=10, b=30),
