@@ -1236,6 +1236,29 @@ def compute_bball_ewma_calendar(v_df, i_df, ath_name, metrics_list):
             axis=1,
         )
     return cal
+
+def parse_asym_val(raw_val):
+    if pd.isna(raw_val): return 0.0, "Balanced"
+    s = str(raw_val).strip().upper()
+    num_part = re.findall(r"[-+]?(?:\d*\.\d+|\d+)", s)
+    val = float(num_part[0]) if num_part else 0.0
+    if "L" in s: return -abs(val), "Left"
+    elif "R" in s: return abs(val), "Right"
+    else: return (val, ("Right" if val > 0 else ("Left" if val < 0 else "Balanced")))
+
+def resolve_col_val(row, primary_col, alt_cols=[]):
+    candidates = [primary_col] + alt_cols
+    for col in candidates:
+        if (col in row and pd.notna(row[col]) and str(row[col]).strip() != ""):
+            return row[col]
+    row_keys_norm = {re.sub(r"[^a-zA-Z0-9]", "", str(k)).lower(): k for k in row.index}
+    for col in candidates:
+        norm = re.sub(r"[^a-zA-Z0-9]", "", str(col)).lower()
+        if norm in row_keys_norm:
+            matched_key = row_keys_norm[norm]
+            if (pd.notna(row[matched_key]) and str(row[matched_key]).strip() != ""):
+                return row[matched_key]
+    return None
     
 # -----------------------------------------------------------------------------
 # 5. SIDEBAR NAVIGATION (DYNAMIC ROLES)
@@ -2976,7 +2999,7 @@ def render_dashboard_content(season_label, season_key):
     # TAB 5: TESTING
     elif main_tab == "Testing":
         testing_tab_intake, testing_tab_cmj, testing_tab_overall = st.tabs(
-            ["Intake Assessment", "CMJ", "Overall Profile"]
+            ["Intake Assessment", "CMJ", "Asymmetry & Favoring", "Overall Profile"]
         )
 
         with testing_tab_intake:
@@ -3443,6 +3466,487 @@ def render_dashboard_content(season_label, season_key):
             else:
                 st.info(f"No Countermovement Jump (CMJ) logs found for {selected_player_t} in {season_label}.")
 
+        # SECTION 5C: ASYMMETRY & FAVORING TAB
+        with testing_tab_asym:
+            st.markdown(
+                '<div class="vball-section-title">Bilateral CMJ Asymmetry & Performance Standards</div>',
+                unsafe_allow_html=True,
+            )
+
+            asym_c1, asym_c_season, asym_c2, asym_c3 = st.columns(
+                [1.3, 1.1, 1.1, 1.1]
+            )
+            with asym_c1:
+                sel_asym_ath = st.selectbox(
+                    "Select Athlete",
+                    roster_players,
+                    key=f"cmj_asym_ath_sel_{season_key}",
+                )
+
+            # Ensure 'Test Date' exists for safe processing
+            cmj_asym_df = cmj_raw.copy()
+            if not cmj_asym_df.empty:
+                if "Date" in cmj_asym_df.columns:
+                    cmj_asym_df["Test Date"] = pd.to_datetime(cmj_asym_df["Date"], errors="coerce")
+                elif "Test Date" in cmj_asym_df.columns:
+                    cmj_asym_df["Test Date"] = pd.to_datetime(cmj_asym_df["Test Date"], errors="coerce")
+
+            ath_cmj_asym_base = cmj_asym_df[
+                cmj_asym_df["Name"] == sel_asym_ath
+            ].sort_values("Test Date") if not cmj_asym_df.empty and "Name" in cmj_asym_df.columns else pd.DataFrame()
+
+            if ath_cmj_asym_base.empty:
+                st.info(f"No CMJ test logs found for {sel_asym_ath}.")
+            else:
+                avail_seasons = ["All Seasons"] + [
+                    s for s in ["In-Season", "Pre-Season", "Spring", "Summer"]
+                    if "Season" in ath_cmj_asym_base.columns and s in ath_cmj_asym_base["Season"].unique()
+                ]
+                with asym_c_season:
+                    sel_asym_season = st.selectbox(
+                        "Season Filter",
+                        avail_seasons,
+                        index=0,
+                        key=f"cmj_asym_season_filter_{season_key}",
+                    )
+
+                ath_cmj_asym = ath_cmj_asym_base.copy()
+                if sel_asym_season != "All Seasons" and "Season" in ath_cmj_asym.columns:
+                    ath_cmj_asym = ath_cmj_asym[
+                        ath_cmj_asym["Season"] == sel_asym_season
+                    ]
+
+                if ath_cmj_asym.empty:
+                    st.info(f"No CMJ test logs found for {sel_asym_ath} in {sel_asym_season}.")
+                else:
+                    asym_valid_dates = (
+                        ath_cmj_asym["Test Date"]
+                        .dropna()
+                        .drop_duplicates()
+                        .sort_values(ascending=False)
+                        .dt.strftime("%m/%d/%y")
+                        .tolist()
+                    )
+                    with asym_c2:
+                        sel_asym_date_str = st.selectbox(
+                            "Select Test Date",
+                            asym_valid_dates,
+                            index=0,
+                            key=f"cmj_asym_date_sel_{season_key}",
+                        )
+                    with asym_c3:
+                        known_injury_side = st.selectbox(
+                            "Known Injured / Re-hab Side",
+                            ["None / Unknown", "Left", "Right"],
+                            key=f"cmj_asym_injured_side_{season_key}",
+                        )
+
+                    cur_asym_idx = ath_cmj_asym[
+                        ath_cmj_asym["Test Date"].dt.strftime("%m/%d/%y") == sel_asym_date_str
+                    ].index[-1]
+                    cur_asym_row = ath_cmj_asym.loc[cur_asym_idx]
+
+                    bw_kg = float(
+                        cur_asym_row.get(
+                            "BW [KG]",
+                            cur_asym_row.get("Body Weight [kg]", 80.0),
+                        )
+                    )
+                    bw_n = bw_kg * 9.81
+
+                    asym_metric_list = [
+                        {
+                            "label": "Eccentric Braking RFD",
+                            "raw_val_col": "Eccentric Braking RFD [N/s]",
+                            "alt_raw": ["Eccentric Braking RFD", "Braking RFD [N/s]", "Braking RFD"],
+                            "asym_col": "Eccentric Braking RFD % (Asym) (%)",
+                            "alt_asym": [
+                                "Eccentric Braking RFD (Asym) (%)",
+                                "Eccentric Braking RFD Asymmetry (%)",
+                                "Braking RFD (Asym) (%)",
+                            ],
+                            "phase": "Eccentric Braking RFD",
+                            "unit": "N/s",
+                            "fmt": "{:.0f}",
+                            "target_min": 4000.0,
+                            "target_max": 8000.0,
+                            "target_label": "4,000 - 8,000 N/s",
+                            "desc": "Rate of force development as the athlete decelerates downward.",
+                        },
+                        {
+                            "label": "Force at Zero Velocity",
+                            "raw_val_col": "Force at Zero Velocity [N]",
+                            "alt_raw": ["Force at Zero Velocity", "Force @ 0 Velo", "Relative Force @ 0 Velo"],
+                            "asym_col": "Force at Zero Velocity % (Asym) (%)",
+                            "alt_asym": [
+                                "Force at Zero Velocity (Asym) (%)",
+                                "Force at Zero Velocity Asymmetry (%)",
+                                "Force @ 0 Velo (Asym) (%)",
+                            ],
+                            "phase": "Force at Zero Velocity",
+                            "unit": "N",
+                            "fmt": "{:.0f}",
+                            "target_min": round(bw_n * 2.2, 0),
+                            "target_max": round(bw_n * 2.6, 0),
+                            "target_label": f"{bw_n*2.2:.0f} - {bw_n*2.6:.0f} N (2.2-2.6x BW)",
+                            "desc": "Vertical load absorbed at the absolute bottom of the dip (v = 0).",
+                        },
+                        {
+                            "label": "Concentric Mean Force",
+                            "raw_val_col": "Concentric Mean Force [N]",
+                            "alt_raw": ["Concentric Mean Force", "Relative Mean Con Force", "Mean Concentric Force [N]"],
+                            "asym_col": "Concentric Mean Force % (Asym) (%)",
+                            "alt_asym": ["Concentric Mean Force (Asym) (%)", "Concentric Mean Force Asymmetry (%)"],
+                            "phase": "Concentric Mean Force",
+                            "unit": "N",
+                            "fmt": "{:.0f}",
+                            "target_min": round(bw_n * 1.6, 0),
+                            "target_max": round(bw_n * 1.9, 0),
+                            "target_label": f"{bw_n*1.6:.0f} - {bw_n*1.9:.0f} N (1.6-1.9x BW)",
+                            "desc": "Average upward thrust produced across the propulsion phase.",
+                        },
+                        {
+                            "label": "Takeoff Peak Force",
+                            "raw_val_col": "Takeoff Peak Force [N]",
+                            "alt_raw": [
+                                "Takeoff Peak Force", "Take-off Peak Force [N]", "Take-off Peak Force",
+                                "Peak Takeoff Force [N]", "Peak Takeoff Force", "Takeoff Force [N]",
+                                "Takeoff Force", "Concentric Peak Force [N]", "Concentric Peak Force",
+                            ],
+                            "asym_col": "Takeoff Peak Force % (Asym) (%)",
+                            "alt_asym": [
+                                "Takeoff Peak Force (Asym) (%)", "Takeoff Peak Force [N] (Asym) (%)",
+                                "Take-off Peak Force % (Asym) (%)", "Take-off Peak Force (Asym) (%)",
+                                "Peak Takeoff Force % (Asym) (%)", "Takeoff Peak Force Asymmetry (%)",
+                                "Concentric Peak Force % (Asym) (%)",
+                            ],
+                            "phase": "Takeoff Peak Force",
+                            "unit": "N",
+                            "fmt": "{:.0f}",
+                            "target_min": round(bw_n * 2.0, 0),
+                            "target_max": round(bw_n * 2.5, 0),
+                            "target_label": f"{bw_n*2.0:.0f} - {bw_n*2.5:.0f} N (2.0-2.5x BW)",
+                            "desc": "Maximum explosive force spike generated before leaving the plates.",
+                        },
+                    ]
+
+                    parsed_records = []
+                    for item in asym_metric_list:
+                        raw_val_found = resolve_col_val(
+                            cur_asym_row,
+                            item["raw_val_col"],
+                            item.get("alt_raw", []),
+                        )
+                        raw_num_val = None
+                        if raw_val_found is not None:
+                            try:
+                                cleaned_num = float(re.sub(r"[^0-9.]", "", str(raw_val_found)))
+                                if cleaned_num > 0:
+                                    raw_num_val = cleaned_num
+                            except:
+                                raw_num_val = None
+
+                        if raw_num_val is not None and raw_num_val > 0:
+                            if raw_num_val >= item["target_min"]:
+                                out_status = "Optimal" if raw_num_val <= item["target_max"] * 1.25 else "Elite"
+                                out_color = "#137333"
+                                out_bg = "#E6F4EA"
+                            else:
+                                out_status = "Below Norm"
+                                out_color = "#D93025"
+                                out_bg = "#FCE8E6"
+                        else:
+                            out_status = "No Data"
+                            out_color = "#64748B"
+                            out_bg = "#F1F5F9"
+
+                        raw_asym_found = resolve_col_val(
+                            cur_asym_row,
+                            item["asym_col"],
+                            item.get("alt_asym", []),
+                        )
+                        parsed_signed_val, side_favored = parse_asym_val(raw_asym_found)
+
+                        asym_status = "Symmetric (<10%)"
+                        if abs(parsed_signed_val) >= 15.0:
+                            asym_status = f"High Bias ({abs(parsed_signed_val):.1f}%)"
+                        elif abs(parsed_signed_val) >= 10.0:
+                            asym_status = f"Moderate Bias ({abs(parsed_signed_val):.1f}%)"
+
+                        parsed_records.append({
+                            "Phase / Metric": item["label"],
+                            "Phase": item["phase"],
+                            "Description": item["desc"],
+                            "Absolute_Val": raw_num_val,
+                            "Formatted_Val": (
+                                f"{item['fmt'].format(raw_num_val)} {item['unit']}"
+                                if raw_num_val is not None else "—"
+                            ),
+                            "Target_Range": item["target_label"],
+                            "Output_Status": out_status,
+                            "Output_Color": out_color,
+                            "Output_Bg": out_bg,
+                            "Signed_Val": parsed_signed_val,
+                            "Magnitude": abs(parsed_signed_val),
+                            "Favored": side_favored,
+                            "Raw_Asym": (
+                                str(raw_asym_found)
+                                if pd.notna(raw_asym_found) and str(raw_asym_found).strip() != ""
+                                else "0.0"
+                            ),
+                            "Asym_Status": asym_status,
+                        })
+
+                    asym_table_df = pd.DataFrame(parsed_records)
+                    max_imbalance_row = asym_table_df.loc[asym_table_df["Magnitude"].idxmax()]
+
+                    r_count = sum(1 for r in parsed_records if r["Favored"] == "Right" and r["Magnitude"] >= 5.0)
+                    l_count = sum(1 for r in parsed_records if r["Favored"] == "Left" and r["Magnitude"] >= 5.0)
+
+                    primary_favoring = "Balanced"
+                    if r_count > l_count:
+                        primary_favoring = "Right Leg (Unloading Left)"
+                    elif l_count > r_count:
+                        primary_favoring = "Left Leg (Unloading Right)"
+
+                    kpi_a1, kpi_a2 = st.columns(2)
+                    kpi_a1.metric(
+                        "Dominant Favoring",
+                        primary_favoring,
+                        help="Limb consistently generating higher force across jump phases.",
+                    )
+                    kpi_a2.metric(
+                        "Peak Phase Imbalance",
+                        f"{max_imbalance_row['Phase']} ({max_imbalance_row['Magnitude']:.1f}% {max_imbalance_row['Favored'][0]})",
+                    )
+
+                    if known_injury_side != "None / Unknown":
+                        unloaded_side = (
+                            "Left" if "Right" in primary_favoring
+                            else ("Right" if "Left" in primary_favoring else "None")
+                        )
+                        if unloaded_side == known_injury_side:
+                            diag_color = "#D93025"
+                            diag_bg = "#FCE8E6"
+                            diag_text = (
+                                "<b>Compensatory Unloading Detected:</b> Athlete is meeting output standards overall but heavily offloading the injured"
+                                f" <b>{known_injury_side}</b> side onto the healthy"
+                                f" <b>{primary_favoring.split()[0]}</b> limb."
+                            )
+                        elif unloaded_side != "None":
+                            diag_color = "#D97706"
+                            diag_bg = "#FEF3C7"
+                            diag_text = (
+                                "<b>Observation:</b> Athlete is favoring the injured side"
+                                f" (<b>{known_injury_side}</b>). Verify test mechanics or limb dominance compensation."
+                            )
+                        else:
+                            diag_color = "#137333"
+                            diag_bg = "#E6F4EA"
+                            diag_text = "<b>Symmetric Strategy:</b> Jump mechanics show balanced loading across both limbs."
+
+                        st.markdown(
+                            f'<div style="background:{diag_bg}; border-left:5px solid {diag_color}; padding:10px 14px; border-radius:6px; margin: 15px 0; font-size:13px; color:#111827;">{diag_text}</div>',
+                            unsafe_allow_html=True,
+                        )
+
+                    fig_asym = go.Figure()
+                    fig_asym.add_vrect(
+                        x0=-10, x1=10, fillcolor="#E2E8F0", opacity=0.4, line_width=0, layer="below",
+                        annotation_text="Symmetric Zone (±10%)", annotation_position="top left",
+                        annotation_font_size=10, annotation_font_color="#64748B",
+                    )
+
+                    bar_colors = ["#FF8200" if v > 0 else "#4895DB" for v in asym_table_df["Signed_Val"]]
+
+                    fig_asym.add_trace(
+                        go.Bar(
+                            y=asym_table_df["Phase / Metric"],
+                            x=asym_table_df["Signed_Val"],
+                            orientation="h",
+                            marker=dict(color=bar_colors, line=dict(color="#1E293B", width=1)),
+                            text=[
+                                f"<b>{r['Magnitude']:.1f}% {r['Favored'][0]}</b>" if r["Magnitude"] > 0 else "0%"
+                                for _, r in asym_table_df.iterrows()
+                            ],
+                            textposition="outside",
+                            cliponaxis=False,
+                        )
+                    )
+
+                    max_range = max(30.0, asym_table_df["Magnitude"].max() * 1.35)
+                    fig_asym.update_layout(
+                        height=320,
+                        template="simple_white",
+                        title=dict(
+                            text="<b>Current Test: Limb Loading Bias (← Left Favored | Right Favored →)</b>",
+                            font=dict(size=13, color="#1D1D1F"),
+                        ),
+                        margin=dict(l=20, r=40, t=40, b=20),
+                        xaxis=dict(
+                            range=[-max_range, max_range], ticksuffix="%", zeroline=True,
+                            zerolinewidth=2, zerolinecolor="#111827",
+                        ),
+                        yaxis=dict(autorange="reversed"),
+                    )
+                    st.plotly_chart(
+                        fig_asym,
+                        use_container_width=True,
+                        config={"displayModeBar": False},
+                        key=f"cmj_asym_horizontal_bar_{season_key}",
+                    )
+
+                    # =========================================================================
+                    # --- LONGITUDINAL LIMB FAVORING HEATMAP ----------------------------------
+                    # =========================================================================
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    season_heatmap_label = f"({sel_asym_season})" if sel_asym_season != "All Seasons" else "(All Seasons)"
+                    st.markdown(f"#### Longitudinal Limb Favoring Heatmap: {sel_asym_ath} {season_heatmap_label}")
+
+                    trend_records = []
+                    for _, test_row in ath_cmj_asym.iterrows():
+                        t_date = test_row["Test Date"]
+                        t_date_str = pd.to_datetime(t_date).strftime("%m/%d/%y")
+
+                        for item in asym_metric_list:
+                            raw_asym_val = resolve_col_val(test_row, item["asym_col"], item.get("alt_asym", []))
+                            signed_v, fav_side = parse_asym_val(raw_asym_val)
+                            trend_records.append({
+                                "Date": t_date,
+                                "Date_Str": t_date_str,
+                                "Metric": item["label"],
+                                "Signed_Asymmetry": signed_v,
+                                "Magnitude": abs(signed_v),
+                                "Favored": fav_side,
+                            })
+
+                    trend_df = pd.DataFrame(trend_records).sort_values("Date")
+
+                    if not trend_df.empty:
+                        metric_order = [m["label"] for m in asym_metric_list]
+                        pivot_asym = (
+                            trend_df.pivot_table(
+                                index="Metric",
+                                columns="Date_Str",
+                                values="Signed_Asymmetry",
+                                aggfunc="mean",
+                            )
+                            .reindex(metric_order)
+                            .fillna(0.0)
+                        )
+
+                        diverging_scale = [
+                            [0.00, "#1E40AF"],  # Dark Navy Blue (Heavy Left)
+                            [0.30, "#60A5FA"],  # Light Blue (Moderate Left)
+                            [0.45, "#F1F5F9"],  # Soft Neutral Gray (Balanced)
+                            [0.55, "#F1F5F9"],  # Soft Neutral Gray (Balanced)
+                            [0.70, "#FB923C"],  # Soft Orange (Moderate Right)
+                            [1.00, "#C2410C"],  # Dark Orange (Heavy Right)
+                        ]
+
+                        fig_heat = go.Figure(
+                            data=go.Heatmap(
+                                z=pivot_asym.values,
+                                x=list(pivot_asym.columns),
+                                y=list(pivot_asym.index),
+                                colorscale=diverging_scale,
+                                zmid=0,
+                                zmin=-25,
+                                zmax=25,
+                                xgap=5,
+                                ygap=5,
+                                hoverinfo="none",
+                                colorbar=dict(
+                                    title=dict(text="Limb Bias", font=dict(size=11, color="#64748B")),
+                                    tickvals=[-20, -10, 0, 10, 20],
+                                    ticktext=["Left (20%+)", "Left (10%)", "Balanced", "Right (10%)", "Right (20%+)"],
+                                    len=0.9,
+                                ),
+                            )
+                        )
+
+                        annotations = []
+                        for r_idx, metric in enumerate(pivot_asym.index):
+                            for c_idx, date_val in enumerate(pivot_asym.columns):
+                                val = pivot_asym.iloc[r_idx, c_idx]
+                                if abs(val) >= 0.1:
+                                    side_char = "R" if val > 0 else "L"
+                                    display_txt = f"{abs(val):.1f}% {side_char}"
+                                else:
+                                    display_txt = "0.0%"
+
+                                font_color = "#FFFFFF" if abs(val) >= 8.0 else "#0F172A"
+
+                                annotations.append(
+                                    dict(
+                                        x=date_val,
+                                        y=metric,
+                                        text=f"<b>{display_txt}</b>",
+                                        font=dict(size=13, color=font_color, family="Arial"),
+                                        showarrow=False,
+                                    )
+                                )
+
+                        fig_heat.update_layout(
+                            height=300,
+                            margin=dict(l=20, r=20, t=10, b=30),
+                            annotations=annotations,
+                            xaxis=dict(title=None, showgrid=False, tickfont=dict(size=12, color="#1D1D1F", weight="bold")),
+                            yaxis=dict(autorange="reversed", showgrid=False, tickfont=dict(size=11, weight="bold", color="#1D1D1F")),
+                            plot_bgcolor="white",
+                            paper_bgcolor="white",
+                        )
+                        st.plotly_chart(
+                            fig_heat,
+                            use_container_width=True,
+                            config={"displayModeBar": False},
+                            key=f"asym_heatmap_{sel_asym_ath}_{sel_asym_season}_{season_key}",
+                        )
+
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    st.markdown("#### Combined Metric Values, Standards & Limb Asymmetry")
+                    
+                    # Note: Used vball-table here to conform with basketball's existing CSS styling
+                    unified_tbl_html = """<table class="vball-table" style="width:100%; border:1px solid #E2E8F0; background:white;">
+                        <thead>
+                            <tr style="background:#4895DB; color:white;">
+                                <th style="text-align:left !important; padding-left:14px; width:30%;">Phase Metric</th>
+                                <th style="width:14%;">Actual Total</th>
+                                <th style="width:18%;">D1 Standard Target</th>
+                                <th style="width:12%;">Output Standard</th>
+                                <th style="width:13%;">Favored Limb</th>
+                                <th style="width:13%;">Asymmetry %</th>
+                            </tr>
+                        </thead>
+                        <tbody>"""
+                    for _, row in asym_table_df.iterrows():
+                        asym_badge_color = (
+                            "#137333" if "Symmetric" in row["Asym_Status"]
+                            else ("#D97706" if "Moderate" in row["Asym_Status"] else "#D93025")
+                        )
+                        asym_badge_bg = (
+                            "#E6F4EA" if "Symmetric" in row["Asym_Status"]
+                            else ("#FEF3C7" if "Moderate" in row["Asym_Status"] else "#FCE8E6")
+                        )
+                        favored_text_color = (
+                            "#FF8200" if row["Favored"] == "Right"
+                            else ("#4895DB" if row["Favored"] == "Left" else "#64748B")
+                        )
+
+                        unified_tbl_html += f"""<tr>
+                            <td style="text-align:left !important; padding-left:14px; padding-top:8px; padding-bottom:8px;">
+                                <div style="font-weight:800; font-size:12px; color:#111827;">{row['Phase / Metric']}</div>
+                                <div style="font-size:10px; color:#64748B; line-height:1.2;">{row['Description']}</div>
+                            </td>
+                            <td style="font-weight:800; font-size:13px; color:#0F172A;">{row['Formatted_Val']}</td>
+                            <td style="color:#64748B; font-weight:600; font-size:11px;">{row['Target_Range']}</td>
+                            <td><span style="background:{row['Output_Bg']}; color:{row['Output_Color']}; padding:3px 8px; border-radius:10px; font-weight:700; font-size:11px;">{row['Output_Status']}</span></td>
+                            <td style="font-weight:800; color:{favored_text_color};">{row['Favored']}</td>
+                            <td><span style="background:{asym_badge_bg}; color:{asym_badge_color}; padding:3px 8px; border-radius:10px; font-weight:800; font-size:11px;">{row['Raw_Asym']}</span></td>
+                        </tr>"""
+                    unified_tbl_html += "</tbody></table>"
+                    st.markdown(unified_tbl_html, unsafe_allow_html=True)
+                    
         # SECTION 5C: OVERALL PROFILE
         with testing_tab_overall:
             st.markdown(
