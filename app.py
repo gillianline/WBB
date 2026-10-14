@@ -2998,7 +2998,7 @@ def render_dashboard_content(season_label, season_key):
         
     # TAB 5: TESTING
     elif main_tab == "Testing":
-        testing_tab_intake, testing_tab_cmj, testing_tab_overall = st.tabs(
+        testing_tab_intake, testing_tab_cmj, testing_tab_asym, testing_tab_overall = st.tabs(
             ["Intake Assessment", "CMJ", "Asymmetry & Favoring", "Overall Profile"]
         )
 
