@@ -3868,7 +3868,7 @@ def render_dashboard_content(season_label, season_key):
                         fig_heat.update_layout(
                             height=300,
                             margin=dict(l=20, r=20, t=10, b=30),
-                            annotations=annotations,
+                            # annotations line removed here
                             xaxis=dict(title=None, showgrid=False, tickfont=dict(size=12, color="#1D1D1F", weight="bold")),
                             yaxis=dict(autorange="reversed", showgrid=False, tickfont=dict(size=11, weight="bold", color="#1D1D1F")),
                             plot_bgcolor="white",
