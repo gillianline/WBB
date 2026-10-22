@@ -5314,8 +5314,8 @@ def render_combined_seasons_content():
             display_tbl = df_comb_timeline[
                 [
                     "Date_Str",
-                    "Phase",
-                    "Session",
+                    "Season",
+                    "Type",
                     "Team Volume Score",
                     "Team Intensity Score",
                     "Team Combined Score",
