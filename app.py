@@ -5311,53 +5311,54 @@ def render_combined_seasons_content():
 
         # 3. Data Table
         with st.expander("View Daily Session & Score Breakdown Table", expanded=False):
-            display_tbl = df_comb_timeline[
-                [
-                    "Date_Str",
-                    "Season",
-                    "Type",
-                    "Team Volume Score",
-                    "Team Intensity Score",
-                    "Team Combined Score",
-                ]
-            ].rename(
-                columns={
-                    "Date_Str": "Date",
-                    "Phase": "Phase",
-                    "Session": "Session / Type",
-                    "Team Volume Score": "Volume Avg",
-                    "Team Intensity Score": "Intensity Avg",
-                    "Team Combined Score": "Combined Avg",
-                }
-            )
+            display_tbl = df_comb_timeline[[
+            "Date_Str",
+            "Phase",
+            "Session",
+            "Team Volume Score",
+            "Team Intensity Score",
+            "Team Combined Score",
+        ]].rename(
+            columns={
+                "Date_Str": "Date",
+                "Phase": "Phase",
+                "Session": "Session / Type",
+                "Team Volume Score": "Volume Avg",
+                "Team Intensity Score": "Intensity Avg",
+                "Team Combined Score": "Combined Avg",
+            }
+        )
 
-            html = '<table class="vball-table"><thead><tr>'
+        html = '<table class="vball-table"><thead><tr>'
+        for col in display_tbl.columns:
+            html += f"<th>{col}</th>"
+        html += "</tr></thead><tbody>"
+
+        for _, row in display_tbl.iterrows():
+            html += "<tr>"
             for col in display_tbl.columns:
-                html += f"<th>{col}</th>"
-            html += "</tr></thead><tbody>"
+                val = row[col]
+                if col in ["Volume Avg", "Intensity Avg", "Combined Avg"]:
+                    bg_c, fg_c = get_vball_color(val)
+                    html += (
+                        f'<td><span class="grade-badge" '
+                        f'style="background-color:{bg_c}; color:{fg_c}; font-weight:800; padding:2px 10px; border-radius:6px;">'
+                        f"{val:.1f}</span></td>"
+                    )
+                elif col == "Session / Type":
+                    if "scrimmage" in str(val).lower():
+                        badge_color = "#E11D48"
+                    else:
+                        badge_color = marker_color_map.get(val, "#FF8200")
+                    
+                    txt_color = "#FFFFFF" if val == "SEC Game" else ("#0F172A" if val == "Non-Conference Game" else "#FFFFFF")
+                    html += f'<td><span style="background-color:{badge_color}; color:{txt_color}; font-weight:700; padding:2px 8px; border-radius:4px; font-size:0.75rem;">{val}</span></td>'
+                else:
+                    html += f"<td>{val}</td>"
+            html += "</tr>"
+        html += "</tbody></table>"
 
-            for _, row in display_tbl.iterrows():
-                html += "<tr>"
-                for col in display_tbl.columns:
-                    val = row[col]
-                    if col in ["Volume Avg", "Intensity Avg", "Combined Avg"]:
-                        bg_c, fg_c = get_vball_color(val)
-                        html += (
-                            f'<td><span class="grade-badge" '
-                            f'style="background-color:{bg_c}; color:{fg_c}; font-weight:800; padding:2px 10px; border-radius:6px;">'
-                            f"{val:.1f}</span></td>"
-                        )
-                    elif col == "Session / Type":
-                        # Check dynamically for the table badge
-                        if "scrimmage" in str(val).lower():
-                            badge_color = "#E11D48"
-                        else:
-                            badge_color = marker_color_map.get(val, "#FF8200")
-                            
-                        txt_color = "#FFFFFF" if val == "SEC Game" else ("#0F172A" if val == "Non-Conference Game" else "#FFFFFF")
-                        html += f'<td><span style="background-color:{badge_color}; color:{txt_color}; font-weight:700; padding:2px 8px; border-radius:4px; font-size:0.75rem;">{val}</span></td>'
-
-            st.markdown(html, unsafe_allow_html=True)
+        st.markdown(html, unsafe_allow_html=True)
     else:
         st.info("No combined practice or game data points calculated.")
         
