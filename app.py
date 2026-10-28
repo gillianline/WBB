@@ -5181,8 +5181,9 @@ def render_combined_seasons_content():
             "Practice": "#FF8200",
             "Conditioning": "#38BDF8",
             "Skill": "#8B5CF6",
-            "Shootaround": "#10B981",
-            "Scrimmage": "#E11D48", 
+            "Shoot Around": "#10B981",  
+            "Scrimmage": "#E11D48",
+            "Open Gym": "#FBBF24",    
         }
         
         def create_custom_timeline_chart(metric_col, title_label, show_text=True):
