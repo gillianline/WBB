@@ -5335,8 +5335,12 @@ def render_combined_seasons_content():
             html += f"<th>{col}</th>"
         html += "</tr></thead><tbody>"
 
-        for _, row in display_tbl.iterrows():
+        for idx, row in display_tbl.iterrows():
             html += "<tr>"
+            
+            # Fetch the underlying type (e.g. "SEC Game" or "Non-Conference Game") to determine the color
+            event_type = df_comb_timeline.loc[idx, "Type"]
+            
             for col in display_tbl.columns:
                 val = row[col]
                 if col in ["Volume Avg", "Intensity Avg", "Combined Avg"]:
@@ -5347,17 +5351,20 @@ def render_combined_seasons_content():
                         f"{val:.1f}</span></td>"
                     )
                 elif col == "Session / Type":
-                    if "scrimmage" in str(val).lower():
+                    # Determine the color based on the event_type, not the specific name of the session
+                    if "scrimmage" in str(event_type).lower():
                         badge_color = "#E11D48"
                     else:
-                        badge_color = marker_color_map.get(val, "#FF8200")
+                        badge_color = marker_color_map.get(event_type, "#FF8200")
                     
-                    txt_color = "#FFFFFF" if val == "SEC Game" else ("#0F172A" if val == "Non-Conference Game" else "#FFFFFF")
+                    txt_color = "#FFFFFF" if event_type == "SEC Game" else ("#0F172A" if event_type == "Non-Conference Game" else "#FFFFFF")
+                    
                     html += f'<td><span style="background-color:{badge_color}; color:{txt_color}; font-weight:700; padding:2px 8px; border-radius:4px; font-size:0.75rem;">{val}</span></td>'
                 else:
                     html += f"<td>{val}</td>"
             html += "</tr>"
         html += "</tbody></table>"
+        
 
         st.markdown(html, unsafe_allow_html=True)
     else:
