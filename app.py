@@ -5006,32 +5006,16 @@ def render_combined_seasons_content():
         unsafe_allow_html=True,
     )
 
-    st.markdown(
-        '<div class="vball-section-title">Team Daily Practice & Game Trends (Summer vs. Pre-Season vs. In-Season)</div>',
-        unsafe_allow_html=True,
-    )
-
     if vol_raw.empty or int_raw.empty:
-        st.info("No practice session data available to calculate team practice scores.")
+        st.info("No practice session data available to calculate practice scores.")
         return
 
     # Check for multi-session support column
     if "Session_Label" not in vol_raw.columns:
         vol_raw["Session_Label"] = "Practice"
 
-    # Select display mode: show each distinct session or merge into a single daily combined load
-    c_toggle, _ = st.columns([2.5, 2.5])
-    with c_toggle:
-        view_mode = st.radio(
-            "Multi-Session Display Mode:",
-            options=["Show Individual Sessions", "Show Combined Daily Total"],
-            horizontal=True,
-            key="combined_seasons_view_mode",
-        )
-
     in_season_cutoff = pd.to_datetime("2026-09-21")
     season_col = next((c for c in vol_raw.columns if c.lower() in ["season", "phase"]), None)
-    type_col = next((c for c in vol_raw.columns if "type" in c.lower()), None)
     opp_col = next((c for c in vol_raw.columns if any(k in c.lower() for k in ["opponent", "conf", "game_type", "sec"])), None)
 
     sec_teams = [
@@ -5041,159 +5025,167 @@ def render_combined_seasons_content():
         "vanderbilt", "vandy", "texas", "oklahoma"
     ]
 
-    daily_team_scores = []
+    marker_color_map = {
+        "SEC Game": "#000000",
+        "Non-Conference Game": "#94A3B8",
+        "Practice": "#FF8200",
+        "Conditioning": "#38BDF8",
+        "Skill": "#8B5CF6",
+        "Shoot Around": "#10B981",  
+        "Scrimmage": "#E11D48",
+        "Open Gym": "#FBBF24",    
+    }
 
-    if view_mode == "Show Individual Sessions":
-        # Group by Date and specific Session_Label so both morning and afternoon show as separate points
-        sessions_df = (
-            vol_raw[["Date", "Date_Str", "Session_Label", "Player"]]
-            .dropna(subset=["Date", "Date_Str", "Session_Label"])
-            .drop_duplicates()
-        )
+    # Reusable helper to compute timeline dataframe (for either Team Avg or a Single Athlete)
+    def build_timeline_df(view_mode, target_player=None):
+        daily_scores = []
+        v_subset = vol_raw[vol_raw["Player"] == target_player].copy() if target_player else vol_raw.copy()
 
-        for (d_str, dt, s_label), group in sessions_df.groupby(["Date_Str", "Date", "Session_Label"]):
-            players = group["Player"].unique()
-            day_vol_scores, day_int_scores, day_combined_scores = [], [], []
+        if v_subset.empty:
+            return pd.DataFrame()
 
-            for p in players:
-                _, _, vol_sc, int_sc, comb_sc, *_ = compute_practice_tables(
-                    p, d_str, vol_raw, int_raw, session_select=s_label
-                )
-                if vol_sc == 0 and int_sc == 0 and comb_sc == 0:
-                    continue
-                day_vol_scores.append(vol_sc)
-                day_int_scores.append(int_sc)
-                day_combined_scores.append(comb_sc)
+        if view_mode == "Show Individual Sessions":
+            sessions_df = (
+                v_subset[["Date", "Date_Str", "Session_Label", "Player"]]
+                .dropna(subset=["Date", "Date_Str", "Session_Label"])
+                .drop_duplicates()
+            )
 
-            if day_combined_scores:
-                avg_vol = round(float(np.mean(day_vol_scores)), 1)
-                avg_int = round(float(np.mean(day_int_scores)), 1)
-                avg_comb = round(float(np.mean(day_combined_scores)), 1)
+            for (d_str, dt, s_label), group in sessions_df.groupby(["Date_Str", "Date", "Session_Label"]):
+                players = [target_player] if target_player else group["Player"].unique()
+                day_vol_scores, day_int_scores, day_combined_scores = [], [], []
 
-                # Resolve Phase
-                if dt >= in_season_cutoff:
-                    phase = "In-Season"
-                else:
-                    phase = "Summer"
-                    if season_col and season_col in vol_raw.columns:
-                        phase_vals = vol_raw[vol_raw["Date_Str"] == d_str][season_col].dropna().values
-                        if len(phase_vals) > 0:
-                            raw_p = str(phase_vals[0]).lower().replace("-", "").replace(" ", "").replace("_", "")
-                            if "in" in raw_p:
-                                phase = "In-Season"
-                            elif "pre" in raw_p:
-                                phase = "Pre-Season"
+                for p in players:
+                    _, _, vol_sc, int_sc, comb_sc, *_ = compute_practice_tables(
+                        p, d_str, vol_raw, int_raw, session_select=s_label
+                    )
+                    if vol_sc == 0 and int_sc == 0 and comb_sc == 0:
+                        continue
+                    day_vol_scores.append(vol_sc)
+                    day_int_scores.append(int_sc)
+                    day_combined_scores.append(comb_sc)
 
-                # Resolve Session Event Type
-                sess_type = s_label
-                day_records = vol_raw[(vol_raw["Date_Str"] == d_str) & (vol_raw["Session_Label"] == s_label)]
-                combined_context = (s_label + " " + " ".join(day_records[opp_col].dropna().astype(str).tolist())).lower() if opp_col and opp_col in day_records.columns else s_label.lower()
+                if day_combined_scores:
+                    avg_vol = round(float(np.mean(day_vol_scores)), 1)
+                    avg_int = round(float(np.mean(day_int_scores)), 1)
+                    avg_comb = round(float(np.mean(day_combined_scores)), 1)
 
-                if "game" in combined_context or "match" in combined_context:
-                    sess_type = "SEC Game" if any(k in combined_context for k in sec_teams) else "Non-Conference Game"
-                elif "scrimmage" in combined_context:
-                    sess_type = "Scrimmage"
-                    
-                daily_team_scores.append({
-                    "Date": dt,
-                    "Date_Str": format_date_clean(d_str),
-                    "Phase": phase,
-                    "Type": sess_type,
-                    "Session": s_label,
-                    "Team Volume Score": avg_vol,
-                    "Team Intensity Score": avg_int,
-                    "Team Combined Score": avg_comb,
-                })
+                    if dt >= in_season_cutoff:
+                        phase = "In-Season"
+                    else:
+                        phase = "Summer"
+                        if season_col and season_col in vol_raw.columns:
+                            phase_vals = vol_raw[vol_raw["Date_Str"] == d_str][season_col].dropna().values
+                            if len(phase_vals) > 0:
+                                raw_p = str(phase_vals[0]).lower().replace("-", "").replace(" ", "").replace("_", "")
+                                if "in" in raw_p:
+                                    phase = "In-Season"
+                                elif "pre" in raw_p:
+                                    phase = "Pre-Season"
 
-    else:
-        # Group purely by Date and aggregate all sessions combined
-        combined_dates_df = (
-            vol_raw[["Date", "Date_Str", "Player"]]
-            .dropna(subset=["Date", "Date_Str"])
-            .drop_duplicates()
-        )
+                    sess_type = s_label
+                    day_records = vol_raw[(vol_raw["Date_Str"] == d_str) & (vol_raw["Session_Label"] == s_label)]
+                    combined_context = (s_label + " " + " ".join(day_records[opp_col].dropna().astype(str).tolist())).lower() if opp_col and opp_col in day_records.columns else s_label.lower()
 
-        for (d_str, dt), group in combined_dates_df.groupby(["Date_Str", "Date"]):
-            players = group["Player"].unique()
-            day_vol_scores, day_int_scores, day_combined_scores = [], [], []
+                    if "game" in combined_context or "match" in combined_context:
+                        sess_type = "SEC Game" if any(k in combined_context for k in sec_teams) else "Non-Conference Game"
+                    elif "scrimmage" in combined_context:
+                        sess_type = "Scrimmage"
+                        
+                    daily_scores.append({
+                        "Date": dt,
+                        "Date_Str": format_date_clean(d_str),
+                        "Phase": phase,
+                        "Type": sess_type,
+                        "Session": s_label,
+                        "Volume Score": avg_vol,
+                        "Intensity Score": avg_int,
+                        "Combined Score": avg_comb,
+                    })
+        else:
+            combined_dates_df = (
+                v_subset[["Date", "Date_Str", "Player"]]
+                .dropna(subset=["Date", "Date_Str"])
+                .drop_duplicates()
+            )
 
-            for p in players:
-                _, _, vol_sc, int_sc, comb_sc, *_ = compute_practice_tables(
-                    p, d_str, vol_raw, int_raw, session_select="Combined"
-                )
-                if vol_sc == 0 and int_sc == 0 and comb_sc == 0:
-                    continue
-                day_vol_scores.append(vol_sc)
-                day_int_scores.append(int_sc)
-                day_combined_scores.append(comb_sc)
+            for (d_str, dt), group in combined_dates_df.groupby(["Date_Str", "Date"]):
+                players = [target_player] if target_player else group["Player"].unique()
+                day_vol_scores, day_int_scores, day_combined_scores = [], [], []
 
-            if day_combined_scores:
-                avg_vol = round(float(np.mean(day_vol_scores)), 1)
-                avg_int = round(float(np.mean(day_int_scores)), 1)
-                avg_comb = round(float(np.mean(day_combined_scores)), 1)
+                for p in players:
+                    _, _, vol_sc, int_sc, comb_sc, *_ = compute_practice_tables(
+                        p, d_str, vol_raw, int_raw, session_select="Combined"
+                    )
+                    if vol_sc == 0 and int_sc == 0 and comb_sc == 0:
+                        continue
+                    day_vol_scores.append(vol_sc)
+                    day_int_scores.append(int_sc)
+                    day_combined_scores.append(comb_sc)
 
-                if dt >= in_season_cutoff:
-                    phase = "In-Season"
-                else:
-                    phase = "Summer"
-                    if season_col and season_col in vol_raw.columns:
-                        phase_vals = vol_raw[vol_raw["Date_Str"] == d_str][season_col].dropna().values
-                        if len(phase_vals) > 0:
-                            raw_p = str(phase_vals[0]).lower().replace("-", "").replace(" ", "").replace("_", "")
-                            if "in" in raw_p:
-                                phase = "In-Season"
-                            elif "pre" in raw_p:
-                                phase = "Pre-Season"
+                if day_combined_scores:
+                    avg_vol = round(float(np.mean(day_vol_scores)), 1)
+                    avg_int = round(float(np.mean(day_int_scores)), 1)
+                    avg_comb = round(float(np.mean(day_combined_scores)), 1)
 
-                day_records = vol_raw[vol_raw["Date_Str"] == d_str]
-                type_col_check = "Base_Type" if "Base_Type" in day_records.columns else "Session_Label"
-                all_s_types = [str(x).strip() for x in day_records[type_col_check].dropna().unique() if str(x).strip() != ""]
-                s_types_lower = [s.lower() for s in all_s_types]
+                    if dt >= in_season_cutoff:
+                        phase = "In-Season"
+                    else:
+                        phase = "Summer"
+                        if season_col and season_col in vol_raw.columns:
+                            phase_vals = vol_raw[vol_raw["Date_Str"] == d_str][season_col].dropna().values
+                            if len(phase_vals) > 0:
+                                raw_p = str(phase_vals[0]).lower().replace("-", "").replace(" ", "").replace("_", "")
+                                if "in" in raw_p:
+                                    phase = "In-Season"
+                                elif "pre" in raw_p:
+                                    phase = "Pre-Season"
 
-                if any("scrimmage" in s for s in s_types_lower):
-                    sess_type = "Scrimmage"
-                elif "skill" in s_types_lower and "practice" in s_types_lower:
-                    sess_type = "Skill + Practice"
-                elif len(all_s_types) > 1:
-                    sess_type = " + ".join(dict.fromkeys(all_s_types))
-                elif len(all_s_types) == 1:
-                    sess_type = all_s_types[0]
-                else:
-                    sess_type = "Skill + Practice"
+                    day_records = v_subset[v_subset["Date_Str"] == d_str]
+                    type_col_check = "Base_Type" if "Base_Type" in day_records.columns else "Session_Label"
+                    all_s_types = [str(x).strip() for x in day_records[type_col_check].dropna().unique() if str(x).strip() != ""]
+                    s_types_lower = [s.lower() for s in all_s_types]
 
-                daily_team_scores.append({
-                    "Date": dt,
-                    "Date_Str": format_date_clean(d_str),
-                    "Phase": phase,
-                    "Type": sess_type,
-                    "Session": sess_type,
-                    "Team Volume Score": avg_vol,
-                    "Team Intensity Score": avg_int,
-                    "Team Combined Score": avg_comb,
-                })
+                    if any("scrimmage" in s for s in s_types_lower):
+                        sess_type = "Scrimmage"
+                    elif "skill" in s_types_lower and "practice" in s_types_lower:
+                        sess_type = "Skill + Practice"
+                    elif len(all_s_types) > 1:
+                        sess_type = " + ".join(dict.fromkeys(all_s_types))
+                    elif len(all_s_types) == 1:
+                        sess_type = all_s_types[0]
+                    else:
+                        sess_type = "Skill + Practice"
 
-    df_comb_timeline = pd.DataFrame(daily_team_scores).sort_values("Date")
+                    daily_scores.append({
+                        "Date": dt,
+                        "Date_Str": format_date_clean(d_str),
+                        "Phase": phase,
+                        "Type": sess_type,
+                        "Session": sess_type,
+                        "Volume Score": avg_vol,
+                        "Intensity Score": avg_int,
+                        "Combined Score": avg_comb,
+                    })
 
-    if not df_comb_timeline.empty:
-        marker_color_map = {
-            "SEC Game": "#000000",
-            "Non-Conference Game": "#94A3B8",
-            "Practice": "#FF8200",
-            "Conditioning": "#38BDF8",
-            "Skill": "#8B5CF6",
-            "Shoot Around": "#10B981",  
-            "Scrimmage": "#E11D48",
-            "Open Gym": "#FBBF24",    
-        }
-        
+        if not daily_scores:
+            return pd.DataFrame()
+        return pd.DataFrame(daily_scores).sort_values("Date")
+
+    # Reusable helper to render the 3 color-coded charts and expandable HTML table
+    def render_timeline_and_table(df_timeline, chart_prefix, chart_key_suffix):
+        if df_timeline.empty:
+            st.info("No combined practice or game data points calculated.")
+            return
+
         def create_custom_timeline_chart(metric_col, title_label, show_text=True):
             fig = go.Figure()
 
             # Baseline line trace connecting chronology
             fig.add_trace(
                 go.Scatter(
-                    x=df_comb_timeline["Date"],
-                    y=df_comb_timeline[metric_col],
+                    x=df_timeline["Date"],
+                    y=df_timeline[metric_col],
                     mode="lines",
                     line=dict(color="#94A3B8", width=2),
                     showlegend=False,
@@ -5202,12 +5194,11 @@ def render_combined_seasons_content():
             )
 
             # Scatter markers by Session / Type
-            for type_name in df_comb_timeline["Type"].unique():
-                t_group = df_comb_timeline[df_comb_timeline["Type"] == type_name]
+            for type_name in df_timeline["Type"].unique():
+                t_group = df_timeline[df_timeline["Type"] == type_name]
                 
-                # Check dynamically so custom names like "Scrimmage v. Wake Forest" work
                 if "scrimmage" in str(type_name).lower():
-                    pt_color = "#E11D48"  # Distinct Crimson/Rose color for scrimmage
+                    pt_color = "#E11D48"
                 else:
                     pt_color = marker_color_map.get(type_name, "#FF8200")
                     
@@ -5284,11 +5275,11 @@ def render_combined_seasons_content():
 
         # 1. Main Combined Score Graph
         fig_combined = create_custom_timeline_chart(
-            "Team Combined Score",
-            "Team Average Combined Score across Sessions",
+            "Combined Score",
+            f"{chart_prefix} Combined Score across Sessions",
             show_text=True,
         )
-        st.plotly_chart(fig_combined, use_container_width=True, key="comb_chart_combined")
+        st.plotly_chart(fig_combined, use_container_width=True, key=f"comb_chart_combined_{chart_key_suffix}")
 
         st.markdown("<br>", unsafe_allow_html=True)
 
@@ -5296,79 +5287,158 @@ def render_combined_seasons_content():
         col_v_g, col_i_g = st.columns(2)
         with col_v_g:
             fig_vol = create_custom_timeline_chart(
-                "Team Volume Score",
-                "Team Volume Score Breakdown",
+                "Volume Score",
+                f"{chart_prefix} Volume Score Breakdown",
                 show_text=False,
             )
-            st.plotly_chart(fig_vol, use_container_width=True, key="comb_chart_vol")
+            st.plotly_chart(fig_vol, use_container_width=True, key=f"comb_chart_vol_{chart_key_suffix}")
 
         with col_i_g:
             fig_int = create_custom_timeline_chart(
-                "Team Intensity Score",
-                "Team Intensity Score Breakdown",
+                "Intensity Score",
+                f"{chart_prefix} Intensity Score Breakdown",
                 show_text=False,
             )
-            st.plotly_chart(fig_int, use_container_width=True, key="comb_chart_int")
+            st.plotly_chart(fig_int, use_container_width=True, key=f"comb_chart_int_{chart_key_suffix}")
 
-        # 3. Data Table
+        # 3. Color-Coded Data Table
         with st.expander("View Daily Session & Score Breakdown Table", expanded=False):
-            display_tbl = df_comb_timeline[[
-            "Date_Str",
-            "Phase",
-            "Session",
-            "Team Volume Score",
-            "Team Intensity Score",
-            "Team Combined Score",
-        ]].rename(
-            columns={
-                "Date_Str": "Date",
-                "Phase": "Phase",
-                "Session": "Session / Type",
-                "Team Volume Score": "Volume Avg",
-                "Team Intensity Score": "Intensity Avg",
-                "Team Combined Score": "Combined Avg",
-            }
+            score_labels = (
+                ("Volume Avg", "Intensity Avg", "Combined Avg")
+                if chart_prefix == "Team Average"
+                else ("Volume Score", "Intensity Score", "Combined Score")
+            )
+            display_tbl = df_timeline[[
+                "Date_Str",
+                "Phase",
+                "Session",
+                "Volume Score",
+                "Intensity Score",
+                "Combined Score",
+            ]].rename(
+                columns={
+                    "Date_Str": "Date",
+                    "Phase": "Phase",
+                    "Session": "Session / Type",
+                    "Volume Score": score_labels[0],
+                    "Intensity Score": score_labels[1],
+                    "Combined Score": score_labels[2],
+                }
+            )
+
+            html = '<table class="vball-table"><thead><tr>'
+            for col in display_tbl.columns:
+                html += f"<th>{col}</th>"
+            html += "</tr></thead><tbody>"
+
+            for idx, row in display_tbl.iterrows():
+                html += "<tr>"
+                event_type = df_timeline.loc[idx, "Type"]
+
+                for col in display_tbl.columns:
+                    val = row[col]
+                    if col in score_labels:
+                        bg_c, fg_c = get_vball_color(val)
+                        html += (
+                            f'<td><span class="grade-badge" '
+                            f'style="background-color:{bg_c}; color:{fg_c}; font-weight:800; padding:2px 10px; border-radius:6px;">'
+                            f"{val:.1f}</span></td>"
+                        )
+                    elif col == "Session / Type":
+                        if "scrimmage" in str(event_type).lower():
+                            badge_color = "#E11D48"
+                        else:
+                            badge_color = marker_color_map.get(event_type, "#FF8200")
+
+                        txt_color = "#FFFFFF" if event_type == "SEC Game" else ("#0F172A" if event_type == "Non-Conference Game" else "#FFFFFF")
+                        html += f'<td><span style="background-color:{badge_color}; color:{txt_color}; font-weight:700; padding:2px 8px; border-radius:4px; font-size:0.75rem;">{val}</span></td>'
+                    else:
+                        html += f"<td>{val}</td>"
+                html += "</tr>"
+            html += "</tbody></table>"
+
+            st.markdown(html, unsafe_allow_html=True)
+
+    # -------------------------------------------------------------------------
+    # SUB-TABS: TEAM OVERVIEW vs. INDIVIDUAL PROFILE
+    # -------------------------------------------------------------------------
+    comb_tab_team, comb_tab_ind = st.tabs(["Team Overview", "Individual Profile"])
+
+    # TAB A: TEAM OVERVIEW
+    with comb_tab_team:
+        st.markdown(
+            '<div class="vball-section-title">Team Daily Practice & Game Trends (Summer vs. Pre-Season vs. In-Season)</div>',
+            unsafe_allow_html=True,
         )
 
-        html = '<table class="vball-table"><thead><tr>'
-        for col in display_tbl.columns:
-            html += f"<th>{col}</th>"
-        html += "</tr></thead><tbody>"
+        c_toggle_team, _ = st.columns([2.5, 2.5])
+        with c_toggle_team:
+            team_view_mode = st.radio(
+                "Multi-Session Display Mode:",
+                options=["Show Individual Sessions", "Show Combined Daily Total"],
+                horizontal=True,
+                key="combined_seasons_view_mode_team",
+            )
 
-        for idx, row in display_tbl.iterrows():
-            html += "<tr>"
-            
-            # Fetch the underlying type (e.g. "SEC Game" or "Non-Conference Game") to determine the color
-            event_type = df_comb_timeline.loc[idx, "Type"]
-            
-            for col in display_tbl.columns:
-                val = row[col]
-                if col in ["Volume Avg", "Intensity Avg", "Combined Avg"]:
-                    bg_c, fg_c = get_vball_color(val)
-                    html += (
-                        f'<td><span class="grade-badge" '
-                        f'style="background-color:{bg_c}; color:{fg_c}; font-weight:800; padding:2px 10px; border-radius:6px;">'
-                        f"{val:.1f}</span></td>"
-                    )
-                elif col == "Session / Type":
-                    # Determine the color based on the event_type, not the specific name of the session
-                    if "scrimmage" in str(event_type).lower():
-                        badge_color = "#E11D48"
-                    else:
-                        badge_color = marker_color_map.get(event_type, "#FF8200")
-                    
-                    txt_color = "#FFFFFF" if event_type == "SEC Game" else ("#0F172A" if event_type == "Non-Conference Game" else "#FFFFFF")
-                    
-                    html += f'<td><span style="background-color:{badge_color}; color:{txt_color}; font-weight:700; padding:2px 8px; border-radius:4px; font-size:0.75rem;">{val}</span></td>'
-                else:
-                    html += f"<td>{val}</td>"
-            html += "</tr>"
-        html += "</tbody></table>"
-        
+        df_team_timeline = build_timeline_df(team_view_mode, target_player=None)
+        render_timeline_and_table(df_team_timeline, chart_prefix="Team Average", chart_key_suffix="team")
 
-        st.markdown(html, unsafe_allow_html=True)
-    else:
-        st.info("No combined practice or game data points calculated.")
+    # TAB B: INDIVIDUAL PROFILE
+    with comb_tab_ind:
+        st.markdown(
+            '<div class="vball-section-title">Individual Athlete Daily Practice & Game Trends (Summer vs. Pre-Season vs. In-Season)</div>',
+            unsafe_allow_html=True,
+        )
+
+        roster_players_comb = (
+            roster_raw["Name"].tolist()
+            if not roster_raw.empty and "Name" in roster_raw.columns
+            else sorted(vol_raw["Player"].dropna().unique().tolist())
+        )
+
+        c_ind_sel, c_toggle_ind = st.columns([2, 2.5])
+        with c_ind_sel:
+            sel_comb_player = st.selectbox(
+                "Select Athlete:",
+                options=roster_players_comb,
+                key="combined_seasons_ind_player_select",
+            )
+        with c_toggle_ind:
+            ind_view_mode = st.radio(
+                "Multi-Session Display Mode:",
+                options=["Show Individual Sessions", "Show Combined Daily Total"],
+                horizontal=True,
+                key="combined_seasons_view_mode_ind",
+            )
+
+        # Render Athlete Header Card
+        p_row = (
+            roster_raw[roster_raw["Name"] == sel_comb_player]
+            if not roster_raw.empty and "Name" in roster_raw.columns
+            else pd.DataFrame()
+        )
+        p_pos = p_row["Position"].values[0] if not p_row.empty and "Position" in p_row.columns else "Guard / Forward | #00"
+        p_img = p_row["Picture"].values[0] if not p_row.empty and "Picture" in p_row.columns else "https://via.placeholder.com/80"
+
+        st.markdown(
+            f"""
+            <div class="athlete-card">
+                <img src="{p_img}" class="athlete-avatar">
+                <div class="athlete-info">
+                    <h2 style="margin:0; font-size:1.4rem; font-weight:700; color:#0F172A;">{sel_comb_player}</h2>
+                    <p style="margin:2px 0 0 0; color:#64748B; font-size:0.88rem;">{p_pos}</p>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        df_ind_timeline = build_timeline_df(ind_view_mode, target_player=sel_comb_player)
+        render_timeline_and_table(
+            df_ind_timeline,
+            chart_prefix=f"{sel_comb_player}",
+            chart_key_suffix=f"ind_{sel_comb_player.replace(' ', '_')}",
+        )
         
 # -----------------------------------------------------------------------------
 # 9. TEAM WELLNESS ENGINE
