@@ -1259,6 +1259,61 @@ def resolve_col_val(row, primary_col, alt_cols=[]):
             if (pd.notna(row[matched_key]) and str(row[matched_key]).strip() != ""):
                 return row[matched_key]
     return None
+
+def extract_joint_subtests(df_sub, joint_type="ankle"):
+    """
+    Splits ankle_data or hip_data into sub-tests based on Direction/Test columns
+    and returns a list of (display_label, filtered_df) tuples that actually contain data.
+    """
+    if df_sub.empty:
+        return []
+
+    dir_col = next((c for c in df_sub.columns if "direction" in c.lower() or "test" in c.lower()), None)
+    results = []
+
+    if joint_type == "ankle":
+        if dir_col:
+            s = df_sub[dir_col].astype(str)
+            pf_df = df_sub[s.str.contains(r"plantar|pf", case=False, na=False)]
+            inv_df = df_sub[s.str.contains(r"inversion|\binv\b", case=False, na=False)]
+            ev_df = df_sub[s.str.contains(r"eversion|\bev\b", case=False, na=False)]
+
+            if not pf_df.empty:
+                results.append(("Ankle Plantar Flexion", pf_df))
+            if not inv_df.empty:
+                results.append(("Ankle Inversion", inv_df))
+            if not ev_df.empty:
+                results.append(("Ankle Eversion", ev_df))
+
+            # Fallback if existing rows didn't have a specific movement label
+            if not results:
+                results.append(("Ankle Plantar Flexion", df_sub))
+        else:
+            results.append(("Ankle Plantar Flexion", df_sub))
+
+    elif joint_type == "hip":
+        if dir_col:
+            s = df_sub[dir_col].astype(str)
+            ad_df = df_sub[s.str.contains(r"\bad\b|adduction", case=False, na=False)]
+            ab_df = df_sub[s.str.contains(r"\bab\b|abduction", case=False, na=False)]
+            ir_df = df_sub[s.str.contains(r"internal|\bir\b", case=False, na=False)]
+            er_df = df_sub[s.str.contains(r"external|\ber\b", case=False, na=False)]
+
+            if not ad_df.empty:
+                results.append(("Hip Adduction", ad_df))
+            if not ab_df.empty:
+                results.append(("Hip Abduction", ab_df))
+            if not ir_df.empty:
+                results.append(("Hip Internal Rotation", ir_df))
+            if not er_df.empty:
+                results.append(("Hip External Rotation", er_df))
+
+            if not results:
+                results.append(("Hip Adduction", df_sub))
+        else:
+            results.append(("Hip Adduction", df_sub))
+
+    return results
     
 # -----------------------------------------------------------------------------
 # 5. SIDEBAR NAVIGATION (DYNAMIC ROLES)
@@ -2214,21 +2269,20 @@ def render_dashboard_content(season_label, season_key):
             if val:
                 ind_records.append({"Assessment": "Knee Flexion (L/R)", "Peak Value": val, "Date": dt})
 
-        # 2. Hip
+        # 2. Hip (Adduction, Abduction, Internal Rotation, External Rotation)
         p_hip_ind = hip_data[hip_data["Name"] == selected_player].copy() if not hip_data.empty and "Name" in hip_data.columns else pd.DataFrame()
-        if not p_hip_ind.empty:
-            dir_col = next((c for c in p_hip_ind.columns if "direction" in c.lower() or "test" in c.lower()), None)
-            ad_df = p_hip_ind[p_hip_ind[dir_col].astype(str).str.contains("AD|Adduction", case=False, na=False)] if dir_col else p_hip_ind
-            ab_df = p_hip_ind[p_hip_ind[dir_col].astype(str).str.contains("AB|Abduction", case=False, na=False)] if dir_col else pd.DataFrame()
-
-            val, dt = get_formatted_peak(ad_df)
+        for hip_lbl, sub_df in extract_joint_subtests(p_hip_ind, joint_type="hip"):
+            val, dt = get_formatted_peak(sub_df)
             if val:
-                ind_records.append({"Assessment": "Hip Adduction (L/R)", "Peak Value": val, "Date": dt})
+                ind_records.append({"Assessment": f"{hip_lbl} (L/R)", "Peak Value": val, "Date": dt})
 
-            val, dt = get_formatted_peak(ab_df)
+        # 5. Ankle (Plantar Flexion, Inversion, Eversion)
+        p_ank_ind = ankle_data[ankle_data["Name"] == selected_player].copy() if not ankle_data.empty and "Name" in ankle_data.columns else pd.DataFrame()
+        for ank_lbl, sub_df in extract_joint_subtests(p_ank_ind, joint_type="ankle"):
+            val, dt = get_formatted_peak(sub_df)
             if val:
-                ind_records.append({"Assessment": "Hip Abduction (L/R)", "Peak Value": val, "Date": dt})
-
+                ind_records.append({"Assessment": f"{ank_lbl} (L/R)", "Peak Value": val, "Date": dt})
+                
         # 3. NordBord
         p_nord_ind = nordic_data[nordic_data["Name"] == selected_player].copy() if not nordic_data.empty and "Name" in nordic_data.columns else pd.DataFrame()
         if not p_nord_ind.empty:
@@ -3165,50 +3219,68 @@ def render_dashboard_content(season_label, season_key):
                     if not hip_ath.empty:
                         l_col = next((c for c in hip_ath.columns if "l max force" in c.lower() or "left max" in c.lower()), None)
                         r_col = next((c for c in hip_ath.columns if "r max force" in c.lower() or "right max" in c.lower()), None)
-                        dir_col = next((c for c in hip_ath.columns if "direction" in c.lower() or "test" in c.lower()), None)
-                        hip_ad = hip_ath[hip_ath[dir_col].astype(str).str.contains("AD|Adduction", case=False, na=False)] if dir_col else hip_ath
-                        hip_ab = hip_ath[hip_ath[dir_col].astype(str).str.contains("AB|Abduction", case=False, na=False)] if dir_col else hip_ath
+                        hip_subtests = extract_joint_subtests(hip_ath, joint_type="hip")
+                        date_str = format_date_clean(hip_ath.sort_values("Date").iloc[-1].get("Date"))
 
-                        (ad_maxL, ad_maxR), (ad_recL, ad_recR), (ad_initL, ad_initR) = get_peak_and_recent_row(hip_ad, l_col, r_col)
-                        (ab_maxL, ab_maxR), (ab_recL, ab_recR), (ab_initL, ab_initR) = get_peak_and_recent_row(hip_ab, l_col, r_col)
-                        date_str = format_date_clean(hip_ath.sort_values("Date").iloc[-1].get("Date")) if not hip_ath.empty else "N/A"
+                        hip_lines_html = ""
+                        for hip_lbl, sub_df in hip_subtests:
+                            (h_maxL, h_maxR), (h_recL, h_recR), (h_initL, h_initR) = get_peak_and_recent_row(sub_df, l_col, r_col)
+                            if h_maxL > 0 or h_maxR > 0:
+                                short_lbl = hip_lbl.replace("Hip ", "")
+                                hip_lines_html += (
+                                    f"<b>{short_lbl}:</b> Max L {h_maxL:.1f}N | R {h_maxR:.1f}N &nbsp;→&nbsp; "
+                                    f"<b>Recent:</b> L {render_val_with_arrow(h_recL, h_initL, '{:.1f}', 'N')} | "
+                                    f"R {render_val_with_arrow(h_recR, h_initR, '{:.1f}', 'N')}<br>"
+                                )
 
-                        st.markdown(
-                            f"""
-                            <div class="hud-metric-row-light-blue">
-                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">2</span>HIP ADDUCTION & ABDUCTION</span>
-                                    <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
+                        if hip_lines_html:
+                            st.markdown(
+                                f"""
+                                <div class="hud-metric-row-light-blue">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                        <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">2</span>HIP STRENGTH & ROTATION</span>
+                                        <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
+                                    </div>
+                                    <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
+                                        {hip_lines_html}
+                                    </div>
                                 </div>
-                                <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
-                                    <b>Hip Adduction:</b> Max L {ad_maxL:.1f}N | R {ad_maxR:.1f}N &nbsp;→&nbsp; <b>Recent:</b> L {render_val_with_arrow(ad_recL, ad_initL, '{:.1f}', 'N')} | R {render_val_with_arrow(ad_recR, ad_initR, '{:.1f}', 'N')}<br>
-                                    <b>Hip Abduction:</b> Max L {ab_maxL:.1f}N | R {ab_maxR:.1f}N &nbsp;→&nbsp; <b>Recent:</b> L {render_val_with_arrow(ab_recR, ad_initR, '{:.1f}', 'N')} | R {render_val_with_arrow(ab_recR, ad_initR, '{:.1f}', 'N')}
-                                </div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
-                        )
+                                """,
+                                unsafe_allow_html=True,
+                            )
 
                     if not calf_ath.empty:
                         l_col = next((c for c in calf_ath.columns if "l max force" in c.lower() or "left max" in c.lower()), None)
                         r_col = next((c for c in calf_ath.columns if "r max force" in c.lower() or "right max" in c.lower()), None)
-                        (ank_maxL, ank_maxR), (ank_recL, ank_recR), (ank_initL, ank_initR) = get_peak_and_recent_row(calf_ath, l_col, r_col)
-                        date_str = format_date_clean(calf_ath.sort_values("Date").iloc[-1].get("Date")) if not calf_ath.empty else "N/A"
+                        ank_subtests = extract_joint_subtests(calf_ath, joint_type="ankle")
+                        date_str = format_date_clean(calf_ath.sort_values("Date").iloc[-1].get("Date"))
 
-                        st.markdown(
-                            f"""
-                            <div class="hud-metric-row-light-blue">
-                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                    <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">3</span>ANKLE PLANTAR FLEXION</span>
-                                    <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
+                        ank_lines_html = ""
+                        for ank_lbl, sub_df in ank_subtests:
+                            (a_maxL, a_maxR), (a_recL, a_recR), (a_initL, a_initR) = get_peak_and_recent_row(sub_df, l_col, r_col)
+                            if a_maxL > 0 or a_maxR > 0:
+                                short_lbl = ank_lbl.replace("Ankle ", "")
+                                ank_lines_html += (
+                                    f"<b>{short_lbl}:</b> Max L {a_maxL:.1f}N | R {a_maxR:.1f}N &nbsp;→&nbsp; "
+                                    f"<b>Recent:</b> L {render_val_with_arrow(a_recL, a_initL, '{:.1f}', 'N')} | "
+                                    f"R {render_val_with_arrow(a_recR, a_initR, '{:.1f}', 'N')}<br>"
+                                )
+
+                        if ank_lines_html:
+                            st.markdown(
+                                f"""
+                                <div class="hud-metric-row-light-blue">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                        <span style="font-weight:800; font-size:12px; color:#1D1D1F;"><span class="node-badge-blue">3</span>ANKLE PLANTAR FLEXION, INVERSION & EVERSION</span>
+                                        <span style="font-size:10px; color:#6E6E73; font-weight:600;">Latest: {date_str}</span>
+                                    </div>
+                                    <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
+                                        {ank_lines_html}
+                                    </div>
                                 </div>
-                                <div style="font-size:11px; line-height:1.4; color:#1D1D1F;">
-                                    <b>Max Force:</b> L {ank_maxL:.1f}N | R {ank_maxR:.1f}N &nbsp;→&nbsp; <b>Recent:</b> L {render_val_with_arrow(ank_recL, ank_initL, '{:.1f}', 'N')} | R {render_val_with_arrow(ank_recR, ank_initR, '{:.1f}', 'N')}
-                                </div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
-                        )
+                                """,
+                                unsafe_allow_html=True,
+                            )
 
                     if not nord_ath.empty:
                         l_col = next((c for c in nord_ath.columns if "l max force" in c.lower() or "left max" in c.lower()), None)
@@ -3284,16 +3356,22 @@ def render_dashboard_content(season_label, season_key):
                 else:
                     st.info(f"No Knee Assessment records for {selected_intake_athlete} in {season_label}.")
 
-            with st.expander("Hip Adduction / Abduction Log", expanded=False):
+            with st.expander("Hip Assessment Log (Adduction / Abduction / IR / ER)", expanded=False):
                 if not hip_ath.empty:
                     hip_display_df = hip_ath.copy()
                     dir_col = next((c for c in hip_display_df.columns if "direction" in c.lower() or "test" in c.lower()), None)
                     test_col = next((c for c in hip_display_df.columns if c.lower() == "test"), None)
 
+                    def map_hip_label(x):
+                        s = str(x)
+                        if re.search(r"internal|\bir\b", s, re.I): return "Hip Internal Rotation"
+                        if re.search(r"external|\ber\b", s, re.I): return "Hip External Rotation"
+                        if re.search(r"\bad\b|adduction", s, re.I): return "Hip Adduction"
+                        if re.search(r"\bab\b|abduction", s, re.I): return "Hip Abduction"
+                        return s
+
                     if dir_col:
-                        hip_display_df["Test"] = hip_display_df[dir_col].apply(
-                            lambda x: "Hip Adduction" if "AD" in str(x) or "Adduction" in str(x) else ("Hip Abduction" if "AB" in str(x) or "Abduction" in str(x) else str(x))
-                        )
+                        hip_display_df["Test"] = hip_display_df[dir_col].apply(map_hip_label)
                     
                     omit_cols = ["Name", "Date_Str"]
                     if dir_col and dir_col != "Test":
@@ -3315,7 +3393,7 @@ def render_dashboard_content(season_label, season_key):
                 else:
                     st.info(f"No Hip Assessment records for {selected_intake_athlete} in {season_label}.")
 
-            with st.expander("Ankle Plantar Flexion Log", expanded=False):
+            with st.expander("Ankle Assessment Log (Plantar Flexion / Inversion / Eversion)", expanded=False):
                 if not calf_ath.empty:
                     disp_ankle = [c for c in calf_ath.columns if c not in ["Name", "Date_Str"]]
                     st.markdown(render_vball_table(calf_ath[disp_ankle]), unsafe_allow_html=True)
@@ -4032,24 +4110,16 @@ def render_dashboard_content(season_label, season_key):
                     records.append({"Category": "Knee Flexion (L/R)", "Best Test Value": val, "Date Achieved": dt})
 
             p_hip_ov = hip_data[hip_data["Name"] == selected_ov_athlete].copy() if not hip_data.empty and "Name" in hip_data.columns else pd.DataFrame()
-            if not p_hip_ov.empty:
-                dir_col = next((c for c in p_hip_ov.columns if "direction" in c.lower() or "test" in c.lower()), None)
-                ad_df = p_hip_ov[p_hip_ov[dir_col].astype(str).str.contains("AD|Adduction", case=False, na=False)] if dir_col else p_hip_ov
-                ab_df = p_hip_ov[p_hip_ov[dir_col].astype(str).str.contains("AB|Abduction", case=False, na=False)] if dir_col else pd.DataFrame()
-
-                val, dt = get_formatted_peak_overall(ad_df)
+            for hip_lbl, sub_df in extract_joint_subtests(p_hip_ov, joint_type="hip"):
+                val, dt = get_formatted_peak_overall(sub_df)
                 if val:
-                    records.append({"Category": "Hip Adduction (L/R)", "Best Test Value": val, "Date Achieved": dt})
-
-                val, dt = get_formatted_peak_overall(ab_df)
-                if val:
-                    records.append({"Category": "Hip Abduction (L/R)", "Best Test Value": val, "Date Achieved": dt})
+                    records.append({"Category": f"{hip_lbl} (L/R)", "Best Test Value": val, "Date Achieved": dt})
 
             p_ank_ov = ankle_data[ankle_data["Name"] == selected_ov_athlete].copy() if not ankle_data.empty and "Name" in ankle_data.columns else pd.DataFrame()
-            if not p_ank_ov.empty:
-                val, dt = get_formatted_peak_overall(p_ank_ov)
+            for ank_lbl, sub_df in extract_joint_subtests(p_ank_ov, joint_type="ankle"):
+                val, dt = get_formatted_peak_overall(sub_df)
                 if val:
-                    records.append({"Category": "Ankle Plantar Flexion (L/R)", "Best Test Value": val, "Date Achieved": dt})
+                    records.append({"Category": f"{ank_lbl} (L/R)", "Best Test Value": val, "Date Achieved": dt})
 
             if records:
                 ov_df = pd.DataFrame(records)
