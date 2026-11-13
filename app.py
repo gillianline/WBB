@@ -3052,15 +3052,18 @@ def render_dashboard_content(season_label, season_key):
                     st.markdown(render_vball_table(pd.DataFrame(detail_rows)), unsafe_allow_html=True)
                     
         
-    # TAB 5: TESTING
+    # TAB 5: TESTING (ALL SEASONS)
     elif main_tab == "Testing":
         testing_tab_intake, testing_tab_cmj, testing_tab_asym, testing_tab_overall = st.tabs(
             ["Intake Assessment", "CMJ", "Asymmetry & Favoring", "Overall Profile"]
         )
 
+        # ---------------------------------------------------------------------
+        # 5A: INTAKE ASSESSMENT (ALL SEASONS)
+        # ---------------------------------------------------------------------
         with testing_tab_intake:
             st.markdown(
-                f"<h3 style='color:#1D1D1F; font-weight:900; text-transform:uppercase;'>Athlete Intake Assessment ({season_label})</h3>",
+                "<h3 style='color:#1D1D1F; font-weight:900; text-transform:uppercase;'>Athlete Intake Assessment (All Seasons)</h3>",
                 unsafe_allow_html=True,
             )
             c_int_ath, _ = st.columns([2, 2])
@@ -3071,11 +3074,11 @@ def render_dashboard_content(season_label, season_key):
                     key=f"intake_ath_select_{season_key}",
                 )
 
-            calf_ath = ankle_data[ankle_data["Name"] == selected_intake_athlete].sort_values("Date") if not ankle_data.empty and "Name" in ankle_data.columns else pd.DataFrame()
-            hip_ath = hip_data[hip_data["Name"] == selected_intake_athlete].sort_values("Date") if not hip_data.empty and "Name" in hip_data.columns else pd.DataFrame()
-            sh_ath = knee_data[knee_data["Name"] == selected_intake_athlete].sort_values("Date") if not knee_data.empty and "Name" in knee_data.columns else pd.DataFrame()
-            nord_ath = nordic_data[nordic_data["Name"] == selected_intake_athlete].sort_values("Date") if not nordic_data.empty and "Name" in nordic_data.columns else pd.DataFrame()
-            bs_ath = belt_squat_data[belt_squat_data["Name"] == selected_intake_athlete].sort_values("Date") if not belt_squat_data.empty and "Name" in belt_squat_data.columns else pd.DataFrame()
+            calf_ath = ankle_raw[ankle_raw["Name"] == selected_intake_athlete].sort_values("Date") if not ankle_raw.empty and "Name" in ankle_raw.columns else pd.DataFrame()
+            hip_ath = hip_raw[hip_raw["Name"] == selected_intake_athlete].sort_values("Date") if not hip_raw.empty and "Name" in hip_raw.columns else pd.DataFrame()
+            sh_ath = knee_raw[knee_raw["Name"] == selected_intake_athlete].sort_values("Date") if not knee_raw.empty and "Name" in knee_raw.columns else pd.DataFrame()
+            nord_ath = nordic_raw[nordic_raw["Name"] == selected_intake_athlete].sort_values("Date") if not nordic_raw.empty and "Name" in nordic_raw.columns else pd.DataFrame()
+            bs_ath = belt_squat_raw[belt_squat_raw["Name"] == selected_intake_athlete].sort_values("Date") if not belt_squat_raw.empty and "Name" in belt_squat_raw.columns else pd.DataFrame()
 
             has_data = not (calf_ath.empty and hip_ath.empty and sh_ath.empty and nord_ath.empty and bs_ath.empty)
 
@@ -3173,17 +3176,17 @@ def render_dashboard_content(season_label, season_key):
 
             with hud_col2:
                 st.markdown(
-                    f"""
+                    """
                     <style>
-                    .hud-details-card {{ background: #FFFFFF; border-radius: 16px; padding: 20px; border: 1px solid #E5E5E7; box-shadow: 0 4px 12px rgba(0,0,0,0.03); }}
-                    .hud-header-title-light {{ color: #1D1D1F; font-weight: 800; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; border-bottom: 2px solid #FF8200; padding-bottom: 6px; margin-bottom: 16px; }}
-                    .hud-metric-row-light {{ background: #F8F9FA; border-left: 4px solid #FF8200; border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; color: #1D1D1F; border: 1px solid #E5E5E7; border-left: 4px solid #FF8200; }}
-                    .hud-metric-row-light-blue {{ background: #F8F9FA; border-left: 4px solid #4895DB; border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; color: #1D1D1F; border: 1px solid #E5E5E7; border-left: 4px solid #4895DB; }}
-                    .node-badge-orange {{ display: inline-block; width: 20px; height: 20px; background: #FF8200; color: #FFFFFF; font-weight: 900; font-size: 11px; border-radius: 4px; text-align: center; line-height: 20px; margin-right: 8px; }}
-                    .node-badge-blue {{ display: inline-block; width: 20px; height: 20px; background: #4895DB; color: #FFFFFF; font-weight: 900; font-size: 11px; border-radius: 4px; text-align: center; line-height: 20px; margin-right: 8px; }}
+                    .hud-details-card { background: #FFFFFF; border-radius: 16px; padding: 20px; border: 1px solid #E5E5E7; box-shadow: 0 4px 12px rgba(0,0,0,0.03); }
+                    .hud-header-title-light { color: #1D1D1F; font-weight: 800; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; border-bottom: 2px solid #FF8200; padding-bottom: 6px; margin-bottom: 16px; }
+                    .hud-metric-row-light { background: #F8F9FA; border-left: 4px solid #FF8200; border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; color: #1D1D1F; border: 1px solid #E5E5E7; border-left: 4px solid #FF8200; }
+                    .hud-metric-row-light-blue { background: #F8F9FA; border-left: 4px solid #4895DB; border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; color: #1D1D1F; border: 1px solid #E5E5E7; border-left: 4px solid #4895DB; }
+                    .node-badge-orange { display: inline-block; width: 20px; height: 20px; background: #FF8200; color: #FFFFFF; font-weight: 900; font-size: 11px; border-radius: 4px; text-align: center; line-height: 20px; margin-right: 8px; }
+                    .node-badge-blue { display: inline-block; width: 20px; height: 20px; background: #4895DB; color: #FFFFFF; font-weight: 900; font-size: 11px; border-radius: 4px; text-align: center; line-height: 20px; margin-right: 8px; }
                     </style>
                     <div class="hud-details-card">
-                        <div class="hud-header-title-light">Location Assessment ({season_label})</div>
+                        <div class="hud-header-title-light">Location Assessment (All Seasons)</div>
                     """,
                     unsafe_allow_html=True,
                 )
@@ -3327,34 +3330,34 @@ def render_dashboard_content(season_label, season_key):
                                 unsafe_allow_html=True,
                             )
                 else:
-                    st.info(f"No Intake Assessment records found for {selected_intake_athlete} in {season_label}.")
+                    st.info(f"No Intake Assessment records found for {selected_intake_athlete}.")
 
                 st.markdown("</div>", unsafe_allow_html=True)
 
             st.divider()
 
-            st.markdown(f"### Intake Assessment Raw Logs for {selected_intake_athlete} ({season_label})")
+            st.markdown(f"### Intake Assessment Raw Logs for {selected_intake_athlete} (All Seasons)")
 
             with st.expander("NordBord Test Log", expanded=False):
                 if not nord_ath.empty:
                     disp_nord = [c for c in nord_ath.columns if c not in ["Name", "Date_Str"]]
                     st.markdown(render_vball_table(nord_ath[disp_nord]), unsafe_allow_html=True)
                 else:
-                    st.info(f"No NordBord records for {selected_intake_athlete} in {season_label}.")
+                    st.info(f"No NordBord records for {selected_intake_athlete}.")
 
             with st.expander("Harness Belt Squat Log", expanded=False):
                 if not bs_ath.empty:
                     disp_bs = [c for c in bs_ath.columns if c not in ["Name", "Date_Str", "PVF_Calc"]]
                     st.markdown(render_vball_table(bs_ath[disp_bs]), unsafe_allow_html=True)
                 else:
-                    st.info(f"No Harness Belt Squat records for {selected_intake_athlete} in {season_label}.")
+                    st.info(f"No Harness Belt Squat records for {selected_intake_athlete}.")
 
             with st.expander("Knee Extension / Flexion Log", expanded=False):
                 if not sh_ath.empty:
                     disp_knee = [c for c in sh_ath.columns if c not in ["Name", "Date_Str"]]
                     st.markdown(render_vball_table(sh_ath[disp_knee]), unsafe_allow_html=True)
                 else:
-                    st.info(f"No Knee Assessment records for {selected_intake_athlete} in {season_label}.")
+                    st.info(f"No Knee Assessment records for {selected_intake_athlete}.")
 
             with st.expander("Hip Assessment Log (Adduction / Abduction / IR / ER)", expanded=False):
                 if not hip_ath.empty:
@@ -3391,19 +3394,21 @@ def render_dashboard_content(season_label, season_key):
 
                     st.markdown(render_vball_table(hip_display_df[final_cols]), unsafe_allow_html=True)
                 else:
-                    st.info(f"No Hip Assessment records for {selected_intake_athlete} in {season_label}.")
+                    st.info(f"No Hip Assessment records for {selected_intake_athlete}.")
 
             with st.expander("Ankle Assessment Log (Plantar Flexion / Inversion / Eversion)", expanded=False):
                 if not calf_ath.empty:
                     disp_ankle = [c for c in calf_ath.columns if c not in ["Name", "Date_Str"]]
                     st.markdown(render_vball_table(calf_ath[disp_ankle]), unsafe_allow_html=True)
                 else:
-                    st.info(f"No Ankle Assessment records for {selected_intake_athlete} in {season_label}.")
+                    st.info(f"No Ankle Assessment records for {selected_intake_athlete}.")
 
-        # SECTION 5B: CMJ TAB
+        # ---------------------------------------------------------------------
+        # 5B: CMJ TAB (ALL SEASONS)
+        # ---------------------------------------------------------------------
         with testing_tab_cmj:
             st.markdown(
-                f'<div class="vball-section-title">CMJ Performance Standards & History — {season_label}</div>',
+                '<div class="vball-section-title">CMJ Performance Standards & History (All Seasons)</div>',
                 unsafe_allow_html=True,
             )
 
@@ -3436,13 +3441,8 @@ def render_dashboard_content(season_label, season_key):
             )
             st.markdown("<br>", unsafe_allow_html=True)
 
-            p_cmj = (
-                cmj_data[cmj_data["Name"] == selected_player_t]
-                .sort_values("Date")
-                .copy()
-                if not cmj_data.empty
-                else pd.DataFrame()
-            )
+            # Use cmj_raw so trend graph and log table show ALL seasons
+            p_cmj = ath_all_jumps.copy()
 
             jump_cols = [c for c in p_cmj.columns if "jump" in c.lower() or "height" in c.lower()]
             j_col = jump_cols[0] if jump_cols else None
@@ -3541,10 +3541,10 @@ def render_dashboard_content(season_label, season_key):
                     end_idx = display_cols.index(stiffness_col) + 1
                     display_cols = display_cols[:end_idx]
 
-                st.markdown(f"### Jump History Logs for {selected_player_t} ({season_label})")
+                st.markdown(f"### Jump History Logs for {selected_player_t} (All Seasons)")
                 st.markdown(render_vball_table(p_cmj[display_cols]), unsafe_allow_html=True)
             else:
-                st.info(f"No Countermovement Jump (CMJ) logs found for {selected_player_t} in {season_label}.")
+                st.info(f"No Countermovement Jump (CMJ) logs found for {selected_player_t}.")
 
         # SECTION 5C: ASYMMETRY & FAVORING TAB
         with testing_tab_asym:
@@ -4005,10 +4005,12 @@ def render_dashboard_content(season_label, season_key):
                     unified_tbl_html += "</tbody></table>"
                     st.markdown(unified_tbl_html, unsafe_allow_html=True)
                     
-        # SECTION 5C: OVERALL PROFILE
+        # ---------------------------------------------------------------------
+        # 5D: OVERALL PROFILE (ALL SEASONS)
+        # ---------------------------------------------------------------------
         with testing_tab_overall:
             st.markdown(
-                f'<div class="vball-section-title">Master Athletic Performance Summary ({season_label})</div>',
+                '<div class="vball-section-title">Master Athletic Performance Summary (All Seasons)</div>',
                 unsafe_allow_html=True,
             )
             c_ov_ath, _ = st.columns([1, 2])
@@ -4045,7 +4047,7 @@ def render_dashboard_content(season_label, season_key):
                 else:
                     return None, None
 
-            p_cmj_ov = cmj_data[cmj_data["Name"] == selected_ov_athlete] if not cmj_data.empty and "Name" in cmj_data.columns else pd.DataFrame()
+            p_cmj_ov = cmj_raw[cmj_raw["Name"] == selected_ov_athlete].copy() if not cmj_raw.empty and "Name" in cmj_raw.columns else pd.DataFrame()
             if not p_cmj_ov.empty:
                 jh_c = next((c for c in p_cmj_ov.columns if "jump" in c.lower() or "height" in c.lower()), None)
                 if jh_c:
@@ -4059,7 +4061,7 @@ def render_dashboard_content(season_label, season_key):
                             "Date Achieved": format_date_clean(best_cmj.get("Date"))
                         })
 
-            p_nord_ov = nordic_data[nordic_data["Name"] == selected_ov_athlete].copy() if not nordic_data.empty and "Name" in nordic_data.columns else pd.DataFrame()
+            p_nord_ov = nordic_raw[nordic_raw["Name"] == selected_ov_athlete].copy() if not nordic_raw.empty and "Name" in nordic_raw.columns else pd.DataFrame()
             if not p_nord_ov.empty:
                 t_c = next((c for c in p_nord_ov.columns if "test" in c.lower()), None)
                 if t_c:
@@ -4081,7 +4083,7 @@ def render_dashboard_content(season_label, season_key):
                             "Date Achieved": dt
                         })
 
-            p_bs_ov = belt_squat_data[belt_squat_data["Name"] == selected_ov_athlete] if not belt_squat_data.empty and "Name" in belt_squat_data.columns else pd.DataFrame()
+            p_bs_ov = belt_squat_raw[belt_squat_raw["Name"] == selected_ov_athlete].copy() if not belt_squat_raw.empty and "Name" in belt_squat_raw.columns else pd.DataFrame()
             if not p_bs_ov.empty:
                 f_c = next((c for c in p_bs_ov.columns if "peak vertical force" in c.lower() or "force" in c.lower()), None)
                 if f_c:
@@ -4095,7 +4097,7 @@ def render_dashboard_content(season_label, season_key):
                             "Date Achieved": format_date_clean(best_bs.get("Date"))
                         })
 
-            p_knee_ov = knee_data[knee_data["Name"] == selected_ov_athlete].copy() if not knee_data.empty and "Name" in knee_data.columns else pd.DataFrame()
+            p_knee_ov = knee_raw[knee_raw["Name"] == selected_ov_athlete].copy() if not knee_raw.empty and "Name" in knee_raw.columns else pd.DataFrame()
             if not p_knee_ov.empty:
                 dir_col = next((c for c in p_knee_ov.columns if "direction" in c.lower() or "test" in c.lower()), None)
                 ke_df = p_knee_ov[p_knee_ov[dir_col].astype(str).str.contains("Extension", case=False, na=False)] if dir_col else p_knee_ov
@@ -4109,13 +4111,13 @@ def render_dashboard_content(season_label, season_key):
                 if val:
                     records.append({"Category": "Knee Flexion (L/R)", "Best Test Value": val, "Date Achieved": dt})
 
-            p_hip_ov = hip_data[hip_data["Name"] == selected_ov_athlete].copy() if not hip_data.empty and "Name" in hip_data.columns else pd.DataFrame()
+            p_hip_ov = hip_raw[hip_raw["Name"] == selected_ov_athlete].copy() if not hip_raw.empty and "Name" in hip_raw.columns else pd.DataFrame()
             for hip_lbl, sub_df in extract_joint_subtests(p_hip_ov, joint_type="hip"):
                 val, dt = get_formatted_peak_overall(sub_df)
                 if val:
                     records.append({"Category": f"{hip_lbl} (L/R)", "Best Test Value": val, "Date Achieved": dt})
 
-            p_ank_ov = ankle_data[ankle_data["Name"] == selected_ov_athlete].copy() if not ankle_data.empty and "Name" in ankle_data.columns else pd.DataFrame()
+            p_ank_ov = ankle_raw[ankle_raw["Name"] == selected_ov_athlete].copy() if not ankle_raw.empty and "Name" in ankle_raw.columns else pd.DataFrame()
             for ank_lbl, sub_df in extract_joint_subtests(p_ank_ov, joint_type="ankle"):
                 val, dt = get_formatted_peak_overall(sub_df)
                 if val:
@@ -4123,10 +4125,10 @@ def render_dashboard_content(season_label, season_key):
 
             if records:
                 ov_df = pd.DataFrame(records)
-                st.markdown(f"### Peak Performance Snapshot for {selected_ov_athlete} ({season_label})")
+                st.markdown(f"### Peak Performance Snapshot for {selected_ov_athlete} (All Seasons)")
                 st.markdown(render_vball_table(ov_df), unsafe_allow_html=True)
             else:
-                st.info(f"No testing records found across modules for {selected_ov_athlete} in {season_label}.")
+                st.info(f"No testing records found across modules for {selected_ov_athlete}.")
 
     # TAB 6: RECOVERY
     elif main_tab == "Recovery":
