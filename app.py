@@ -5181,7 +5181,6 @@ def render_combined_seasons_content():
         def create_custom_timeline_chart(metric_col, title_label, show_text=True):
             fig = go.Figure()
 
-            # Baseline line trace connecting chronology
             fig.add_trace(
                 go.Scatter(
                     x=df_timeline["Date"],
@@ -5193,7 +5192,6 @@ def render_combined_seasons_content():
                 )
             )
 
-            # Scatter markers by Session / Type
             for type_name in df_timeline["Type"].unique():
                 t_group = df_timeline[df_timeline["Type"] == type_name]
                 
@@ -5360,9 +5358,19 @@ def render_combined_seasons_content():
             st.markdown(html, unsafe_allow_html=True)
 
     # -------------------------------------------------------------------------
-    # SUB-TABS: TEAM OVERVIEW vs. INDIVIDUAL PROFILE
+    # SUB-TABS: TEAM OVERVIEW vs. INDIVIDUAL PROFILE vs. WEEKLY ROSTER CARDS
     # -------------------------------------------------------------------------
-    comb_tab_team, comb_tab_ind = st.tabs(["Team Overview", "Individual Profile"])
+    comb_tab_team, comb_tab_ind, comb_tab_cards = st.tabs([
+        "Team Overview",
+        "Individual Profile",
+        "Weekly Roster Cards",
+    ])
+
+    roster_players_comb = (
+        roster_raw["Name"].tolist()
+        if not roster_raw.empty and "Name" in roster_raw.columns
+        else sorted(vol_raw["Player"].dropna().unique().tolist())
+    )
 
     # TAB A: TEAM OVERVIEW
     with comb_tab_team:
@@ -5390,12 +5398,6 @@ def render_combined_seasons_content():
             unsafe_allow_html=True,
         )
 
-        roster_players_comb = (
-            roster_raw["Name"].tolist()
-            if not roster_raw.empty and "Name" in roster_raw.columns
-            else sorted(vol_raw["Player"].dropna().unique().tolist())
-        )
-
         c_ind_sel, c_toggle_ind = st.columns([2, 2.5])
         with c_ind_sel:
             sel_comb_player = st.selectbox(
@@ -5411,7 +5413,6 @@ def render_combined_seasons_content():
                 key="combined_seasons_view_mode_ind",
             )
 
-        # Render Athlete Header Card
         p_row = (
             roster_raw[roster_raw["Name"] == sel_comb_player]
             if not roster_raw.empty and "Name" in roster_raw.columns
@@ -5439,7 +5440,131 @@ def render_combined_seasons_content():
             chart_prefix=f"{sel_comb_player}",
             chart_key_suffix=f"ind_{sel_comb_player.replace(' ', '_')}",
         )
-        
+
+    # TAB C: WEEKLY ROSTER CARDS (SIDE-BY-SIDE TABLES PER ATHLETE)
+    with comb_tab_cards:
+        st.markdown(
+            '<div class="vball-section-title">Weekly Roster Score Cards (All Athletes)</div>',
+            unsafe_allow_html=True,
+        )
+
+        all_comb_mondays = get_season_mondays(vol_raw)
+        c_wk_sel, c_card_mode = st.columns([1.8, 2.5])
+
+        with c_wk_sel:
+            sel_cards_monday = st.selectbox(
+                "Select Week Starting (Monday):",
+                options=all_comb_mondays,
+                index=0,
+                format_func=lambda d: f"Week of {d.strftime('%Y-%m-%d')} ({d.strftime('%b %d')})",
+                key="combined_seasons_cards_week_select",
+            )
+        with c_card_mode:
+            cards_view_mode = st.radio(
+                "Multi-Session Display Mode:",
+                options=["Show Individual Sessions", "Show Combined Daily Total"],
+                horizontal=True,
+                key="combined_seasons_view_mode_cards",
+            )
+
+        wk_start = pd.to_datetime(sel_cards_monday)
+        wk_end = wk_start + pd.Timedelta(days=6)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # Render 2 athlete cards per row
+        for i in range(0, len(roster_players_comb), 2):
+            card_cols = st.columns(2)
+            for j in range(2):
+                if i + j >= len(roster_players_comb):
+                    continue
+
+                player_name = roster_players_comb[i + j]
+                with card_cols[j]:
+                    p_row = (
+                        roster_raw[roster_raw["Name"] == player_name]
+                        if not roster_raw.empty and "Name" in roster_raw.columns
+                        else pd.DataFrame()
+                    )
+                    p_pos = p_row["Position"].values[0] if not p_row.empty and "Position" in p_row.columns else "Athlete"
+                    p_img = p_row["Picture"].values[0] if not p_row.empty and "Picture" in p_row.columns else "https://via.placeholder.com/60"
+
+                    df_p_all = build_timeline_df(cards_view_mode, target_player=player_name)
+                    if not df_p_all.empty:
+                        df_p_wk = df_p_all[
+                            (df_p_all["Date"] >= wk_start) & (df_p_all["Date"] <= wk_end)
+                        ].copy()
+                    else:
+                        df_p_wk = pd.DataFrame()
+
+                    if not df_p_wk.empty:
+                        wk_avg_comb = round(float(df_p_wk["Combined Score"].mean()), 1)
+                        avg_bg, avg_fg = get_vball_color(wk_avg_comb)
+                        avg_badge_html = (
+                            f'<div style="text-align:right;">'
+                            f'<div style="font-size:0.65rem; font-weight:700; color:#64748B; text-transform:uppercase;">Wk Combined Avg</div>'
+                            f'<span style="background-color:{avg_bg}; color:{avg_fg}; font-weight:800; padding:3px 10px; border-radius:6px; font-size:0.95rem; display:inline-block; margin-top:2px;">{wk_avg_comb:.1f}</span>'
+                            f'</div>'
+                        )
+
+                        rows_html = ""
+                        for _, r in df_p_wk.iterrows():
+                            day_lbl = pd.to_datetime(r["Date"]).strftime("%a %m/%d")
+                            ev_type = r["Type"]
+                            sess_lbl = r["Session"]
+
+                            if "scrimmage" in str(ev_type).lower():
+                                badge_color = "#E11D48"
+                            else:
+                                badge_color = marker_color_map.get(ev_type, "#FF8200")
+                            txt_color = "#FFFFFF" if ev_type == "SEC Game" else ("#0F172A" if ev_type == "Non-Conference Game" else "#FFFFFF")
+
+                            v_bg, v_fg = get_vball_color(r["Volume Score"])
+                            i_bg, i_fg = get_vball_color(r["Intensity Score"])
+                            c_bg, c_fg = get_vball_color(r["Combined Score"])
+
+                            rows_html += (
+                                f"<tr>"
+                                f"<td style='font-weight:600; white-space:nowrap;'>{day_lbl}</td>"
+                                f"<td><span style='background-color:{badge_color}; color:{txt_color}; font-weight:700; padding:2px 7px; border-radius:4px; font-size:0.72rem;'>{sess_lbl}</span></td>"
+                                f"<td><span class='grade-badge' style='background-color:{v_bg}; color:{v_fg}; padding:2px 7px; font-size:0.78rem;'>{r['Volume Score']:.1f}</span></td>"
+                                f"<td><span class='grade-badge' style='background-color:{i_bg}; color:{i_fg}; padding:2px 7px; font-size:0.78rem;'>{r['Intensity Score']:.1f}</span></td>"
+                                f"<td><span class='grade-badge' style='background-color:{c_bg}; color:{c_fg}; padding:2px 7px; font-size:0.78rem;'>{r['Combined Score']:.1f}</span></td>"
+                                f"</tr>"
+                            )
+
+                        body_html = (
+                            f'<table class="vball-table" style="margin-bottom:0; font-size:0.8rem;">'
+                            f'<thead><tr>'
+                            f'<th>Date</th>'
+                            f'<th>Session</th>'
+                            f'<th>Vol</th>'
+                            f'<th>Int</th>'
+                            f'<th>Comb</th>'
+                            f'</tr></thead>'
+                            f'<tbody>{rows_html}</tbody></table>'
+                        )
+                    else:
+                        avg_badge_html = ""
+                        body_html = "<p style='color:#94A3B8; font-style:italic; font-size:0.85rem; margin:8px 0 0 0;'>No sessions logged for this week.</p>"
+
+                    card_html = (
+                        f'<div style="background:#FFFFFF; border:1px solid #CBD5E1; border-radius:12px; padding:14px 16px; margin-bottom:16px; box-shadow:0 2px 6px rgba(0,0,0,0.03);">'
+                        f'<div style="display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #E2E8F0; padding-bottom:10px; margin-bottom:10px;">'
+                        f'<div style="display:flex; align-items:center; gap:12px;">'
+                        f'<img src="{p_img}" style="width:46px; height:46px; border-radius:50%; border:2.5px solid #FF8200; object-fit:cover; background:#F1F5F9;">'
+                        f'<div>'
+                        f'<div style="font-weight:800; font-size:1.05rem; color:#0F172A; line-height:1.2;">{player_name}</div>'
+                        f'<div style="color:#64748B; font-size:0.78rem;">{p_pos}</div>'
+                        f'</div>'
+                        f'</div>'
+                        f'{avg_badge_html}'
+                        f'</div>'
+                        f'{body_html}'
+                        f'</div>'
+                    )
+                    st.markdown(card_html, unsafe_allow_html=True)
+                    
 # -----------------------------------------------------------------------------
 # 9. TEAM WELLNESS ENGINE
 # -----------------------------------------------------------------------------
